@@ -1,0 +1,15 @@
+BODY {
+	FONT-SIZE: 10pt;	
+}
+TABLE {
+	FONT-SIZE: 10pt;
+}
+A:link {
+	COLOR: #0f0cbf; TEXT-DECORATION: none
+}
+A:visited {
+	TEXT-DECORATION: none
+}
+A:hover {
+	COLOR: red; TEXT-DECORATION: underline
+} 

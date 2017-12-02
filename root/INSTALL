@@ -1,0 +1,19 @@
+
+./configure --help to obtain the configure help.
+
+./configure --prefix=/usr/local/
+make
+make install
+
+config file is etc/config.xml
+virtualHost file is etc/vh.xml
+
+bin/kangle to start the server
+bin/kangle -q stop  the server
+bin/kangle -h help
+
+open url http://server_host:manage_port/
+enter user and password to monitor and manage the server.
+default user is admin, password is manage.
+
+detail please see doc directory.
