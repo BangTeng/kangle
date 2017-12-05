@@ -3,7 +3,7 @@
 language: c++
 compiler:
   - g++
-  - clang++
+#  - clang++
 
 # The build machines are Ubuntu 12.04 x64
 addons:
