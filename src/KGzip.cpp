@@ -32,9 +32,9 @@ KGzipCompress::KGzipCompress(bool use_deflate,KWStream *st,bool autoDelete) : KH
 	isSuccess = false;
 	this->use_deflate = use_deflate;
 	memset(&strm,0,sizeof(strm));
-	if (deflateInit2(&strm, conf.gzip_level,
-		Z_DEFLATED, -MAX_WBITS, 8, Z_DEFAULT_STRATEGY) != Z_OK)
-	return;
+	if (deflateInit2(&strm, conf.gzip_level, Z_DEFLATED, -MAX_WBITS, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+		return;
+	}
 	out = (char *) malloc(CHUNK);
 	if (out == NULL) {
 		klog(KLOG_ERR, "no memory to alloc\n");

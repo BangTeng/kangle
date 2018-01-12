@@ -24,15 +24,12 @@ public:
 		hot = NULL;
 		current_size = 0;
 		badStage = BadStage_Connect;
-		//默认短连接
-		lifeTime = -1;
-#ifdef _WIN32
-		pipe_refs = 1;
-#endif
+		buffer = NULL;
 	}
 	void close(KHttpRequest *rq)
 	{
 		if (client) {
+			assert(!client->is_upstream_locked());
 			if (TEST(rq->filter_flags,RF_UPSTREAM_NOKA) 
 				|| !rq->ctx->upstream_connection_keep_alive) {
 				lifeTime = -1;
@@ -50,6 +47,9 @@ public:
 		}
 		if (header) {
 			free(header);
+		}
+		if (buffer) {
+			delete buffer;
 		}
 	}
 	//期望中的完成，长连接中用于标识此连接还可用
@@ -80,7 +80,7 @@ public:
 	{
 		//新版已经简化流程，之前就把预加载的数据发送到buffer里面了。
 		assert(rq->pre_post_length==0);
-		buffer.getRBuffer(buf,bufCount);
+		buffer->getRBuffer(buf,bufCount);
 	}
 	int check_chunk_stream(KHttpRequest *rq,const char *buf,int got,bool &is_end) {
 		int orig_len = got;
@@ -104,7 +104,7 @@ public:
 	//得到post写缓冲，从client接收post数据
 	char *getPostWBuffer(KHttpRequest *rq,int &len)
 	{
-		char *buf = buffer.getWBuffer(len);
+		char *buf = buffer->getWBuffer(len);
 		if (!rq->ctx->connection_upgrade && rq->left_read>=0) {			
 			len = (int)(MIN((INT64)len,rq->left_read));
 			assert(len>0);
@@ -161,13 +161,10 @@ public:
 	void handleUpstreamError(KHttpRequest *rq,int error,const char *msg,int last_got);
 	void handleConnectResult(KHttpRequest *rq,int got);
 	void shutdown(KHttpRequest *rq);
-	KSocketBuffer buffer;
+	KSocketBuffer *buffer;
 	KUpstreamSelectable *client;
 	BadStage badStage;
 protected:
-#ifdef _WIN32
-	int pipe_refs;
-#endif
 	void sendHeadSuccess(KHttpRequest *rq);
 	void readHeadSuccess(KHttpRequest *rq);
 	//header重新分配过时要重新调整偏移量

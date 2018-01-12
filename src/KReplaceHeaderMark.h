@@ -33,7 +33,7 @@ public:
 		int ovector[MAX_OVECTOR];
 		while (header) {
 			if (attr==NULL || strcasecmp(attr,header->attr)==0) {
-				int ret = val.match(header->val,strlen(header->val),0,ovector,MAX_OVECTOR);
+				int ret = val.match(header->val,header->val_len,0,ovector,MAX_OVECTOR);
 				if (ret>0) {
 					KRegSubString *subString = KReg::makeSubString(header->val,ovector,MAX_OVECTOR,ret);
 					KStringBuf *replaced = KRewriteMarkEx::getString(NULL,replace.c_str(),rq,NULL,subString);

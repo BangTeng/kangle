@@ -199,7 +199,7 @@ inline const char *getWorkModelName(int model) {
 	}
 #ifdef IP_TRANSPARENT
 #ifdef ENABLE_TPROXY
-	if (TEST(model,WORK_MODEL_TPROXY|WORK_MODEL_TCP)) {
+	if (TEST(model,WORK_MODEL_TPROXY|WORK_MODEL_TCP)== (WORK_MODEL_TPROXY | WORK_MODEL_TCP)) {
 		return "tcp-tproxy";
 	}
 	if (TEST(model,WORK_MODEL_TPROXY)) {

@@ -279,7 +279,10 @@ public:
 		
 	};
 	kgl_array_t  *cookies;
-	INT64 content_length;
+#ifndef NDEBUG
+	INT64 orig_content_length;
+#endif
+	INT64 content_left;
 	friend class KHttp2;
 	unsigned  in_closed : 1;
 	unsigned  out_closed:1;
@@ -294,15 +297,16 @@ public:
 	kgl_http2_event *read_wait;
 	KSendBuffer *read_buffer;
 	size_t recv_window;
+	int ev_refs;
 	int send_window;
-	http2_buff *build_write_buffer(resultEvent result, bufferEvent buffer, void *arg, int &len)
+	http2_buff *build_write_buffer(kgl_http2_event *e, int &len)
 	{
 		http2_buff *buf_out = NULL;
 		http2_buff *last = NULL;
 		WSABUF vc[4];
 		int bufferCount = 4;
 		int total_len = 0;
-		buffer(arg, vc, bufferCount);
+		e->buffer(e->arg, vc, bufferCount);
 		for (int i = 0; i<bufferCount; i++) {
 			if (len <= 0) {
 				break;
@@ -316,29 +320,30 @@ public:
 			total_len += new_buf->used;
 			if (last) {
 				last->next = new_buf;
-			} else {
+			}
+			else {
 				buf_out = new_buf;
 			}
 			last = new_buf;
 		}
 		assert(last);
-		last->e = new kgl_http2_event;
-		last->e->arg = arg;
-		last->e->result = result;
-		last->e->len = total_len;
+		assert(total_len>0);
+		e->len = total_len;
 		http2_buff *new_buf = new http2_buff;
 		http2_frame_header *data = (http2_frame_header *)malloc(sizeof(http2_frame_header));
+		e->refs_buff = new_buf;
+		new_buf->ctx = this;
 		new_buf->data = (char *)data;
 		new_buf->used = sizeof(http2_frame_header);
 		memset(data, 0, sizeof(http2_frame_header));
 		data->set_length_type(total_len, KGL_HTTP_V2_DATA_FRAME);
 		data->stream_id = ntohl(node->id);
 		if (know_content_length) {
-			content_length -= total_len;
-			if (content_length <= 0) {
+			content_left -= total_len;
+			if (content_left <= 0) {
 				data->flags |= KGL_HTTP_V2_END_STREAM_FLAG;
 				out_closed = 1;
-				assert(content_length == 0);
+				assert(content_left == 0);
 				last->tcp_nodelay = 1;
 			}
 		}
@@ -347,10 +352,23 @@ public:
 		len = total_len;
 		return new_buf;
 	}
+	http2_buff *build_write_buffer(resultEvent result, bufferEvent buffer, void *arg, int &len)
+	{
+		assert(write_wait == NULL);
+		write_wait = new kgl_http2_event;
+		write_wait->buffer = buffer;
+		write_wait->arg = arg;
+		write_wait->result = result;
+		write_wait->len = -1;
+		return build_write_buffer(write_wait, len);
+	}
 	void setContentLength (INT64 content_length) {
 		if (content_length >= 0) {
 			know_content_length = 1;
-			this->content_length = content_length;
+			this->content_left = content_length;
+#ifndef NDEBUG
+			this->orig_content_length = content_length;
+#endif
 		} else {
 			know_content_length = 0;
 		}
@@ -410,6 +428,7 @@ public:
 	void resultWrite(int got);
 	friend class KConnectionSelectable;
 	friend class KSelector;
+	friend class http2_buff;
 private:
 	static kgl_http_v2_handler_pt kgl_http_v2_frame_states[];
 	u_char *state_data(u_char *pos, u_char *end);
@@ -461,6 +480,7 @@ private:
 	KHttp2Node **streams_index;
 	kgl_http_v2_state_t state;
 	kgl_http_v2_hpack_t hpack;
+	time_t last_stream_time;
 	uint32_t last_sid;
 	unsigned write_processing : 1;
 	unsigned read_processing : 1;

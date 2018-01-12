@@ -28,17 +28,31 @@ bool thread_start_worker(void *param, asyncWorkerCallBack callback)
 	delete p;
 	return false;
 }
-void KAsyncWorker::start(void *data,asyncWorkerCallBack callBack,bool high)
+void KAsyncWorker::start(void *data, asyncWorkerCallBack callBack)
 {
+	KCondWait *wait = NULL;
 	KAsyncParam *rq = new KAsyncParam;
 	rq->startTime = kgl_current_msec;
 	rq->callBack = callBack;
 	rq->data = data;
 	rq->next = NULL;
 	lock.Lock();
+	if (maxQueue > 0 && queue >= this->maxQueue) {
+		wait = new KCondWait;
+	}
+	rq->wait = wait;
+	add(rq, false);
+	lock.Unlock();
+	if (wait != NULL) {
+		wait->wait();
+		delete wait;
+	}
+}
+void KAsyncWorker::add(KAsyncParam *rq, bool high)
+{
 	queue++;
-	if (last==NULL) {
-		assert(head==NULL);
+	if (last == NULL) {
+		assert(head == NULL);
 		head = rq;
 		last = rq;
 	} else {
@@ -52,19 +66,33 @@ void KAsyncWorker::start(void *data,asyncWorkerCallBack callBack,bool high)
 			last = rq;
 		}
 	}
-	if (worker>=maxWorker) {
-		lock.Unlock();
+	if (worker >= maxWorker) {
 		return;
 	}
 	worker++;
-	lock.Unlock();
 	addRef();
-	if (!m_thread.start(this,kasyncWorkerThread)) {
-		lock.Lock();
+	if (!m_thread.start(this, kasyncWorkerThread)) {
 		worker--;
-		lock.Unlock();
 		release();
 	}
+	return;
+}
+bool KAsyncWorker::tryStart(void *data,asyncWorkerCallBack callBack,bool high)
+{
+	lock.Lock();
+	if (maxQueue>0 && queue > this->maxQueue) {
+		lock.Unlock();
+		return false;
+	}
+	KAsyncParam *rq = new KAsyncParam;
+	rq->startTime = kgl_current_msec;
+	rq->callBack = callBack;
+	rq->data = data;
+	rq->next = NULL;
+	rq->wait = NULL;
+	add(rq,high);
+	lock.Unlock();
+	return true;
 }
 void KAsyncWorker::workThread()
 {
@@ -83,7 +111,14 @@ void KAsyncWorker::workThread()
 			last = NULL;
 		}
 		lock.Unlock();
-		rq->callBack(rq->data,(int)(kgl_current_msec - rq->startTime));
+		int msec = (int)(kgl_current_msec - rq->startTime);
+		if (msec < 0) {
+			msec = 0;
+		}
+		if (rq->wait) {
+			rq->wait->notice();
+		}
+		rq->callBack(rq->data, msec);
 		delete rq;
 	}
 	release();

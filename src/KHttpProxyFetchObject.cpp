@@ -27,7 +27,32 @@ void print_buff(buff *buf) {
 		buf = buf->next;
 	}
 }
-
+void upstream_sign_request(KHttpRequest *rq, KHttpEnv *s)
+{
+	KStringBuf v;
+	if (TEST(rq->raw_url.flags, KGL_URL_SSL)) {
+		v.WSTR("p=https,");
+	}
+	v.WSTR("ip=");
+	v << rq->getClientIp();
+	v.WSTR(",t=");
+	v << (int)kgl_current_sec;
+	char buf[33];
+	KMD5_CTX context;
+	unsigned char digest[17];
+	KMD5Init(&context);
+	KMD5Update(&context, (unsigned char *)v.getBuf(), v.getSize());
+	int upstream_sign_len = conf.upstream_sign_len;
+	if (upstream_sign_len > sizeof(conf.upstream_sign)) {
+		upstream_sign_len = sizeof(conf.upstream_sign);
+	}
+	KMD5Update(&context, (unsigned char *)conf.upstream_sign, upstream_sign_len);
+	KMD5Final(digest, &context);
+	make_digest(buf, digest);
+	v.WSTR("|");
+	v.write_all(buf, 32);
+	s->add(kgl_expand_string(X_REAL_IP_SIGN), v.getBuf(), v.getSize());
+}
 
 Parse_Result KHttpProxyFetchObject::parseHead(KHttpRequest *rq,char *buf,int len)
 {
@@ -51,7 +76,7 @@ Parse_Result KHttpProxyFetchObject::parseHead(KHttpRequest *rq,char *buf,int len
 			}
 			rq->ctx->obj->data->headers = client->parser->stealHeaders(rq->ctx->obj->data->headers);
 			//ÖØÖÃhot
-			hot = NULL;			
+			hot = NULL;
 			return Parse_Success;
 	}
 	return Parse_Continue;
@@ -59,11 +84,13 @@ Parse_Result KHttpProxyFetchObject::parseHead(KHttpRequest *rq,char *buf,int len
 
 void KHttpProxyFetchObject::buildHead(KHttpRequest *rq)
 {
+	assert(buffer == NULL);
+	buffer = new KSocketBuffer(16384);
 	client->prepare_parser(rq);
 
-	char tmpbuff[50];	
-	KSocketBuffer &s = buffer;
-	KStreamHttpEnv env(&s);
+	char tmpbuff[50];
+	KSocketBuffer &s = *buffer;
+	KStreamHttpEnv env(buffer);
 	struct KHttpHeader *av;
 	const char *connectionState = "close";
 	const char *meth = rq->getMethod();
@@ -77,7 +104,7 @@ void KHttpProxyFetchObject::buildHead(KHttpRequest *rq)
 		defaultPort = 443;
 	}
 	KUrl *url = rq->url;
-	if (TEST(rq->filter_flags,RF_PROXY_RAW_URL)) {
+	if (TEST(rq->filter_flags,RF_PROXY_RAW_URL) || !TEST(rq->raw_url.flags,KGL_URL_REWRITED)) {
 		url = &rq->raw_url;
 	}
 	char *path = url->path;
@@ -120,11 +147,10 @@ void KHttpProxyFetchObject::buildHead(KHttpRequest *rq)
 			goto do_not_insert;
 		}
 #endif
-		if (is_attr(av,"If-None-Match",sizeof("If-None-Match")-1)
-			|| is_attr(av,"If-Range",sizeof("If-Range")-1)) {
-			goto do_not_insert;
-		}
 
+			if (strcasecmp(av->attr, X_REAL_IP_SIGN) == 0) {
+				goto do_not_insert;
+			}
 			if (TEST(rq->filter_flags,RF_X_REAL_IP)) {
 				if (is_attr(av, "X-Real-IP") || is_attr(av,"X-Forwarded-Proto")) {
 					goto do_not_insert;

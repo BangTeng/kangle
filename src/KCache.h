@@ -4,6 +4,7 @@
 #include "KMutex.h"
 #include "KHttpObject.h"
 #include "KObjectList.h"
+#include "KMemPool.h"
 #ifdef ENABLE_DB_DISK_INDEX
 #include "KDiskCacheIndex.h"
 #endif
@@ -15,8 +16,6 @@ struct KCacheInfo
 {
 	INT64 mem_size;
 	INT64 disk_size;
-	INT64 have_length;
-	INT64 content_length;
 };
 /**
 * 缓存接口。采用LRU淘汰算法，由内存和磁盘两级缓存组成
@@ -44,17 +43,22 @@ public:
 		}
 		unlock();
 #ifdef ENABLE_DB_DISK_INDEX
-		if (TEST(obj->index.flags, FLAG_IN_DISK) && dci) {
+		/*
+		if (TEST(obj->index.flags, FLAG_IN_DISK) &&
+			dci &&
+			dci->getWorker()->getQueue()<1024) {
 			dci->start(ci_updateLast, obj);
 		}
+		*/
 #endif
 	}
 	//清除obj
-	void dead(KHttpObject *obj)
+	void dead(KHttpObject *obj,const char *file,int line)
 	{
 		if (obj->in_cache == 0) {
 			return;
 		}
+		klog(KLOG_NOTICE, "dead obj=[%p] from [%s:%d]\n", obj, file, line);
 		cacheLock.Lock();
 		assert(obj->list_state != LIST_IN_NONE);
 		SET(obj->index.flags, FLAG_DEAD | OBJ_INDEX_UPDATE);
@@ -65,7 +69,7 @@ public:
 	KHttpObject * find(KHttpRequest *rq, u_short url_hash)
 	{
 		return objHash[url_hash].get(rq->url,
-			(TEST(rq->flags, RQ_HAS_GZIP) != 0),
+			rq->raw_url.encoding,
 			TEST(rq->workModel, WORK_MODEL_INTERNAL) > 0,
 			TEST(rq->filter_flags, RF_NO_DISK_CACHE) > 0,
 			rq->min_obj_verified);
@@ -78,19 +82,25 @@ public:
 		if (obj->h == HASH_SIZE) {
 			obj->h = hash_url(obj->url);
 		}
-		assert(obj->in_cache == 0);
-		obj->in_cache = 1;
+		assert(obj->in_cache == 0);		
 		cacheLock.Lock();
-		if (!objHash[obj->h].put(obj)) {
+		if (clean_blocked) {
 			cacheLock.Unlock();
-			obj->in_cache = 0;
+			klog(KLOG_ERR, "clean_blocked add to cache failed\n");
 			return false;
 		}
+		if (!objHash[obj->h].put(obj)) {
+			cacheLock.Unlock();
+			return false;
+		}
+		obj->in_cache = 1;
 		objList[list_state].add(obj);
 		count++;
 		cacheLock.Unlock();
 		return true;
 	}
+#ifdef ENABLE_DISK_CACHE
+#if 0
 	int save_disk_index(KFile *fp)
 	{
 		int save_count = 0;
@@ -105,6 +115,8 @@ public:
 		unlock();
 		return save_count;
 	}
+#endif
+#endif
 	void flush_mem_to_disk()
 	{
 		objList[LIST_IN_MEM].move(1, true);
@@ -122,28 +134,28 @@ public:
 		objList[LIST_IN_DISK].dead_count(kill_count);
 		objList[LIST_IN_MEM].dead_count(kill_count);
 		cacheLock.Unlock();
+		klog(KLOG_ERR, "cache count limit kill count=[%d]\n", kill_count);
 		return true;
 	}
 	//刷新缓存
 	void flush(INT64 maxMemSize,INT64 maxDiskSize,bool disk_is_radio)
 	{
 		INT64 total_size = 0;
-		INT64 kill_size;
+		INT64 kill_mem_size=0,kill_disk_size =0;
 		INT64 total_disk_size = 0;
-		bool check_count_result = check_count_limit(maxMemSize);
+		check_count_limit(maxMemSize);
 		getSize(total_size, total_disk_size);
-		kill_size = total_size - maxMemSize;
-		objList[LIST_IN_MEM].move(kill_size, true);
+		kill_mem_size = total_size - maxMemSize;
+		objList[LIST_IN_MEM].move(kill_mem_size, true);
 #ifdef ENABLE_DISK_CACHE
-		if (check_count_result || conf.diskWorkTime.checkTime(time(NULL))) {
-			if (disk_is_radio) {
-				kill_size = get_need_free_disk_size((int)(maxDiskSize));
-			} else {
-				kill_size = total_disk_size - maxDiskSize;
-			}
-			objList[LIST_IN_DISK].move(kill_size, false);
+		if (disk_is_radio) {
+			kill_disk_size = get_need_free_disk_size((int)(maxDiskSize));
+		} else {
+			kill_disk_size = total_disk_size - maxDiskSize;
 		}
+		objList[LIST_IN_DISK].move(kill_disk_size, false);		
 #endif
+		klog(KLOG_NOTICE, "cache flush, killed memory size=[" INT64_FORMAT "],killed disk size=[" INT64_FORMAT "]\n", kill_mem_size, kill_disk_size);
 		return;
 	}
 	//得到缓存大小
@@ -202,7 +214,6 @@ public:
 	}
 	void syncDisk()
 	{
-		
 		cacheLock.Lock();
 #ifdef ENABLE_DB_DISK_INDEX
 		//清除死物件
@@ -220,6 +231,14 @@ public:
 		}
 #endif
 		cacheLock.Unlock();
+	}
+	bool is_disk_shutdown()
+	{
+		return disk_shutdown;
+	}
+	void shutdown_disk(bool shutdown_flag)
+	{
+		disk_shutdown = shutdown_flag;
 	}
 	KHttpObjectHash *getHash(u_short h)
 	{
@@ -245,10 +264,13 @@ private:
 	{
 		cacheLock.Unlock();
 	}
+	bool clean_blocked;
+	bool disk_shutdown;
 	int count;
 	KMutex cacheLock;
 	KObjectList objList[2];
 	KHttpObjectHash objHash[HASH_SIZE];
+
 };
 extern KCache cache;
 #endif

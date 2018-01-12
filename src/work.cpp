@@ -106,6 +106,49 @@ void resultEndSubRequest(void *arg ,int got)
 	KHttpRequest *rq = (KHttpRequest *)arg;
 	rq->endSubRequest();
 }
+void stageUnlockedEndRequest(void *arg,int got)
+{
+	KHttpRequest *rq = (KHttpRequest *)arg;
+	CLR(rq->workModel, WORK_MODEL_INTERNAL | WORK_MODEL_REPLACE);
+	int status = HTTP_PARSE_FAILED;
+	log_access(rq);
+	rq->ctx->clean_obj(rq);
+#ifdef ENABLE_KSAPI_FILTER
+	/* http filter end request hook */
+	if (rq->svh && rq->svh->vh->hfm) {
+		KHttpFilterHookCollect *end_request = rq->svh->vh->hfm->hook.end_request;
+		if (end_request) {
+			end_request->process(rq, KF_NOTIFY_END_REQUEST, NULL);
+		}
+	}
+	if (conf.gvm->globalVh.hfm) {
+		KHttpFilterHookCollect *end_request = conf.gvm->globalVh.hfm->hook.end_request;
+		if (end_request) {
+			end_request->process(rq, KF_NOTIFY_END_REQUEST, NULL);
+		}
+	}
+#endif
+	if (!TEST(rq->flags, RQ_CONNECTION_CLOSE) && TEST(rq->flags, RQ_HAS_KEEP_CONNECTION)) {
+		//检测http pipe line，查看是否还有请求要处理
+		status = checkHaveNextRequest(rq);
+		if (status == HTTP_PARSE_SUCCESS) {
+			rq->c->next(nextRequest, rq);
+			return;
+		}
+	}
+	/*
+	对下一次状态不同做出不同的处理
+	*/
+	if (status == HTTP_PARSE_FAILED || rq->c->queue.next == NULL) {
+		delete rq;
+		return;
+	}
+	if (status != HTTP_PARSE_CONTINUE) {
+		rq->clean();
+		rq->init();
+	}
+	rq->c->read(rq, resultRequestRead, bufferRequestRead, KGL_LIST_KA);
+}
 /*
 结束请求
 调用这个函数有两个入口点，一个是主线程，还有一个是stage2返回stage1时调用的
@@ -118,10 +161,17 @@ void stageEndRequest(KHttpRequest *rq)
 	assert(!rq->c->socket->isBlock());
 #endif
 #endif
+	if (rq->fetchObj) {
+		KUpstreamSelectable *st = rq->fetchObj->getSelectable();
+		if (st && st->is_upstream_locked()) {
+			static_cast<KAsyncFetchObject *>(rq->fetchObj)->shutdown(rq);
+			return;
+		}
+	}
 
 	if (!TEST(rq->flags,RQ_CONNECTION_CLOSE) && rq->sr) {
 		//子请求结束
-		rq->c->next(rq,resultEndSubRequest);
+		rq->c->next(resultEndSubRequest,rq);
 		return;
 	}
 #ifdef ENABLE_TF_EXCHANGE
@@ -137,45 +187,14 @@ void stageEndRequest(KHttpRequest *rq)
 		return;
 	}
 #endif
-	CLR(rq->workModel,WORK_MODEL_INTERNAL|WORK_MODEL_REPLACE);
-	int status  = HTTP_PARSE_FAILED;
-	log_access(rq);
-	rq->ctx->clean_obj(rq);
-#ifdef ENABLE_KSAPI_FILTER
-	/* http filter end request hook */
-	if (rq->svh && rq->svh->vh->hfm) {
-		KHttpFilterHookCollect *end_request = rq->svh->vh->hfm->hook.end_request;
-		if (end_request) {
-			end_request->process(rq,KF_NOTIFY_END_REQUEST,NULL);
-		}
-	}
-	if (conf.gvm->globalVh.hfm) {
-		KHttpFilterHookCollect *end_request = conf.gvm->globalVh.hfm->hook.end_request;
-		if (end_request) {
-			end_request->process(rq,KF_NOTIFY_END_REQUEST,NULL);
-		}
-	}
-#endif
-	if (!TEST(rq->flags,RQ_CONNECTION_CLOSE) && TEST(rq->flags,RQ_HAS_KEEP_CONNECTION)) {
-		//检测http pipe line，查看是否还有请求要处理
-		status = checkHaveNextRequest(rq);
-		if(status == HTTP_PARSE_SUCCESS){
-			rq->c->next(rq,nextRequest);
-			return;
-		}
-	}
-	/*
-	对下一次状态不同做出不同的处理
-	*/
-	if (status == HTTP_PARSE_FAILED || rq->c->queue.next==NULL) {
-		delete rq;
+	if (rq->c->is_locked(rq)) {
+		rq->c->unlock_read_hup(rq, stageUnlockedEndRequest);
 		return;
+	} else if (rq->c->is_event(rq,STF_EVENT)) {
+		rq->c->removeRequest(rq, false);
 	}
-	if (status != HTTP_PARSE_CONTINUE) {
-		rq->clean();
-		rq->init();
-	}
-	rq->c->read(rq,resultRequestRead,bufferRequestRead,KGL_LIST_KA);
+
+	stageUnlockedEndRequest(rq, 0);
 }
 
 void log_access(KHttpRequest *rq) {
@@ -295,11 +314,17 @@ void log_access(KHttpRequest *rq) {
 	if (TEST(rq->flags, RQ_UPSTREAM_ERROR)) {
 		l.WSTR("E");
 	}
-	if(TEST(rq->flags,RQ_HIT_CACHE)){
+	if(rq->ctx->cache_hit){
 		l.WSTR("C");
 	}
 	if(TEST(rq->flags,RQ_OBJ_STORED)){
 		l.WSTR("S");
+	}
+	if (rq->ctx->upstream_sign) {
+		l.WSTR("U");
+	}
+	if (rq->ctx->parent_signed) {
+		l.WSTR("P");
 	}
 	if(TEST(rq->flags,RQ_OBJ_VERIFIED)){
 		l.WSTR("V");
@@ -328,7 +353,29 @@ void log_access(KHttpRequest *rq) {
 		l.WSTR("m");
 		l << (int)rq->mark;
 	}
-	l.WSTR("]\n");
+	l.WSTR("a");
+	l << rq->ctx->us_code;
+	l.WSTR("]");
+	if (conf.log_event_id) {
+		l.WSTR(" ");
+		l.add(rq->request_msec, INT64_FORMAT_HEX);
+		l.WSTR("-");
+		l.add((INT64)rq, INT64_FORMAT_HEX);
+	}
+#if 0
+	l.WSTR(" ");
+	l.addHex(rq->if_modified_since);
+	l.WSTR(" ");
+	l.addHex(rq->ctx->lastModified);
+	l.WSTR(" ");
+	if (TEST(rq->flags, RQ_HAS_IF_NONE_MATCH)) {
+		l.WSTR("inm");
+	}
+	if (rq->ctx->if_none_match) {
+		l.write_all(rq->ctx->if_none_match->data, rq->ctx->if_none_match->len);
+	}
+#endif
+	l.WSTR("\n");
 	//*/
 	if (s->place != LOG_NONE) {
 		s->startLog();
@@ -412,7 +459,7 @@ void stageHttpManage(KHttpRequest *rq)
 			(rq->raw_url.param?"?":""),(rq->raw_url.param?rq->raw_url.param:""));
 	if(strstr(rq->url->path,".whm") 
 		|| strcmp(rq->url->path,"/logo.gif")==0
-		|| strcmp(rq->url->path,"/kangle.css")==0){
+		|| strcmp(rq->url->path,"/main.css")==0){
 		//如果有whm的，直接走whm,跳过post数据处理
 		CLR(rq->flags,RQ_HAS_AUTHORIZATION);
 		assert(rq->fetchObj==NULL && rq->svh==NULL);
@@ -457,14 +504,16 @@ bool check_virtual_host_request(KHttpRequest *rq) {
 	}
 #ifdef ENABLE_VH_RS_LIMIT
 	/* 带宽限制 */
-	if (rq->svh->vh->sl) {
-		rq->addSpeedLimit(rq->svh->vh->sl);
+	KSpeedLimit *sl= rq->svh->vh->refsSpeedLimit();
+	if (sl) {
+		rq->pushSpeedLimit(sl);
 	}
 #endif
 #ifdef ENABLE_VH_FLOW
 	/* 流量统计 */
-	if (rq->svh->vh->flow) {
-		rq->addFlowInfo(rq->svh->vh->flow);
+	KFlowInfo *flow = rq->svh->vh->refsFlowInfo();
+	if (flow) {
+		rq->pushFlowInfo(flow);
 	}
 #endif
 #ifndef HTTP_PROXY
@@ -505,11 +554,14 @@ bool bind_virtual_host(KHttpRequest *rq,const char *hostname,int len,bool cname)
 	default:
 		break;
 	}
-	char *orig_host = rq->url->host;
+	//保存raw_url的flags
+	u_short flags = rq->raw_url.flags;
+	rq->raw_url.flags = 0;
 	if (!check_virtual_host_request(rq)) {
+		SET(rq->raw_url.flags, flags);
 		return false;
 	}
-	if (orig_host != rq->url->host) {
+	if (TEST(rq->raw_url.flags,KGL_URL_REWRITED)) {
 		//rewrite host
 		KSubVirtualHost *new_svh = NULL;
 		conf.gvm->queryVirtualHost(rq->c->ls, &new_svh, rq->url->host, 0, false);
@@ -522,6 +574,7 @@ bool bind_virtual_host(KHttpRequest *rq,const char *hostname,int len,bool cname)
 			}
 		}
 	}
+	SET(rq->raw_url.flags, flags);
 	return true;
 }
 void bind_cname_call_back(KHttpRequest *rq,const char *cname,int len) {
@@ -557,7 +610,7 @@ void handleStartRequest(KHttpRequest *rq,int got)
 		return;
 	}
 #endif
-	if (rq->c->is_read_hup()) {
+	if (rq->ctx->read_huped) {
 		SET(rq->flags,RQ_CONNECTION_CLOSE);
 		send_error(rq,NULL,STATUS_BAD_REQUEST,"Client close connection");
 		return;
@@ -623,6 +676,10 @@ void async_http_start(KHttpRequest *rq)
 	if (TEST(rq->flags,RQ_HAVE_EXPECT)) {
 		rq->c->socket->write_all("HTTP/1.1 100 Continue\r\n\r\n");
 		CLR(rq->flags,RQ_HAVE_EXPECT);
+	}
+	if (conf.max_io>0 && katom_get((void *)&kgl_aio_count) > (uint32_t)conf.max_io) {
+		//async io limit
+		SET(rq->filter_flags, RF_NO_DISK_CACHE);
 	}
 	//only if cached
 	if (TEST(rq->flags, RQ_HAS_ONLY_IF_CACHED)) {

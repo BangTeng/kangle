@@ -53,6 +53,8 @@
 #include "cache.h"
 #ifdef _WIN32
 #include <direct.h>
+#else
+#include <sys/mman.h>
 #endif
 bool need_reboot_flag = false;
 using namespace std;
@@ -269,10 +271,13 @@ void init_config(KConfig *conf)
 #ifdef ENABLE_TF_EXCHANGE
 	conf->max_post_size = 8388608;
 #endif	
-	//conf->buffer = 32768;
-	conf->worker = 1;
-	conf->worker_io = 10;
-	conf->worker_dns = 20;
+	conf->read_hup = true;
+	conf->mlock = false;
+	conf->io_timeout = 4;
+	conf->max_io = 0;
+	conf->worker_io = 16;
+	conf->worker_dns = 32;
+	conf->io_buffer = 262144;
 }
 void LoadDefaultConfig() {
 	init_config(&conf);
@@ -475,9 +480,6 @@ void loadExtConfigFile()
 	list_dir(configFile.c_str(),handleExtConfigFile,(void *)configFile.c_str());
 }
 bool saveConfig() {
-	if (conf.worker>1) {
-		need_reboot_flag = true;
-	}
 	return KConfigBuilder::saveConfig();
 }
 void load_main_config(KConfig *cconf,KXml &xmlParser,bool firstload)
@@ -581,6 +583,15 @@ void do_config(bool firstTime) {
 	}
 	delete cconf;
 	cconf = NULL;
+#ifdef MCL_FUTURE
+	if (firstTime && conf.mlock) {
+		if (0 != mlockall(MCL_CURRENT | MCL_FUTURE)) {
+			klog(KLOG_ERR, "Unable to mlockall\n");
+		} else {
+			klog(KLOG_NOTICE, "mlockall success\n");
+		}
+	}
+#endif
 }
 void do_config_clean() {
 
@@ -704,14 +715,14 @@ void parse_config(bool firstTime)
 		conf.worker_dns = 2;
 	}
 	if (conf.ioWorker==NULL) {
-		conf.ioWorker = new KAsyncWorker(conf.worker_io);
+		conf.ioWorker = new KAsyncWorker(conf.worker_io,conf.max_io);
 	} else {
-		conf.ioWorker->setWorker(conf.worker_io);
+		conf.ioWorker->setWorker(conf.worker_io,conf.max_io);
 	}
 	if (conf.dnsWorker==NULL) {
-		conf.dnsWorker = new KAsyncWorker(conf.worker_dns);
+		conf.dnsWorker = new KAsyncWorker(conf.worker_dns,512);
 	} else {
-		conf.dnsWorker->setWorker(conf.worker_dns);
+		conf.dnsWorker->setWorker(conf.worker_dns,512);
 	}
 	if (*conf.disk_work_time) {
 		conf.diskWorkTime.set(conf.disk_work_time);
@@ -739,7 +750,7 @@ void parse_config(bool firstTime)
 	}
 	if (!firstTime) {
 		//不是第一次，处理listen
-		conf.gvm->startStaticListen(conf.service,true);
+		conf.gvm->flush_static_listens(conf.service);
 		//重置log
 		klog_start();
 		selectorManager.setTimeOut();

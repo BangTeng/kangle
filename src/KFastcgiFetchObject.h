@@ -25,7 +25,7 @@ protected:
 	}
 	void expectDone(KHttpRequest *rq)
 	{
-		lifeTime = 0;
+		lifeTime = 0;		
 		KAsyncFetchObject::expectDone(rq);
 	}
 	bool needTempFile()
@@ -69,6 +69,5 @@ private:
 	KHttpObjectParserHook hook;
 	bool bodyEnd;
 protected:
-	//bool chrooted;
 };
 #endif /* KFASTCGIFETCHOBJECT_H_ */

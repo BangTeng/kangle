@@ -65,12 +65,11 @@ void KPortSelector::select() {
 #ifndef NDEBUG
 		klog(KLOG_DEBUG,"select st=%p,st_flags=%d,events=%d at %p\n",st,st->st_flags,events[0].portev_events,pthread_self());
 #endif
-		if (TEST(events[0].portev_events,POLLIN)) {
-			st->eventRead(st->e[OP_READ].arg,st->e[OP_READ].result,st->e[OP_READ].buffer);
-		} else {
-			assert(TEST(events[0].portev_events,POLLOUT));
-			st->eventWrite(st->e[OP_WRITE].arg,st->e[OP_WRITE].result,st->e[OP_WRITE].buffer);
-		}
+		if (TEST(events[0].portev_events, POLLOUT)) {
+			st->eventWrite(st->e[OP_WRITE].arg, st->e[OP_WRITE].result, st->e[OP_WRITE].buffer);
+		} else if (TEST(events[0].portev_events, POLLIN)) {
+			st->eventRead(st->e[OP_READ].arg, st->e[OP_READ].result, st->e[OP_READ].buffer); \
+		}			
 
 	}
 	/*//
@@ -109,7 +108,11 @@ bool KPortSelector::write(KSelectable *st,resultEvent result,bufferEvent buffer,
 	st->e[OP_WRITE].buffer = buffer;
 	//st->e[OP_READ].result = NULL;
 	SOCKET sockfd = st->getSocket()->get_socket();
-	if(0 == port_associate(kdpfd,PORT_SOURCE_FD, sockfd,POLLOUT,st)) {
+	int ev = POLLOUT;
+	if (TEST(st->st_flags, STF_ALWAYS_READ)) {
+		SET(ev, POLLIN);
+	}
+	if(0 == port_associate(kdpfd,PORT_SOURCE_FD, sockfd, ev,st)) {
 		SET(st->st_flags,STF_READ|STF_EV|STF_ONE_SHOT);
 		return true;
 	}
@@ -123,7 +126,6 @@ bool KPortSelector::read(KSelectable *st,resultEvent result,bufferEvent buffer,v
 	st->e[OP_READ].arg = arg;
 	st->e[OP_READ].result = result;
 	st->e[OP_READ].buffer = buffer;
-	//st->e[OP_WRITE].result = NULL;
 	SOCKET sockfd = st->getSocket()->get_socket();
 	if(0 == port_associate(kdpfd,PORT_SOURCE_FD, sockfd,POLLIN,st)) {
 		SET(st->st_flags,STF_READ|STF_EV|STF_ONE_SHOT);
@@ -138,7 +140,7 @@ void KPortSelector::removeSocket(KSelectable *st) {
 	}
 	SOCKET sockfd = st->getSocket()->get_socket();
 	port_dissociate(kdpfd,PORT_SOURCE_FD,sockfd);
-	CLR(st->st_flags,STF_READ|STF_WRITE|STF_ONE_SHOT|STF_EV);
+	CLR(st->st_flags, STF_ALWAYS_READ|STF_READ|STF_WRITE|STF_ONE_SHOT|STF_EV);
 }
 bool KPortSelector::connect(KSelectable *st,resultEvent result,void *arg)
 {

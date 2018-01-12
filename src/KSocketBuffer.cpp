@@ -62,14 +62,14 @@ char *KSocketBuffer::getWBuffer(int &len)
 		hot_buf = head;
 		hot = hot_buf->data;
 	}
-	len = NBUFF_CHUNK - hot_buf->used;
+	len = chunk_size - hot_buf->used;
 	if (len == 0) {
 		buff *nbuf = newbuff();
 		assert(hot_buf->next==NULL);
 		hot_buf->next = nbuf;
 		hot_buf = nbuf;
 		hot = hot_buf->data;
-		len = NBUFF_CHUNK;
+		len = chunk_size;
 	}
 	assert(len>0);
 	return hot;

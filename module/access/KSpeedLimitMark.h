@@ -33,8 +33,7 @@ public:
 	bool mark(KHttpRequest *rq, KHttpObject *obj, const int chainJumpType,int &jumpType) {
 		KSpeedLimit *sl = new KSpeedLimit;
 		sl->setSpeedLimit(speed_limit);
-		rq->addSpeedLimit(sl);
-		sl->release();
+		rq->pushSpeedLimit(sl);
 		return true;
 	}
 	std::string getDisplay() {

@@ -17,7 +17,9 @@ FUNC_TYPE FUNC_CALL MPVProcessPowerWorker(void *param)
         MPVProcessPowerParam *vpp = (MPVProcessPowerParam *)param;
         bool success;
         KUpstreamSelectable *socket = vpp->process->poweron(vpp->rq->svh->vh,vpp->rd,success);
-	
+		if(socket){
+			vpp->rq->c->selector->bindSelectable(socket);
+		}
         static_cast<KAsyncFetchObject *>(vpp->rq->fetchObj)->connectCallBack(vpp->rq,socket,false);
         vpp->process->release();
         delete vpp;
@@ -60,56 +62,67 @@ KUpstreamSelectable *KCmdProcess::poweron(KVirtualHost *vh,KExtendProgram *erd,b
 }
 KMPCmdProcess::KMPCmdProcess()
 {
+	freeProcessList = new KSingleListenPipeStream;
+	busyProcessList = new KSingleListenPipeStream;
+	klist_init(freeProcessList);
+	klist_init(busyProcessList);
 }
 KMPCmdProcess::~KMPCmdProcess()
 {
-	for (std::list<KSingleListenPipeStream *>::iterator it = freeProcess.begin();it!=freeProcess.end();it++) {
-		delete (*it);
-	}
-	freeProcess.clear();
-	KSingleListenPipeStream *st = static_cast<KSingleListenPipeStream *>(this->getHead());
-	KSingleListenPipeStream *next_st;
-	while (st) {
-		next_st = static_cast<KSingleListenPipeStream *>(st->next);
+	KSingleListenPipeStream *st;
+	for (;;) {
+		st = klist_head(freeProcessList);
+		if (st == freeProcessList) {
+			break;
+		}
+		klist_remove(st);
 		delete st;
-		st = next_st;
 	}
+	for (;;) {
+		st = klist_head(busyProcessList);
+		if (st == busyProcessList) {
+			break;
+		}
+		klist_remove(st);
+		delete st;
+	}
+	delete freeProcessList;
+	delete busyProcessList;
 }
 void KMPCmdProcess::handleRequest(KHttpRequest *rq,KExtendProgram *rd)
 {
 	KSingleListenPipeStream *sp = NULL;
-        stLock.Lock();
-        std::list<KSingleListenPipeStream *>::iterator it = freeProcess.begin();
-        if(it!=freeProcess.end()){
-                sp = (*it);
-                freeProcess.erase(it);
-                this->push_back(sp);
-        }
-        stLock.Unlock();
-        if (sp) {
+    stLock.Lock();
+	if (!klist_empty(freeProcessList)) {
+		sp = klist_head(freeProcessList);
+		klist_remove(sp);
+		klist_append(busyProcessList, sp);
+	}
+    stLock.Unlock();
+	if (sp) {
 		addRef();
-                bool isHalf;
-                KUpstreamSelectable *socket = sp->getPoolSocket(isHalf);
-                if (socket==NULL) {
-                        sp->killChild();
-                        gcProcess(sp);
-                }
-                static_cast<KAsyncFetchObject *>(rq->fetchObj)->connectCallBack(rq,socket,isHalf);
-                return;
-        }
-        if (sp==NULL) {
-                rq->c->removeRequest(rq,true);
-                MPVProcessPowerParam *param = new MPVProcessPowerParam;
-                param->rq = rq;
-                param->rd = rd;
-                param->process = this;
-                addRef();
-                if (!m_thread.start(param,MPVProcessPowerWorker)) {
-                        static_cast<KAsyncFetchObject *>(rq->fetchObj)->connectCallBack(rq,NULL,true);
-                        delete param;
-                        release();
-                }
-        }
+		bool isHalf;
+		KUpstreamSelectable *socket = sp->getConnection(rq, isHalf);
+		if (socket == NULL) {
+			sp->killChild();
+			gcProcess(sp);
+		}
+		static_cast<KAsyncFetchObject *>(rq->fetchObj)->connectCallBack(rq, socket, isHalf);
+		return;
+	}
+	if (sp == NULL) {
+		rq->c->removeRequest(rq, true);
+		MPVProcessPowerParam *param = new MPVProcessPowerParam;
+		param->rq = rq;
+		param->rd = rd;
+		param->process = this;
+		addRef();
+		if (!m_thread.start(param, MPVProcessPowerWorker)) {
+			static_cast<KAsyncFetchObject *>(rq->fetchObj)->connectCallBack(rq, NULL, true);
+			delete param;
+			release();
+		}
+	}
 }
 KUpstreamSelectable *KMPCmdProcess::poweron(KVirtualHost *vh,KExtendProgram *erd,bool &success)
 {
@@ -136,7 +149,8 @@ KUpstreamSelectable *KMPCmdProcess::poweron(KVirtualHost *vh,KExtendProgram *erd
 #endif
 	//we need cmdLock and the stLock
 	cmdLock.Lock();
-	socket = rd->createPipeStream(vh,st,st->unix_path,this->head!=NULL);
+	st->setLifeTime(this->lifeTime);
+	socket = rd->createPipeStream(vh,st,st->unix_path,!klist_empty(busyProcessList));
 	if (socket == NULL) {
 		cmdLock.Unlock();
 		delete st;
@@ -147,8 +161,8 @@ KUpstreamSelectable *KMPCmdProcess::poweron(KVirtualHost *vh,KExtendProgram *erd
 	
 #endif
 	stLock.Lock();
-        push_back(st);
-        stLock.Unlock();
+	klist_append(busyProcessList, st);
+    stLock.Unlock();
 	cmdLock.Unlock();
 	st->bind(socket);
 	st->vprocess = this;
@@ -164,9 +178,10 @@ void KMPCmdProcess::gcProcess(KSingleListenPipeStream *st)
 {
 	bool isKilled = st->process.isKilled();
 	stLock.Lock();
-	remove(st);
+	klist_remove(st);
 	if (!isKilled) {
-		freeProcess.push_front(st);
+		KSingleListenPipeStream *head = freeProcessList->next;
+		klist_insert(head,st);
 	}
 	stLock.Unlock();	
 	if (isKilled) {
@@ -177,50 +192,47 @@ void KMPCmdProcess::gcProcess(KSingleListenPipeStream *st)
 
 void KMPCmdProcess::getProcessInfo(const USER_T &user, const std::string &name,std::stringstream &s,int &count)
 {
+	KSingleListenPipeStream *st;
 	stLock.Lock();
-	KSingleListenPipeStream *st = static_cast<KSingleListenPipeStream *>(this->getHead());
-	while(st){
+	klist_foreach(st, busyProcessList) {
 		count++;
-		::getProcessInfo(user,name,&st->process,st,s);
-		st = static_cast<KSingleListenPipeStream *>(st->next);
+		::getProcessInfo(user, name, &st->process, st, s);
 	}
-	for (std::list<KSingleListenPipeStream *>::iterator it = freeProcess.begin();it!=freeProcess.end();it++) {
+	klist_foreach(st, freeProcessList) {
 		count++;
-		::getProcessInfo(user,name,&(*it)->process,(*it),s);
+		::getProcessInfo(user, name, &st->process, st, s);
 	}
 	stLock.Unlock();
 }
 bool KMPCmdProcess::killProcess(int pid)
 {
+	KSingleListenPipeStream *st;
 	bool successKilled = false;
 	stLock.Lock();
-	KSingleListenPipeStream *st = static_cast<KSingleListenPipeStream *>(this->getHead());
-	while(st){
-		if (pid==0) {
+	klist_foreach(st, busyProcessList) {
+		if (pid == 0) {
 			st->killChild();
 			st->unlink_unix();
-			st = static_cast<KSingleListenPipeStream *>(st->next);
 			continue;
-		}			
-		if (st->process.getProcessId()==pid) {
+		}
+		if (st->process.getProcessId() == pid) {
 			st->killChild();
 			st->unlink_unix();
 			successKilled = true;
 			break;
 		}
-		st = static_cast<KSingleListenPipeStream *>(st->next);
 	}
 	if (!successKilled) {
-		std::list<KSingleListenPipeStream *>::iterator it;		
-		for(it = freeProcess.begin();it!=freeProcess.end();it++){			
-			st = (*it);
-			if (pid==0) {
+		klist_foreach(st, freeProcessList) {
+			if (pid == 0) {
 				st->killChild();
 				st->unlink_unix();
-			}else if(pid==st->process.getProcessId()){
+				continue;
+			}
+			if (pid == st->process.getProcessId()) {
 				st->killChild();
 				st->unlink_unix();
-				freeProcess.erase(it);
+				klist_remove(st);
 				delete st;
 				break;
 			}
@@ -235,22 +247,20 @@ bool KMPCmdProcess::killProcess(int pid)
 bool KMPCmdProcess::canDestroy(time_t nowTime)
 {
 	bool result = false;
-	std::list<KSingleListenPipeStream *>::iterator it;
+	KSingleListenPipeStream *st;
 	stLock.Lock();
 	for (;;) {
-		if (freeProcess.size() == 0) {
+		st = klist_end(freeProcessList);
+		if (st == freeProcessList) {
 			break;
 		}
-		it = --freeProcess.end();
-		if (nowTime > idleTime + (*it)->lastActive) {
-			//printf("连接过期了!\n");
-			delete (*it);
-			freeProcess.erase(it);
-		} else {
+		if (nowTime < idleTime + st->lastActive) {
 			break;
 		}
+		klist_remove(st);
+		delete st;
 	}
-	if(freeProcess.size()==0 && getHead()==NULL){
+	if(klist_empty(freeProcessList) && klist_empty(busyProcessList)) {
 		result = true;
 	}
 	stLock.Unlock();

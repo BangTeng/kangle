@@ -17,6 +17,12 @@
 #define KGL_URL_ORIG_SSL  0x40
 #define KGL_URL_BAD       0x80
 
+#define KGL_ENCODING_DEFLATE  1
+#define KGL_ENCODING_COMPRESS (1<<1)
+#define KGL_ENCODING_GZIP     (1<<2)
+#define KGL_ENCODING_BR       (1<<3)
+#define KGL_ENCODING_UNKNOW   (1<<6)
+#define KGL_ENCODING_YES      (1<<7)
 class KUrl {
 public:
 	~KUrl() {
@@ -29,6 +35,23 @@ public:
 		IF_FREE(host);
 		IF_FREE(path);
 		IF_FREE(param);
+		flag_encoding = 0;
+	}
+	bool match_accept_encoding(u_char accept_encoding) {
+		assert(TEST(accept_encoding, KGL_ENCODING_YES) == 0);
+		if (TEST(encoding, KGL_ENCODING_YES) > 0) {
+			return TEST(encoding, accept_encoding) > 0;
+		}
+		return accept_encoding==0 || TEST(encoding,accept_encoding) == accept_encoding;
+	}
+	void set_content_encoding(u_char content_encoding) {
+		this->encoding = (KGL_ENCODING_YES | content_encoding);
+	}
+	void merge_accept_encoding(u_char accept_encoding) {
+		if (TEST(encoding, KGL_ENCODING_YES) > 0) {
+			return;
+		}
+		SET(encoding, accept_encoding);
 	}
 	int cmpn(const KUrl *a,int n) const {
 		int ret = strcasecmp(host,a->host);
@@ -83,12 +106,21 @@ public:
 			url->param = xstrdup(param);		
 		url->port = port;
 		url->flags = flags;
+		url->encoding = encoding;
 	}
 	char *getUrl() {
 		KStringBuf s(128);
 		if (!getUrl(s)) {
 			return NULL;
 		}
+		return s.stealString();
+	}
+	char *getUrl2(int &len) {
+		KStringBuf s(128);
+		if (!getUrl(s)) {
+			return NULL;
+		}
+		len = s.getSize();
 		return s.stealString();
 	}
 	void clean_vary()
@@ -205,7 +237,13 @@ public:
 	char *path;
 	char *param;
 	u_short port;
-	u_short flags;
+	union {
+		u_short flag_encoding;
+		struct {
+			u_char flags;
+			u_char encoding;
+		};
+	};
 };
 void free_url(KUrl *url);
 #endif

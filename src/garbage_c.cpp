@@ -132,6 +132,9 @@ FUNC_TYPE FUNC_CALL time_thread(void* arg) {
 	for(;;){
 		i++;
 		sleep_time = GC_SLEEP_TIME - (int)(time(NULL) - nowTime);
+		if (sleep_time > GC_SLEEP_TIME) {
+			sleep_time = GC_SLEEP_TIME;
+		}
 		if (sleep_time>0) {
 			sleep(sleep_time);
 		}
@@ -188,6 +191,9 @@ FUNC_TYPE FUNC_CALL time_thread(void* arg) {
 		}
 #ifdef ENABLE_DISK_CACHE
 		scan_disk_cache();
+		if (dci && !cache.is_disk_shutdown()) {
+			dci->start(ci_flush, NULL);
+		}
 #endif
 	}
 	KTHREAD_RETURN;

@@ -70,7 +70,7 @@ int asyncHttpRequest(kgl_async_http *ctx)
 		KHttpHeader *h = new_http_header(kgl_expand_string("Accept-Encoding"), kgl_expand_string("gzip"));
 		h->next = ss->rh;
 		ss->rh = h;
-		SET(rq->flags, RQ_HAS_GZIP);
+		SET(rq->raw_url.encoding, KGL_ENCODING_GZIP);
 	}
 	rq->meth = KHttpKeyValue::getMethod(ctx->meth);
 	rq->content_length = ctx->postLen;

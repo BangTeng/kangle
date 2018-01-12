@@ -22,7 +22,8 @@ public:
 				const int chainJumpType, int &jumpType)
 	{
 		if (fi) {
-			rq->addFlowInfo(fi);
+			fi->addRef();
+			rq->pushFlowInfo(fi);
 			return true;
 		}
 		return false;

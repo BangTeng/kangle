@@ -25,35 +25,51 @@ class KResponseFlagMark : public KMark {
 public:
 	KResponseFlagMark() {
 		flag=0;
+		gzip = false;
 		nogzip = false;
+		identity_encoding = false;
 	}
 	virtual ~KResponseFlagMark() {
 	}
 	bool mark(KHttpRequest *rq, KHttpObject *obj,const int chainJumpType, int &jumpType) {
-		SET(obj->index.flags,flag);
-		if (nogzip) {
-			CLR(obj->index.flags,FLAG_NEED_GZIP);
+		bool result = false;
+		if (flag > 0) {
+			SET(obj->index.flags, flag);
+			result = true;
 		}
-		return true;
+		if (nogzip) {
+			obj->need_gzip = 0;
+			result = true;
+		}
+		if (gzip) {
+			obj->need_gzip = 1;
+			result = true;
+		}
+		if (identity_encoding && !TEST(obj->url->encoding, KGL_ENCODING_YES)) {
+			obj->url->encoding = ~KGL_ENCODING_YES;
+			result = true;
+		}
+		return result;
 	}
 	std::string getDisplay() {
 		std::stringstream s;
 		if (nogzip) {
 			s << "nogzip,";
 		}
-		if (TEST(flag,FLAG_NEED_GZIP)) {
+		if (gzip) {
 			s << "gzip,";
 		}
 		if (TEST(flag,FLAG_NO_NEED_CACHE)) {
 			s << "nocache,";
 		}
-
-		
 		if (TEST(flag,FLAG_NO_DISK_CACHE)) {
 			s << "nodiskcache,";
 		}
 		if (TEST(flag, OBJ_CACHE_RESPONSE)) {
 			s << "cache_response,";
+		}
+		if (identity_encoding) {
+			s << "identity_encoding,";
 		}
 		return s.str();
 	}
@@ -61,6 +77,8 @@ public:
 			throw(KHtmlSupportException) {
 		flag=0;
 		nogzip = false;
+		gzip = false;
+		identity_encoding = false;
 		const char *flagStr=attibute["flagvalue"].c_str();
 		char *buf = strdup(flagStr);
 		char *hot = buf;
@@ -73,12 +91,14 @@ public:
 				nogzip = true;
 			}
 			if (strcasecmp(hot,"gzip")==0) {
-				SET(flag,FLAG_NEED_GZIP);
+				gzip = true;
+			}
+			if (strcasecmp(hot, "identity_encoding") == 0) {
+				identity_encoding = true;
 			}
 			if (strcasecmp(hot,"nocache")==0) {
 				SET(flag,FLAG_NO_NEED_CACHE);
 			}
-			
 			if (strcasecmp(hot,"nodiskcache")==0) {
 				SET(flag,FLAG_NO_DISK_CACHE);
 			}
@@ -99,7 +119,7 @@ public:
 			s << model->getDisplay();
 		}
 
-		s << "'>(available:nogzip,gzip,nocache,nodiskcache)";
+		s << "'>(available:nogzip,gzip,nocache,nodiskcache,identity_encoding)";
 		return s.str();
 	}
 	KMark *newInstance() {
@@ -119,6 +139,8 @@ public:
 private:
 	int flag;
 	bool nogzip;
+	bool gzip;
+	bool identity_encoding;
 };
 
 class KExtendFlagMark : public KMark {

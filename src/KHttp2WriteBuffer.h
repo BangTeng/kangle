@@ -10,11 +10,20 @@
 #include "forwin32.h"
 #include "KMutex.h"
 #include "KSelector.h"
+class KHttp2Context;
+class KHttp2;
+class http2_buff;
 class kgl_http2_event
 {
 public:
+	kgl_http2_event()
+	{
+		memset(this, 0, sizeof(kgl_http2_event));
+	}
+	~kgl_http2_event();
 	kgl_http2_event *next;
-	void *arg;	
+	void *arg;
+	http2_buff *refs_buff;
 	bufferEvent buffer;	
 	resultEvent result;	
 	int len;	
@@ -27,11 +36,12 @@ public:
 		memset(this,0,sizeof(*this));
 	}
 	~http2_buff();
+	void clean(KHttp2 *http2);
 	char *data;
 	int used;
 	int skip_data_free:1;
 	int tcp_nodelay : 1;
-	kgl_http2_event *e;
+	KHttp2Context *ctx;
 	http2_buff *next;
 };
 #define KGL_HEADER_FRAME_CHUNK_SIZE 4096
@@ -138,7 +148,7 @@ public:
 	}
 	~KHttp2WriteBuffer()
 	{
-		KHttp2WriteBuffer::remove_buff(clean());
+		KHttp2WriteBuffer::remove_buff(clean(),NULL);
 	}
 	void getReadBuffer(KSocket *fd,LPWSABUF buffer,int &bufferCount)
 	{
@@ -146,6 +156,11 @@ public:
 			tcp_cork = 1;
 			fd->setdelay();
 		}
+#ifndef NDEBUG
+		if (hot == NULL) {
+			printf("bug\n");
+		}
+#endif
 		assert(hot);
 		int got = left;
 		assert(header);
@@ -201,7 +216,7 @@ public:
 	void push(http2_buff *buf)
 	{
 		while (buf) {
-			add(buf,buf->used);
+			add(buf);
 			buf = buf->next;
 		}
 	}
@@ -211,10 +226,11 @@ public:
 	}
 	http2_buff *clean();
 	/* return fin */
-	static void remove_buff(http2_buff *remove_list)
+	static void remove_buff(http2_buff *remove_list,KHttp2 *http2)
 	{
 		 while (remove_list) {
 			http2_buff *next = remove_list->next;
+			remove_list->clean(http2);
 			delete remove_list;
 			remove_list = next;
 		}
@@ -223,6 +239,11 @@ public:
 private:
 	void reset()
 	{
+#ifndef NDEBUG
+		if (left != 0 || header!=NULL) {
+			printf("bug\n");
+		}
+#endif
 		assert(header == NULL);
 		assert(left == 0);
 		last = NULL;
@@ -239,9 +260,9 @@ private:
 			fd->setnodelay();
 		}
 	}
-	void add(http2_buff *buf,int len)
+	void add(http2_buff *buf)
 	{
-		left += len;
+		left += buf->used;
 		if (last==NULL) {
 			assert(header==NULL);
 			last = header = buf;

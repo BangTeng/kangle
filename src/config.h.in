@@ -15,6 +15,9 @@
 /* enable http2 support */
 #undef ENABLE_HTTP2
 
+/* jemalloc */
+#undef ENABLE_JEMALLOC
+
 /* large files support */
 #undef ENABLE_LARGE_FILE
 

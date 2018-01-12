@@ -160,8 +160,7 @@ void KSocket::get_addr(const sockaddr_i *addr, ip_addr *to) {
 	if (addr->v4.sin_family == PF_INET) {
 		to->addr32[0] = addr->v4.sin_addr.s_addr;
 	} else {
-		memcpy(&to->data, &addr->v6.sin6_addr,
-				MIN(sizeof(to->data),sizeof(addr->v6.sin6_addr)));
+		memcpy(&to->data, &addr->v6.sin6_addr,MIN(sizeof(to->data),sizeof(addr->v6.sin6_addr)));
 	}
 #else
 	*to = addr->v4.sin_addr.s_addr;
@@ -276,11 +275,16 @@ bool KSocket::getaddr(const char *host, int port, sockaddr_i *m_a,int ai_family,
 	return true;
 }
 bool KClientSocket::connect(sockaddr_i &m_adr, int tmo, sockaddr_i *bind_addr) {
-	if ((sockfd = socket(m_adr.v4.sin_family, SOCK_STREAM, 0))
-			== INVALID_SOCKET) {
+#ifdef SOCK_CLOEXEC
+	if ((sockfd = socket(m_adr.v4.sin_family, SOCK_STREAM | SOCK_CLOEXEC, 0)) == INVALID_SOCKET) {
+		return false;
+	}
+#else
+	if ((sockfd = socket(m_adr.v4.sin_family, SOCK_STREAM, 0))	== INVALID_SOCKET) {
 		return false;
 	}
 	setCloseOnExec();
+#endif
 	if (bind_addr) {
 		int addr_len = bind_addr->get_addr_len();
 		if (::bind(sockfd, (struct sockaddr *) bind_addr, addr_len) < 0) {
@@ -326,10 +330,16 @@ bool KClientSocket::halfconnect(const char *unixfile)
 #endif
 bool KClientSocket::halfconnect(sockaddr_i *bind_addr,bool tproxy)
 {
+#ifdef SOCK_CLOEXEC
+	if ((sockfd = socket(addr.v4.sin_family, SOCK_STREAM | SOCK_CLOEXEC, 0)) == INVALID_SOCKET) {
+		return false;
+	}
+#else
 	if ((sockfd = socket(addr.v4.sin_family, SOCK_STREAM, 0)) == INVALID_SOCKET) {
 		return false;
 	}
 	setCloseOnExec();
+#endif
 	if (bind_addr) {
 		int addr_len = bind_addr->get_addr_len();
 #ifdef IP_TRANSPARENT
@@ -464,14 +474,24 @@ bool KServerSocket::open6(int port, const char *ip,bool tproxy) {
 }
 #endif
 bool KServerSocket::listen(int flag) {
+#ifdef SOCK_CLOEXEC
+	if ((sockfd = socket(addr.v4.sin_family, SOCK_STREAM|SOCK_CLOEXEC, 0)) == INVALID_SOCKET) {
+		return false;
+	}
+#else
 	if ((sockfd = socket(addr.v4.sin_family, SOCK_STREAM, 0)) == INVALID_SOCKET) {
-		debug("create socket failed,errno=%d.\n", errno);
 		return false;
 	}
 	setCloseOnExec();
+#endif
 	int n = 1;
 #ifndef _WIN32
 	setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (const char *) &n, sizeof(int));
+#endif
+#ifdef SO_REUSEPORT
+	if (TEST(flag, KSOCKET_REUSEPORT)) {
+		setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, (const char *)&n, sizeof(int));
+	}
 #endif
 #ifdef IPV6_V6ONLY
 	if (TEST(flag,KSOCKET_ONLY_IPV6)) {
@@ -484,17 +504,17 @@ bool KServerSocket::listen(int flag) {
 	if (TEST(flag,KSOCKET_TPROXY) ){
 		int value = 1;
 		if (setsockopt(sockfd, SOL_IP, IP_TRANSPARENT, &value, sizeof(value))<0) {
-			debug("setsockopt IP_TRANSPARENT failed,errno=%d\n",errno);
+			//debug("setsockopt IP_TRANSPARENT failed,errno=%d\n",errno);
 		}
 	}
 #endif
 #endif
 	if (::bind(sockfd, (struct sockaddr *) &addr, addr_len) < 0) {
-		debug("bind socket failed,errno=%d.\n", errno);
+		//debug("bind socket failed,errno=%d.\n", errno);
 		return false;
 	}
 	if (::listen(sockfd, -1) < 0) {
-		debug("listen socket failed,errno=%d.\n", errno);
+		//debug("listen socket failed,errno=%d.\n", errno);
 		return false;
 	}
 	return true;

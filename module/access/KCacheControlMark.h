@@ -35,7 +35,9 @@ public:
 	bool mark(KHttpRequest *rq, KHttpObject *obj, const int chainJumpType,int &jumpType) {
 #ifdef ENABLE_FORCE_CACHE
 		if (staticUrl) {
-			obj->forceCache(lastModified);
+			if (!obj->force_cache(lastModified)) {
+				return false;
+			}
 		}
 #endif
 		if (!TEST(obj->index.flags,ANSW_NO_CACHE)) {			
@@ -169,7 +171,9 @@ public:
 				return false;
 			}
 		}
-		obj->forceCache(lastModified);
+		if (!obj->force_cache(lastModified)) {
+			return false;
+		}
 		if (skip_set_cookie) {
 			obj->removeHttpHeader("Set-Cookie");
 			obj->removeHttpHeader("Set-Cookie2");

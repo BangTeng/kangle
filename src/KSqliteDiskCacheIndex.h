@@ -21,8 +21,10 @@ public:
 	void close()
 	{
 		if (db) {
+			klog(KLOG_ERR, "close dci db...\n");
 			sqlite3_close(db);
 			db = NULL;
+			klog(KLOG_ERR, "closed dci db done.\n");
 		}
 	}
 	bool begin();
@@ -31,10 +33,9 @@ public:
 	bool open(const char *indexFileName);
 	INT64 memory_used();
 protected:
-	bool add(unsigned filename1,unsigned filename2,const char *url,time_t t,const char *data,int dataLen);
+	bool add(unsigned filename1,unsigned filename2,const char *url,const char *data,int dataLen);
 	bool del(unsigned filename1,unsigned filename2);
 	bool update(unsigned filename1,unsigned filename2,const char *buf,int len);
-	bool updateLast(unsigned filename1,unsigned filename2,time_t t);
 	
 	bool load(loadDiskCacheIndexCallBack callBack);
 private:

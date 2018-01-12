@@ -47,7 +47,7 @@ string get_connect_per_ip() {
 	bool have_insert = false;
 	connect_per_ip_t m_tmp;
 	s
-			<< "<html><head><LINK href=/kangle.css type='text/css' rel=stylesheet></head><body>";
+			<< "<html><head><LINK href=/main.css type='text/css' rel=stylesheet></head><body>";
 	s << LANG_MAX_CONNECT_PER_IP << conf.max_per_ip;
 	int total = 0;
 	ipLock.Lock();
@@ -113,8 +113,8 @@ KSelectorManager::KSelectorManager() {
 }
 void KSelectorManager::init(unsigned size)
 {
-	//保证listenIndex为2的n次方，最大为512.
-	for (int i=0;i<9;i++) {
+	//保证listenIndex为2的n次方，最大为32.
+	for (int i=0;i<7;i++) {
 		count = (1<<i);
 		if(count==(int)size){
 			break;
@@ -167,31 +167,51 @@ void KSelectorManager::setTimeOut()
 	}
 	selectors[0]->utm = true;
 }
-void KSelectorManager::closeKeepAliveConnection()
-{
-	for(int i=0; i<count; i++){
-		selectors[i]->timeout[KGL_LIST_KA] = 0;
-	}
-}
+
 KSelectorManager::~KSelectorManager() {
 
 }
-void KSelectorManager::destroy() {
 #ifdef MALLOCDEBUG
+void KSelectorManager::close()
+{
+	for (int i = 0; i<count; i++) {
+		selectors[i]->timeout[KGL_LIST_KA] = 1;
+		selectors[i]->timeout[KGL_LIST_RW] = 1;
+		selectors[i]->timeout[KGL_LIST_CONNECT] = 1;
+		selectors[i]->close();
+	}
+}
+void KSelectorManager::destroy() {
+
 	for (int i = 0; i < count; i++) {
 		delete selectors[i];
 	}
 	xfree(selectors);
-#endif
 }
+#endif
 void KSelectorManager::flush(time_t nowTime) {
 
 }
-
-bool KSelectorManager::listen(KServer *st,resultEvent result)
+bool KSelectorManager::listen(KServer *server,resultEvent result)
 {
-	st->selector = getSelector();
-	return st->selector->listen(st,result);
+	if (server->server_selectable == NULL) {
+		return false;
+	}
+	if (!server->is_multi_selectale()) {
+		server->server_selectable->selector = getSelector();
+		server->addRef();
+		server->server_selectable->selector->listen(server->server_selectable, result);		
+		return true;
+	}
+	KServerSelectable *ss = server->server_selectable;
+	for (int i = 0; i < count; i++) {
+		ss->selector = selectors[i];
+		server->addRef();
+		ss->selector->listen(ss, result);
+		ss = ss->next;
+	}
+	assert(ss == NULL);
+	return true;
 }
 void WINAPI get_connection_call_back(void *arg)
 {

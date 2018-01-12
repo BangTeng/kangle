@@ -1,14 +1,14 @@
 #ifndef KFILE_H_asdf1231
 #define KFILE_H_asdf1231
-#include "forwin32.h"
 #include "global.h"
 #include <stdarg.h>
 enum fileModel
 {
 	fileRead,
-	fileWrite,
+	fileWrite,//truncate
+	fileModify,
 	fileReadWrite,
-	fileWriteRead,
+	fileWriteRead,//truncate
 	fileAppend
 };
 enum seekPosion
@@ -20,6 +20,7 @@ enum seekPosion
 #define KFILE_TEMP_MODEL       1
 #define KFILE_ASYNC            2
 #define KFILE_NOFOLLOW         4
+#define KFILE_DSYNC            8
 
 #ifdef _WIN32
 #define FILE_HANDLE     HANDLE
@@ -34,7 +35,9 @@ enum seekPosion
 #ifdef ENABLE_SENDFILE
 #include <sys/sendfile.h>
 #endif
-
+#include "forwin32.h"
+#include <sys/types.h>  
+#include <sys/stat.h>
 #include "KSocket.h"
 inline time_t kfile_last_modified(const char *file)
 {
@@ -118,6 +121,9 @@ public:
 		if(TEST(flag,KFILE_ASYNC)){
 			SET(other_flag,FILE_FLAG_OVERLAPPED);
 		}
+		if (TEST(flag, KFILE_DSYNC)) {
+			SET(other_flag, FILE_FLAG_WRITE_THROUGH);
+		}
 		SECURITY_ATTRIBUTES sa;
 		memset(&sa,0,sizeof(sa));
 		sa.bInheritHandle = FALSE;
@@ -131,6 +137,10 @@ public:
 				flag1 = FILE_APPEND_DATA;
 				flag2 = OPEN_ALWAYS;
 				break;
+		case fileModify:
+				flag1 = GENERIC_WRITE;
+				flag2 = OPEN_ALWAYS;
+				break;
 		case fileWrite:
 				flag1 = GENERIC_WRITE;
 				flag2 = CREATE_ALWAYS;
@@ -139,8 +149,8 @@ public:
 				flag1 = GENERIC_READ | GENERIC_WRITE;
 				break;
 		case fileWriteRead:
-				flag2 = CREATE_ALWAYS;
 				flag1 = GENERIC_READ | GENERIC_WRITE;
+				flag2 = CREATE_ALWAYS;				
 				break;
 		}
 		fp =  CreateFileW(path,
@@ -203,6 +213,9 @@ public:
 		if(TEST(flag,KFILE_ASYNC)){
 			SET(other_flag,FILE_FLAG_OVERLAPPED);
 		}
+		if (TEST(flag, KFILE_DSYNC)) {
+			SET(other_flag, FILE_FLAG_WRITE_THROUGH);
+		}
 		SECURITY_ATTRIBUTES sa;
 		memset(&sa,0,sizeof(sa));
 		sa.bInheritHandle = FALSE;
@@ -216,19 +229,22 @@ public:
 				flag1 = FILE_APPEND_DATA;
 				flag2 = OPEN_ALWAYS;
 				break;
+		case fileModify:
+			flag1 = GENERIC_WRITE;
+			flag2 = OPEN_ALWAYS;
+			break;
 		case fileWrite:
-				flag1 = GENERIC_WRITE;
-				flag2 = CREATE_ALWAYS;
-				break;
+			flag1 = GENERIC_WRITE;
+			flag2 = CREATE_ALWAYS;
+			break;
 		case fileReadWrite:
 				flag1 = GENERIC_READ | GENERIC_WRITE;
 				break;
 		case fileWriteRead:
-				flag2 = CREATE_ALWAYS;
 				flag1 = GENERIC_READ | GENERIC_WRITE;
+				flag2 = CREATE_ALWAYS;				
 				break;
 		}
-
 		fp =  CreateFile(path,
 			flag1 ,
 			share_flag,
@@ -237,9 +253,15 @@ public:
 			other_flag,
 			NULL);
 #else
-		int f = 0;
+		int f = O_CLOEXEC|O_NOATIME;
 		if (TEST(flag,KFILE_NOFOLLOW)) {
 			SET(f,O_NOFOLLOW);
+		}
+		if (TEST(flag, KFILE_ASYNC)) {
+			SET(f, O_DIRECT);
+		}
+		if (TEST(flag, KFILE_DSYNC)) {
+			SET(f, O_DSYNC);
 		}
 		switch(model){
 		case fileRead:
@@ -248,14 +270,17 @@ public:
 		case fileAppend:
 				f |= O_WRONLY|O_APPEND|O_CREAT;
 				break;
+		case fileModify:
+				f |= (O_WRONLY | O_CREAT);
+				break;
 		case fileWrite:
-				f |= (O_WRONLY|O_CREAT|O_TRUNC);
+				f |= (O_WRONLY | O_CREAT | O_TRUNC);
 				break;
 		case fileReadWrite:
 				f |= O_RDWR;
 				break;
 		case fileWriteRead:
-				f |= (O_RDWR|O_CREAT);
+				f |= (O_RDWR|O_CREAT|O_TRUNC);
 				break;
 		}
 #ifdef LINUX
@@ -265,6 +290,14 @@ public:
 #endif
 #endif
 		return kflike(fp);
+	}
+	void sync_data()
+	{
+#ifdef _WIN32
+		FlushFileBuffers(fp);
+#else
+		fdatasync(fp);
+#endif
 	}
 	int vfprintf(const char *fmt,va_list ap)
 	{
@@ -365,5 +398,71 @@ public:
 	}
 private:
 	FILE_HANDLE fp;
+};
+#define KGL_MAX_BUFFER_FILE_SIZE 4194304
+//#define KGL_MAX_BUFFER_FILE_SIZE 4
+class KBufferFile : public KFile
+{
+public:
+	~KBufferFile()
+	{
+		this->flush();
+		free(buffer);
+	}
+	KBufferFile(int buffer_size)
+	{
+		assert(buffer_size > 0);
+		total_write = 0;
+		buffer_size = MIN(buffer_size, KGL_MAX_BUFFER_FILE_SIZE);
+		buffer = (char *)malloc(buffer_size);
+		hot = buffer;
+		buffer_left = buffer_size;
+		this->buffer_size = buffer_size;
+	}
+	void close()
+	{
+		this->flush();
+		KFile::close();
+	}
+	int write(const char *buf, int len)
+	{
+		int orig_len = len;
+		while (len>0) {
+			int write_len = MIN(len, buffer_left);
+			if (write_len <= 0) {
+				if (!flush()) {
+					return -1;
+				}
+				continue;
+			}			
+			if (buf != NULL) {
+				memcpy(hot, buf, write_len);
+				buf += write_len;
+			}
+			hot += write_len;
+			len -= write_len;
+			buffer_left -= write_len;
+			total_write += write_len;
+		};
+		return orig_len;
+	}
+	INT64 get_total_write()
+	{
+		return total_write;
+	}
+private:
+	bool flush()
+	{
+		int len = hot - buffer;
+		bool result = KFile::write(buffer, len) == len;
+		hot = buffer;
+		buffer_left = buffer_size;
+		return result;
+	}
+	INT64 total_write;
+	int buffer_left;
+	int buffer_size;
+	char *buffer;
+	char *hot;
 };
 #endif

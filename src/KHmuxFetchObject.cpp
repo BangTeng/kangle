@@ -3,6 +3,7 @@
 #include "KRewriteMarkEx.h"
 void KHmuxFetchObject::buildHead(KHttpRequest *rq)
 {
+	buffer = new KSocketBuffer(NBUFF_SIZE);
 	char tmpbuff[50];
 	addEnv(HMUX_URL,rq->url->path);
 	addEnv(HMUX_METHOD,rq->getMethod());
@@ -64,21 +65,21 @@ do_not_insert:
 		rq->pre_post_length = 0;
 	}
 	if (rq->left_read==0) {
-		buffer.write_byte(HMUX_QUIT);
+		buffer->write_byte(HMUX_QUIT);
 	}
 }
 void KHmuxFetchObject::buildPost(KHttpRequest *rq)
 {
-	int length = (int)buffer.getLen();
+	int length = (int)buffer->getLen();
 	buff *buf = (buff *)malloc(sizeof(buff));
 	buf->data = (char *)malloc(3);
 	buf->used = 3;
 	buf->data[0] = CSE_DATA;
 	buf->data[1] = 	(length >> 8) & 0xff;
 	buf->data[2] = (length) & 0xff;
-	buffer.insertBuffer(buf);
+	buffer->insertBuffer(buf);
 	if(rq->left_read==0){
-		buffer.write_byte(HMUX_QUIT);
+		buffer->write_byte(HMUX_QUIT);
 	}
 }
 Parse_Result KHmuxFetchObject::parseHead(KHttpRequest *rq,char *data,int len)
@@ -143,8 +144,8 @@ bool KHmuxFetchObject::addEnv(const char code, const char *val,int length)
 	temp[1] = (length >> 8) & 0xff;
 	temp[2] = (length) & 0xff;
 
-	buffer.write_all(temp,3);
-	buffer.write_all(val,length);
+	buffer->write_all(temp,3);
+	buffer->write_all(val,length);
 	return true;
 }
 bool KHmuxFetchObject::addEnv(const char code, const char *val)
@@ -162,7 +163,7 @@ bool KHmuxFetchObject::addEnv(const char code, int i)
 	temp[4] = (char) (i >> 16);
 	temp[5] = (char) (i >> 8);
 	temp[6] = (char) (i);
-	buffer.write_all(temp,7);
+	buffer->write_all(temp,7);
 	return true;
 }
 char *KHmuxFetchObject::parse(char **str,int &len,int &get_len)

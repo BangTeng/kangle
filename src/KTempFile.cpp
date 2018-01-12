@@ -128,7 +128,7 @@ bool KTempFile::dumpInBuffer()
 	kassert(buffer.getHead()==NULL);
 	while (buffer.getLen()<16384) {
 		char *data = (char *)malloc(NBUFF_SIZE);
-		int used = fp.read(data,NBUFF_CHUNK);
+		int used = fp.read(data, NBUFF_SIZE);
 		if (used<=0) {
 			free(data);
 			break;
@@ -237,7 +237,6 @@ bool KTempFile::readPostResult(KHttpRequest *rq,int got)
 		return false;
 	}
 	//fwrite(buf,1,got,stdout);
-	dechunk_status de_status = dechunk_success;
 #ifdef ENABLE_INPUT_FILTER
 	if (rq->if_ctx) {
 		if (rq->if_ctx->dechunk) {
@@ -289,8 +288,6 @@ bool KTempFile::readPostResult(KHttpRequest *rq,int got)
 			break;
 		}
 		rq->c->read(rq,resultTempFileReadPost,bufferTempFileReadPost);
-		break;
-	case STREAM_WRITE_HANDLED:
 		break;
 	default:
 		stageEndRequest(rq);

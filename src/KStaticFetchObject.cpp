@@ -9,17 +9,17 @@ void bufferStaticAsyncRead(void *arg,iovec *buf,int &bufCount)
 	KStaticFetchObject *fo = static_cast<KStaticFetchObject *>(rq->fetchObj);
 	fo->getAsyncBuffer(rq,buf,bufCount);
 }
-void resultStaticAsyncRead(void *arg,int got)
+void resultStaticAsyncRead(KAsyncFile *fp, void *arg, char *buf, int got)
 {
 	KHttpRequest *rq = (KHttpRequest *)arg;
 	KStaticFetchObject *fo = static_cast<KStaticFetchObject *>(rq->fetchObj);
-	fo->handleAsyncReadBody(rq,got);
+	fo->handleAsyncReadBody(rq,buf,got);
 }
 
 KTHREAD_FUNCTION simulateAsyncRead(void *param,int msec)
 {
 	KHttpRequest *rq = (KHttpRequest *)param;
-        KStaticFetchObject *fo = static_cast<KStaticFetchObject *>(rq->fetchObj);
+	KStaticFetchObject *fo = static_cast<KStaticFetchObject *>(rq->fetchObj);
 	fo->syncReadBody(rq);
 	KTHREAD_RETURN;
 }
@@ -39,19 +39,26 @@ void KStaticFetchObject::open(KHttpRequest *rq)
 		CLR(rq->flags,RQ_HAVE_RANGE);
 	}
 	assert(rq->file);
+	bool async_aio = true;
 #ifdef _WIN32
 	
 #else
 	const char *filename = rq->file->getName();
 	if (filename) {
-		fp.open(filename,fileRead,(ad?KFILE_ASYNC:0));
+		fp.open(filename,fileRead,(async_aio ?KFILE_ASYNC:0));
 	}
 #endif
 	if (!fp.opened()) {
 		handleError(rq,STATUS_NOT_FOUND,"file not found");
 		return;
 	}
-	
+	if (async_aio) {
+		//初始化异步相关数据
+		KAsyncFile *aio_file = rq->c->selector->aio_open(&fp);
+		if (aio_file) {
+			ad = new KAsyncData(aio_file, conf.io_buffer);
+		}
+	}
 	if (!rq->sr) {
 #ifdef ENABLE_TF_EXCHANGE
 		if (rq->tf) {
@@ -81,8 +88,9 @@ void KStaticFetchObject::open(KHttpRequest *rq)
 			handleError(rq,416,"range error");
 		    return;
 		}
-		
-		if (!fp.seek(rq->range_from,seekBegin)) {
+		if (ad) {
+			ad->offset = rq->range_from;
+		} else if (!fp.seek(rq->range_from,seekBegin)) {
 			handleError(rq,500,"cann't seek to right position");
 			return ;
 		}
@@ -115,19 +123,10 @@ void KStaticFetchObject::readBody(KHttpRequest *rq)
 {
 	assert(rq->file);
 	assert(fp.opened());
-#ifdef _WIN32
 	if (ad) {
 		asyncReadBody(rq);
 		return;
 	}
-#else
-	//simulate async
-	if (conf.async_io) {
-		rq->c->removeRequest(rq,true);
-		conf.ioWorker->start(rq,simulateAsyncRead);
-		return;
-	}
-#endif
 	syncReadBody(rq);
 }
 void KStaticFetchObject::syncReadBody(KHttpRequest *rq)
@@ -154,15 +153,17 @@ void KStaticFetchObject::syncReadBody(KHttpRequest *rq)
 	} while(pushHttpBody(rq,buf,len));
 }
 //异步io读结果
-void KStaticFetchObject::handleAsyncReadBody(KHttpRequest *rq,int got)
+void KStaticFetchObject::handleAsyncReadBody(KHttpRequest *rq,char *buf,int got)
 {
 	if (got<=0) {
 		stage_rdata_end(rq,STREAM_WRITE_FAILED);
 		return;
 	}
 	rq->file->fileSize -= got;
-	
-	if (!pushHttpBody(rq,ad->buf,got)) {
+	if (ad != NULL) {
+		ad->offset += got;
+	}
+	if (!pushHttpBody(rq,buf,got)) {
 		return;
 	}
 	asyncReadBody(rq);
@@ -171,15 +172,15 @@ void KStaticFetchObject::handleAsyncReadBody(KHttpRequest *rq,int got)
 //异步io读
 void KStaticFetchObject::asyncReadBody(KHttpRequest *rq)
 {
-	int len = (int) MIN(rq->file->fileSize,(INT64)sizeof(ad->buf));
+	int len = (int) MIN(rq->file->fileSize,(INT64)ad->buf_size);
 	if (len <= 0) {
 		stage_rdata_end(rq,STREAM_WRITE_SUCCESS);
 		return;
 	}
-#ifdef _WIN32
-	ad->as->read(rq,resultStaticAsyncRead,bufferStaticAsyncRead);
-#else
-	assert(false);
-#endif
+	rq->c->removeRequest(rq, true);
+	if (!rq->c->selector->aio_read(ad->aio_fp, ad->buf, ad->offset, len, resultStaticAsyncRead, rq)) {
+		stage_rdata_end(rq, STREAM_WRITE_FAILED);
+		return;
+	}
 	return;
 }

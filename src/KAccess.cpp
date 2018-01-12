@@ -230,6 +230,7 @@ void KAccess::loadModel() {
 	addMarkModel(REQUEST,new KSpeedLimitMark());
 #ifdef ENABLE_REQUEST_QUEUE
 	addMarkModel(REQUEST, new KQueueMark());
+	addMarkModel(REQUEST, new KPerQueueMark());
 #endif
 	addMarkModel(REQUEST,new KGSpeedLimitMark());
 	addMarkModel(REQUEST,new KRemoveParamMark());
@@ -309,7 +310,6 @@ void KAccess::loadModel() {
 	addMarkModel(REQUEST,new KPostFileMark());
 	addMarkModel(RESPONSE,new KHttpOnlyCookieMark());
 	addMarkModel(RESPONSE,new KCookieMark());
-	//addMarkModel(REQUEST,new KUploadProgressMark());
 #endif	
 	
 	addMarkModel(REQUEST,new KPathSignMark());
@@ -615,7 +615,7 @@ void KAccess::buildXML(std::stringstream &s, int flag) {
 std::string KAccess::htmlAccess(const char *vh) {
 	std::stringstream s;
 	if(*vh=='\0'){
-		s << "<html><LINK href=/kangle.css type='text/css' rel=stylesheet>\n";
+		s << "<html><LINK href=/main.css type='text/css' rel=stylesheet>\n";
 		s << "<body>";
 	}
 	s << "<script language=javascript>\n";
@@ -1034,7 +1034,7 @@ std::string KAccess::addChainForm(const char *vh,std::string table_name, int ind
 	}
 	if(*vh=='\0'){
 		s << "<html><head><title>add "
-				<< " access</title><LINK href=/kangle.css type='text/css' rel=stylesheet>\n";
+				<< " access</title><LINK href=/main.css type='text/css' rel=stylesheet>\n";
 		//s << "<script language=\"javascript\" src=\"/utils.js\"></script>\n";
 		s << "</head><body>\n";
 	}

@@ -1,13 +1,14 @@
 #include "KSqliteDiskCacheIndex.h"
 #include "lib.h"
+#include "KCache.h"
 #ifdef ENABLE_SQLITE_DISK_INDEX
 #ifndef _WIN32
 #include <unistd.h>
 #else
 #pragma comment(lib,"sqlite3.lib")
 #endif
-#define CREATE_SQL "CREATE TABLE [cache] ([f1] INTEGER  NULL,[f2] INTEGER  NULL,[t] INTEGER  NULL,[url] VARCHAR(1024)  NULL,[data] BLOB  NULL,PRIMARY KEY ([f1],[f2]))"
-#define CREATE_INDEX_SQL "CREATE INDEX [IDX_CACHE_T] ON [cache] ([t]  DESC )"
+#define CREATE_SQL "CREATE TABLE [cache] ([f1] INTEGER  NULL,[f2] INTEGER  NULL,[url] VARCHAR(1024)  NULL,[data] BLOB  NULL,PRIMARY KEY ([f1],[f2]))"
+//#define CREATE_INDEX_SQL "CREATE INDEX [IDX_CACHE_T] ON [cache] ([t]  DESC )"
 static int sqliteBusyHandle(void *db,int count)
 {
 	if (count>20) {
@@ -18,6 +19,7 @@ static int sqliteBusyHandle(void *db,int count)
 }
 bool KSqliteDiskCacheIndex::create(const char *fileName)
 {
+	cache.shutdown_disk(false);
 	if (this->fileName==NULL) {
 		this->fileName = strdup(fileName);
 	}
@@ -29,14 +31,6 @@ bool KSqliteDiskCacheIndex::create(const char *fileName)
 	sqlite3_stmt *stmt;
 	ret = sqlite3_prepare(db,CREATE_SQL,-1,&stmt,NULL);
 	if (SQLITE_OK != ret) {
-		return false;
-	}
-	ret = sqlite3_step(stmt);
-	sqlite3_finalize(stmt);
-	if (ret!=SQLITE_DONE) {
-		return false;
-	}
-	if (SQLITE_OK != sqlite3_prepare(db,CREATE_INDEX_SQL,-1,&stmt,NULL)) {
 		return false;
 	}
 	ret = sqlite3_step(stmt);
@@ -58,26 +52,26 @@ bool KSqliteDiskCacheIndex::load(loadDiskCacheIndexCallBack callBack)
 		rescan_disk_cache();
 		return true;
 	}
-	const char *sql = "select url,data from cache order by t";
+	const char *sql = "select f1,f2,url,data from cache";
 	sqlite3_stmt *stmt;
 	if (SQLITE_OK != sqlite3_prepare(db,sql,-1,&stmt,NULL)) {
 		return false;
 	}
 	while (SQLITE_ROW == sqlite3_step(stmt)) {
-		const char *url = (const char *)sqlite3_column_text(stmt,0);
-		int dataLen = sqlite3_column_bytes(stmt,1);
-		const char *data = (const char *)sqlite3_column_blob(stmt,1);
-		callBack(url,data,dataLen);
+		unsigned f1 = (unsigned)sqlite3_column_int(stmt, 0);
+		unsigned f2 = (unsigned)sqlite3_column_int(stmt, 1);
+		const char *url = (const char *)sqlite3_column_text(stmt,2);
+		int dataLen = sqlite3_column_bytes(stmt,3);
+		const char *data = (const char *)sqlite3_column_blob(stmt,3);
+		callBack(f1,f2,url,data,dataLen);
 	}
 	sqlite3_finalize(stmt);
 	return true;
 }
 INT64 KSqliteDiskCacheIndex::memory_used()
 {
-#if 0
 	return sqlite3_memory_used();
-#endif
-	return 0;
+
 }
 bool KSqliteDiskCacheIndex::check()
 {
@@ -118,12 +112,12 @@ bool KSqliteDiskCacheIndex::open(const char *fileName)
 	//return check();
 	return true;
 }
-bool KSqliteDiskCacheIndex::add(unsigned filename1,unsigned filename2,const char *url,time_t t,const char *data,int dataLen)
+bool KSqliteDiskCacheIndex::add(unsigned filename1,unsigned filename2,const char *url,const char *data,int dataLen)
 {
 	if (db==NULL) {
 		return false;
 	}
-	const char *sql = "insert into cache (f1,f2,url,t,data) values (?,?,?,?,?)";
+	const char *sql = "insert into cache (f1,f2,url,data) values (?,?,?,?)";
 	sqlite3_stmt *stmt;
 	if (SQLITE_OK != sqlite3_prepare(db,sql,-1,&stmt,NULL)) {
 		return false;
@@ -131,8 +125,7 @@ bool KSqliteDiskCacheIndex::add(unsigned filename1,unsigned filename2,const char
 	sqlite3_bind_int(stmt,1,filename1);
 	sqlite3_bind_int(stmt,2,filename2);
 	sqlite3_bind_text(stmt,3,url,-1,NULL);
-	sqlite3_bind_int64(stmt,4,t);
-	sqlite3_bind_blob(stmt,5,data,dataLen,NULL);
+	sqlite3_bind_blob(stmt,4,data,dataLen,NULL);
 	int ret = sqlite3_step(stmt);
 	sqlite3_finalize(stmt);
 	return ret==SQLITE_DONE;
@@ -170,23 +163,6 @@ bool KSqliteDiskCacheIndex::update(unsigned filename1,unsigned filename2,const c
 	sqlite3_finalize(stmt);
 	return ret==SQLITE_DONE;
 }
-bool KSqliteDiskCacheIndex::updateLast(unsigned filename1,unsigned filename2,time_t t)
-{
-	if (db==NULL) {
-		return false;
-	}
-	const char *sql = "update cache set t=? where f1=? and f2=?";
-	sqlite3_stmt *stmt;
-	if (SQLITE_OK != sqlite3_prepare(db,sql,-1,&stmt,NULL)) {
-		return false;
-	}
-	sqlite3_bind_int64(stmt,1,t);
-	sqlite3_bind_int(stmt,2,filename1);
-	sqlite3_bind_int(stmt,3,filename2);	
-	int ret = sqlite3_step(stmt);
-	sqlite3_finalize(stmt);
-	return ret==SQLITE_DONE;
-}
 bool KSqliteDiskCacheIndex::begin()
 {
 	if (db==NULL) {
@@ -217,6 +193,7 @@ void KSqliteDiskCacheIndex::setting()
 		return;
 	}
 	sqlite3_busy_handler(db,sqliteBusyHandle,NULL);
+	/*
 	char *errMsg = NULL;
 	int ret = sqlite3_exec(db,"PRAGMA synchronous = OFF ",NULL,NULL,&errMsg);
 	if (errMsg) {
@@ -226,6 +203,7 @@ void KSqliteDiskCacheIndex::setting()
 	if (errMsg) {
 		sqlite3_free(errMsg);
 	}
+	*/
 	return;
 }
 #endif

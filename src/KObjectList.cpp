@@ -12,13 +12,8 @@
 #define CLEAN_CACHE		0
 #define DROP_DEAD		1
 #define MAX_LOCK_MOVE_SIZE 1
-struct KTempHttpObject
-{
-	KHttpObject *obj;
-	INT64 decSize;
-	bool is_dead;
-	KTempHttpObject *next;
-};
+#define MAX_CLEAN_DEAD_COUNT 512
+
 KObjectList::KObjectList()
 {
 	l_head = l_end = NULL;
@@ -44,6 +39,8 @@ void KObjectList::add(KHttpObject *m_list)
 	checkList();
 #endif
 }
+#ifdef ENABLE_DISK_CACHE
+#if 0
 int KObjectList::save_disk_index(KFile *fp)
 {
 	int save_count = 0;
@@ -59,6 +56,20 @@ int KObjectList::save_disk_index(KFile *fp)
 	}
 	return save_count;
 }
+#endif
+void KObjectList::swap_all_obj()
+{
+	cache.lock();
+	KHttpObject *obj = l_head;
+	while (obj) {
+		if (!TEST(obj->index.flags, FLAG_DEAD)) {
+			obj->swapout(true);
+		}
+		obj = obj->lnext;
+	}
+	cache.unlock();
+}
+#endif
 void KObjectList::remove(KHttpObject *m_list)
 {
 	assert(m_list->list_state == this->list_state);
@@ -101,35 +112,24 @@ void KObjectList::dead(KHttpObject *m_list)
 {
 	assert(m_list->list_state == this->list_state);
 	cache_model = DROP_DEAD;
-	if (m_list == l_head)
+	if (m_list == l_head) {
 		return;
+	}
 	if (m_list == l_end) {
 		l_end = m_list->lprev;
 	}
-	if (m_list->lnext)
+	if (m_list->lnext) {
 		m_list->lnext->lprev = m_list->lprev;
-	if (m_list->lprev)
+	}
+	if (m_list->lprev) {
 		m_list->lprev->lnext = m_list->lnext;
+	}
 	l_head->lprev = m_list;
 	m_list->lnext = l_head;
 	l_head = m_list;
 	l_head->lprev = NULL;
 #ifndef NDEBUG
 	checkList();
-#endif
-}
-void KObjectList::swap_all_obj()
-{
-#ifdef ENABLE_DISK_CACHE
-	cache.lock();
-	KHttpObject *obj = l_head;
-	while (obj) {
-		if (!TEST(obj->index.flags,FLAG_DEAD)) {
-			obj->swapout();
-		}
-		obj = obj->lnext;
-	}
-	cache.unlock();
 #endif
 }
 #ifdef MALLOCDEBUG
@@ -165,17 +165,18 @@ void KObjectList::dead_count(int &count)
 		count--;
 	}
 }
-void KObjectList::move(INT64 m_size,bool swapout)
+void KObjectList::move(INT64 m_size,bool swapout_flag)
 {
-	KMutex * lock = NULL;
 	bool is_dead = true;
+	int dead_obj_count = 0;
+	cache.lock();
+	cache.clean_blocked = false;
 	if (m_size<=0 && cache_model==CLEAN_CACHE) {
+		cache.unlock();
 		return;
 	}
 	KTempHttpObject *thead = NULL;
-	KTempHttpObject *tend = NULL;
-	time_t startTime = kgl_current_sec;
-	cache.lock();
+	INT64 gc_start_time = kgl_current_msec;
 	KHttpObject * obj = l_head;
 	while (obj) {	
 		if (obj->getRefs() > 1) {
@@ -183,85 +184,97 @@ void KObjectList::move(INT64 m_size,bool swapout)
 			continue;
 		}
 		is_dead = (TEST(obj->index.flags,FLAG_DEAD)>0);
-		if (is_dead || m_size>0) {
-			INT64 decSize;	
-			
-				decSize = obj->index.have_length;
-				if (swapout && TEST(obj->index.flags,FLAG_NO_DISK_CACHE)) {
-					//标记为不使用磁盘缓存的，直接dead
-					is_dead = true;
-				}
-				
-			m_size -= decSize;
-			//加入到临时链表中
-			KTempHttpObject *to = new KTempHttpObject;
-			to->next = NULL;
-			assert(obj->list_state == this->list_state);
-			to->obj = obj;
-			to->decSize = decSize;
-			to->is_dead = is_dead;
-			if (tend) {
-				assert(thead);
-				tend->next = to;
-			} else {
-				thead = to;
+		if (m_size <= 0 && is_dead) {
+			if (dead_obj_count++ > MAX_CLEAN_DEAD_COUNT) {
+				break;
 			}
-			tend = to;
-			obj = obj->lnext;
-			continue;
 		}
-		cache_model = CLEAN_CACHE;
-		break;
+		if (!is_dead && m_size <= 0) {
+			cache_model = CLEAN_CACHE;
+			break;
+		}
+		KTempHttpObject *to = new KTempHttpObject;
+		
+			to->decSize = obj->index.content_length;
+			if (swapout_flag && TEST(obj->index.flags,FLAG_NO_DISK_CACHE)) {
+				//标记为不使用磁盘缓存的，直接dead
+				is_dead = true;
+			}
+		
+		m_size -= to->decSize;
+		//加入到临时链表中			
+		to->next = thead;
+		thead = to;
+		assert(obj->list_state == this->list_state);
+		to->obj = obj;
+		to->is_dead = is_dead;		
+		obj = obj->lnext;
 	}
 	cache.unlock();
 	//实际发生磁盘IO
 	while (thead) {
-		KHttpObject *obj = thead->obj;	
-#ifdef ENABLE_DISK_CACHE
-		if (swapout && 
-			!thead->is_dead && 
-			kgl_current_sec - startTime < GC_SLEEP_TIME &&
-			obj->swapout()) {
-			cache.lock();
-			lock = obj->getLock();
-			lock->Lock();
-			SET(obj->index.flags,FLAG_IN_DISK);
-			if (obj->list_state==this->list_state && obj->refs<=1) {
-				remove(obj);
-				CLR(obj->index.flags,FLAG_IN_MEM);
-				cache.objHash[obj->h].decSize(thead->decSize);
-				cache.objList[LIST_IN_DISK].add(obj);
-				delete obj->data;
-				obj->data = NULL;
-			}
-			lock->Unlock();
-			cache.unlock();
-		} else {
-#endif
-			bool result = false;
-			cache.lock();
-			lock = &cache.objHash[obj->h].lock;
-			lock->Lock();
-			//这里为什么要判断一下list_state呢？因为有可能在中间，obj被其它请求使用，如调用swap_in而改变了list_state.
-			if (obj->list_state==this->list_state && obj->getRefs()<=1) {
-				remove(obj);
-				result = cache.objHash[obj->h].remove(obj);
-				cache.count--;
-			}
-			lock->Unlock();
-			cache.unlock();
-			if (result) {
-				obj->release();
-			}
-#ifdef ENABLE_DISK_CACHE
-		}
-#endif
 		KTempHttpObject *tnext = thead->next;
-		delete thead;
+		int gc_used_msec = (int)(kgl_current_msec - gc_start_time);
+		if (swapout_flag && !cache.is_disk_shutdown() && !thead->is_dead) {
+			swapout(thead, gc_used_msec);
+		} else {
+			swapout_result(thead, gc_used_msec, false);
+		}
 		thead = tnext;
 	}
 }
-
+void KObjectList::swapout(KTempHttpObject *thead,int gc_used_msec)
+{
+#ifdef ENABLE_DISK_CACHE
+	bool result = thead->obj->swapout(gc_used_msec > GC_SLEEP_TIME * 1000);
+#else
+	bool result = false;
+#endif
+	swapout_result(thead, gc_used_msec,result);
+}
+void KObjectList::swapout_result(KTempHttpObject *thead,int gc_used_msec,bool result)
+{
+	KMutex * lock = NULL;
+	KHttpObject *obj = thead->obj;
+#ifdef ENABLE_DISK_CACHE
+	if (result) {
+		cache.lock();
+		cache.clean_blocked = (gc_used_msec > (GC_SLEEP_TIME * 1000 + 2000));
+		lock = obj->getLock();
+		lock->Lock();
+		SET(obj->index.flags, FLAG_IN_DISK);
+		if (obj->list_state == this->list_state && obj->refs <= 1) {
+			remove(obj);
+			CLR(obj->index.flags, FLAG_IN_MEM);
+			cache.objHash[obj->h].decSize(thead->decSize);
+			cache.objList[LIST_IN_DISK].add(obj);
+			delete obj->data;
+			obj->data = NULL;
+		}
+		lock->Unlock();
+		cache.unlock();
+		delete thead;
+		return;
+	}
+#endif
+	bool removed_result = false;
+	cache.lock();
+	cache.clean_blocked = (gc_used_msec > (GC_SLEEP_TIME * 1000 + 2000));
+	lock = &cache.objHash[obj->h].lock;
+	lock->Lock();
+	//这里为什么要判断一下list_state呢？因为有可能在中间，obj被其它请求使用，如调用swap_in而改变了list_state.
+	if (obj->list_state == this->list_state && obj->getRefs() <= 1) {
+		remove(obj);
+		removed_result = cache.objHash[obj->h].remove(obj);
+		cache.count--;
+	}
+	lock->Unlock();
+	cache.unlock();
+	if (removed_result) {
+		obj->release();
+	}
+	delete thead;
+}
 int KObjectList::clean_cache(KReg *reg,int flag)
 {
 	cache_model = DROP_DEAD;
@@ -285,11 +298,11 @@ void KObjectList::getSize(INT64 &csize,INT64 &cdsiz)
 	while (obj) {
 		if (TEST(obj->index.flags,FLAG_IN_MEM)) {
 			
-				csize += obj->index.have_length;
+				csize += obj->index.content_length;
 			
 		}
 		if (TEST(obj->index.flags,FLAG_IN_DISK)) {
-			cdsiz += obj->index.have_length;
+			cdsiz += obj->index.content_length;
 		}		
 		obj = obj->lnext;
 	}

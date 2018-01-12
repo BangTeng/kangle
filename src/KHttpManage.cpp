@@ -134,7 +134,7 @@ bool changeAdminPassword(KUrlValue *url,std::string &errMsg)
 }
 
 string chanagePasswordForm() {
-	return "<html><LINK href=/kangle.css type='text/css' rel=stylesheet><body><form action=chanage_password method=get>old password:<input type=password name=old_password><br>new password:<input type=password name=new_password><br>retype new password:<input type=password name=re_new_password><br><input type=submit value=submit></form></body></html>";
+	return "<html><LINK href=/main.css type='text/css' rel=stylesheet><body><form action=chanage_password method=get>old password:<input type=password name=old_password><br>new password:<input type=password name=new_password><br>retype new password:<input type=password name=re_new_password><br><input type=submit value=submit></form></body></html>";
 }
 bool KHttpManage::runCommand() {
 	string cmd = getUrlValue("cmd");
@@ -231,7 +231,7 @@ bool KHttpManage::exportConfig() {
 bool KHttpManage::importexport()
 {
 	stringstream s;
-	s << "<html><LINK href=/kangle.css type='text/css' rel=stylesheet>\
+	s << "<html><LINK href=/main.css type='text/css' rel=stylesheet>\
 		<body><p>" << klang["export_notice"] << "[<a href='/exportconfig'>" << klang["lang_exportConfig"] << "</a>]</p><p>\
 		<form action='/importconfig?action=import' enctype=\"multipart/form-data\" name=import method=\"post\">" << klang["lang_import"] << "\
 			 <input type=\"file\" name=\"file\">\
@@ -262,7 +262,7 @@ bool KHttpManage::importConfig() {
 		map<string, string> importConfig;
 		//importConfig["configVersion"] = configVersion.str();
 		stringstream s;
-		s << "<html><LINK href=/kangle.css type='text/css' rel=stylesheet><body>" << klang["import_result"] << "</body></html>";		
+		s << "<html><LINK href=/main.css type='text/css' rel=stylesheet><body>" << klang["import_result"] << "</body></html>";		
 		return sendHttp(s.str().c_str(),s.str().size(), NULL, NULL, true);
 	} else {
 		return sendHttp("cann't parse post file\n");
@@ -290,7 +290,7 @@ bool KHttpManage::extends(unsigned item) {
 	if (item == 0) {
 		item = atoi(getUrlValue("item").c_str());
 	}
-	s << "<html><LINK href=/kangle.css type='text/css' rel=stylesheet><body>";
+	s << "<html><LINK href=/main.css type='text/css' rel=stylesheet><body>";
 	for (i = 0; i < max_extends; i++) {
 		if (extends_header[i] == NULL) {
 			continue;
@@ -383,7 +383,7 @@ bool KHttpManage::config() {
 		canWrite = false;
 	else
 		fclose(fp);
-	s << "<html><LINK href=/kangle.css type='text/css' rel=stylesheet><body>";
+	s << "<html><LINK href=/main.css type='text/css' rel=stylesheet><body>";
 	if (!canWrite) {
 		s << "<font color=red>" << LANG_CANNOT_WRITE_WARING << file_name
 				<< "</font>";
@@ -424,13 +424,9 @@ bool KHttpManage::config() {
 		}
 		s << "</table>";
 		s << "[<a href='/newlistenform'>" << klang["new_listen"] << "</a>]<br>";
-		s << "connect time out:<input name='connect_time_out' size=5 value='"
-			<< conf.connect_time_out << "'><br>";
-		s <<  LANG_TIME_OUT << ":<input name='time_out' size=5 value='"
-				<< conf.time_out << "'><br>";
-		s <<  klang["keep_alive_timeout"]
-				<< ":<input name='keep_alive' size=5 value='" << conf.keep_alive
-				<< "'>"<< klang["int_disable_note"] << "<br>";
+		s << "connect time out:<input name='connect_time_out' size=5 value='" << conf.connect_time_out << "'><br>";
+		s <<  LANG_TIME_OUT << ":<input name='time_out' size=5 value='"	<< conf.time_out << "'><br>";
+		s <<  klang["keep_alive_timeout"] << ":<input name='keep_alive' size=5 value='" << conf.keep_alive << "'>"<< klang["int_disable_note"] << "<br>";
 		s << klang["keep_alive_count"]	<< ":<input name='keep_alive_count' size=6 value='" << conf.keep_alive_count << "'>"  << "<br>";
 		s << klang["worker_thread"] << ":<select name='worker_thread'>";
 		for (int i=0;i<10;i++) {
@@ -446,69 +442,46 @@ bool KHttpManage::config() {
 		s << "</td><td valign=top>";
 		s << "\n" << klang["success_listen"] << ":<table border=1>";
 		s << "<tr><td>" << LANG_IP	<< "</td><td>" << LANG_PORT;
-		s << "</td><td>" << klang["listen_type"] << "</td><td>"	<< klang["protocol"] << "</td><td>" << klang["dynamic"] << "</td></tr>";
+		s << "</td><td>" << klang["listen_type"] << "</td><td>"	<< klang["protocol"] << "</td><td>flags</td><td>" << LANG_REFS << "</td></tr>";
 		conf.gvm->getListenHtml(s);
 		s << "</table>";
 		s << "</tr></table>";
 	} else if (item == 1) {
-		s << "" << klang["lang_default_cache"]
-				<< "<select name=default_cache><option value=1 ";
-		if (conf.default_cache == 1)
+		//default
+		s << klang["lang_default_cache"] << "<select name=default_cache><option value=1 ";
+		if (conf.default_cache > 0) {
 			s << "selected";
-		s << " > " << LANG_ON << "</option><option value=0 ";
-		if (conf.default_cache != 1)
-			s << "selected";
-		s << " >" << LANG_OFF << "</option></select><br>";
-
-		s << "" << LANG_TOTAL_MEM_CACHE << ":"
-				<< "<input type=text name=mem_cache size=8 value='" << get_size(conf.mem_cache)
-				<< "'><br>";
-#ifdef ENABLE_DISK_CACHE
-		s << LANG_TOTAL_DISK_CACHE << ":" << "<input type=text name=disk_cache size=8 value=" << get_size(conf.disk_cache);
-		if (conf.disk_cache_is_radio) {
-			s << "%";
 		}
-		s << "><br>";
-		s << klang["disk_cache_dir"] << ":"
-				<< "<input type=text name=disk_cache_dir value='" << conf.disk_cache_dir2 << "'>[<a href='/format_disk_cache_dir.km'>"
-				<< klang["format_disk_cache"] << "</a>]<br>";
-		s << klang["disk_work_time"] << ":"	<< "<input type=text name=disk_work_time value='" << conf.disk_work_time
-				<< "'><br>";
+		s << " > " << LANG_ON << "</option><option value=0 ";
+		if (conf.default_cache <=0) {
+			s << "selected";
+		}
+		s << " >" << LANG_OFF << "</option></select><br>";
+		s << "" << LANG_TOTAL_MEM_CACHE << ":<input type=text name=mem_cache size=8 value='" << get_size(conf.mem_cache) << "'><br>";
+#ifdef ENABLE_DISK_CACHE
+		s << LANG_TOTAL_DISK_CACHE << ":<input type=text name=disk_cache size=8 value='" << get_size(conf.disk_cache) << (conf.disk_cache_is_radio? "%": "") << "'><br>";
+		s << klang["disk_cache_dir"] << ":<input type=text name=disk_cache_dir value='" << conf.disk_cache_dir2 << "'>[<a href='/format_disk_cache_dir.km'>" << klang["format_disk_cache"] << "</a>]<br>";
+		s << klang["disk_work_time"] << ":<input type=text name=disk_work_time value='" << conf.disk_work_time << "'><br>";
 #endif
-		s << LANG_MAX_CACHE_SIZE
-			<< ":<input type=text name=max_cache_size size=6 value="
-			<< get_size(conf.max_cache_size) << "><br>";
+		s << LANG_MAX_CACHE_SIZE << ":<input type=text name=max_cache_size size=6 value='"	<< get_size(conf.max_cache_size) << "'><br>";
 		
-		s << LANG_MIN_REFRESH_TIME
-				<< ":<input type=text name=refresh_time size=4 value="
-				<< conf.refresh_time << ">" << LANG_SECOND << "<br>";
+		s << LANG_MIN_REFRESH_TIME << ":<input type=text name=refresh_time size=4 value=" << conf.refresh_time << ">" << LANG_SECOND << "<br>";
+
 	} else if (item == 2) {
-		s << klang["access_log"] << "<input type=text name='access_log' value=\""
-				<< conf.access_log << "\"></br>\n";
-		s << LANG_LOG_ROTATE_TIME
-				<< "<input type=text name=log_rotate_time value=\""
-				<< conf.log_rotate << "\"></br>\n";
-		s << klang["log_rotate_size"] << ":"
-				<< "<input type=text name=log_rotate_size size=6 value=\""
-				<< get_size(conf.log_rotate_size) << "\"></br>\n";
-		s << klang["error_rotate_size"] << ":"
-				<< "<input type=text name='error_rotate_size' size=6 value=\""
-				<< get_size(conf.error_rotate_size) << "\"></br>\n";
-		s << klang["log_level"] << "<input type=text name=log_level value='"
-				<< conf.log_level << "'></br>\n";
-		s << klang["logs_day"] << "<input type=text name='logs_day' value='"
-				<< conf.logs_day << "'></br>\n";
-		s << klang["logs_size"] << "<input type=text name='logs_size' value='"
-				<< get_size(conf.logs_size) << "'></br>\n";
+		s << klang["access_log"] << "<input type=text name='access_log' value=\"" << conf.access_log << "\"></br>\n";
+		s << LANG_LOG_ROTATE_TIME << "<input type=text name=log_rotate_time value=\"" << conf.log_rotate << "\"></br>\n";
+		s << klang["log_rotate_size"] << ":<input type=text name=log_rotate_size size=6 value=\"" << get_size(conf.log_rotate_size) << "\"></br>\n";
+		s << klang["error_rotate_size"] << ":<input type=text name='error_rotate_size' size=6 value=\"" << get_size(conf.error_rotate_size) << "\"></br>\n";
+		s << klang["log_level"] << "<input type=text name=log_level value='" << conf.log_level << "'></br>\n";
+		s << klang["logs_day"] << "<input type=text name='logs_day' value='" << conf.logs_day << "'></br>\n";
+		s << klang["logs_size"] << "<input type=text name='logs_size' value='" << get_size(conf.logs_size) << "'></br>\n";
 		s << "<input type=checkbox name='log_handle' value='1' ";
 		if (conf.log_handle) {
 			s << "checked";
 		}
 		s << ">" << klang["log_handle"] << "</br>\n";
-		s << klang["access_log_handle"] << "<input type=text size='30' name='access_log_handle' value='"
-				<< conf.logHandle << "'></br>\n";
-		s << klang["log_handle_concurrent"] << "<input type=text name='log_handle_concurrent' value='"
-				<< conf.maxLogHandle << "'></br>\n";
+		s << klang["access_log_handle"] << "<input type=text size='30' name='access_log_handle' value='" << conf.logHandle << "'></br>\n";
+		s << klang["log_handle_concurrent"] << "<input type=text name='log_handle_concurrent' value='" << conf.maxLogHandle << "'></br>\n";
 	} else if (item == 3) {
 		s <<  klang["max_connection"] << ": <input type=text size=5 name=max value=" << conf.max << "><br>";
 		s <<  LANG_TOTAL_THREAD_EACH_IP	<< ":<input type=text size=3 title='";
@@ -550,30 +523,22 @@ bool KHttpManage::config() {
 //				<< conf.stack_size << "><br>";
 #endif
 		s << klang["io_worker"] << ":<input type=text size=4 name='worker_io' value='" << conf.worker_io << "'><br>";
+		s << "max_io:<input type=text size=4 name='max_io' value='" << conf.max_io << "'><br>";
+		s << "io_timeout:<input type=text size=4 name='io_timeout' value='" << conf.io_timeout << "'><br>";
 		s << klang["dns_worker"] << ":<input type=text size=4 name='worker_dns' value='" << conf.worker_dns << "'><br>";
 	} else if (item == 4) {
 		//data exchange
 #ifdef ENABLE_TF_EXCHANGE	
-		s << klang["max_post_size"] << ":<input name='max_post_size' size='4' value='"
-				<< get_size(conf.max_post_size) << "'><br>";
+		s << klang["max_post_size"] << ":<input name='max_post_size' size='4' value='" << get_size(conf.max_post_size) << "'><br>\n";
 #endif
-#if 0
-		s << klang["tmpfile"] << ":<select name='tmpfile'>";
-		s << "<option value='0' " << (conf.tmpfile==0?"selected":"") << ">" << klang["tmpfile0"] << "</option>";
-		s << "<option value='1' " << (conf.tmpfile==1?"selected":"") << ">" << klang["tmpfile1"] << "</option>";
-		s << "<option value='2' " << (conf.tmpfile==2?"selected":"") << ">" << klang["tmpfile2"] << "</option>";
-		s << "</select><br>";
-#endif
+		s << "io_buffer:" << get_size(conf.io_buffer) << "<br>";
 		//async io
-		s << "<input type=checkbox name='async_io' value='1' ";
-        if (conf.async_io) {
-                s << "checked";
-        }
-        s << ">" << klang["async_io"];
-        s << "<br>";
+		//s << "<input type=checkbox name='async_io' value='1' " << (conf.async_io ?"checked":"") << ">" << klang["async_io"] << "<br>\n";
+		s << "upstream sign : <code title='len=" << conf.upstream_sign_len << "'>" << conf.upstream_sign << "</code><br>\n";
+		s << "<!-- read_hup=" << conf.read_hup << " -->\n";
+		s << "<!-- mlock=" << conf.mlock << " -->\n";
 	} else if (item == 5) {
-		s  << klang["lang_only_gzip_cache"]
-				<< "<select name=only_gzip_cache><option value=1 ";
+		s  << klang["lang_only_gzip_cache"] << "<select name=only_gzip_cache><option value=1 ";
 		if (conf.only_gzip_cache == 1){
 			s << "selected";
 		}
@@ -583,11 +548,8 @@ bool KHttpManage::config() {
 		}
 		s << " >" << LANG_OFF << "</option></select><br>";
 
-		s << klang["lang_min_gzip_len"]
-				<< "<input name=min_gzip_length size=6 value='"
-				<< conf.min_gzip_length << "'><br>";
-		s << klang["lang_gzip_level"] << "<input name=gzip_level size=3 value='"
-				<< conf.gzip_level << "'><br>";
+		s << klang["lang_min_gzip_len"]	<< "<input name=min_gzip_length size=6 value='"	<< conf.min_gzip_length << "'><br>";
+		s << klang["lang_gzip_level"] << "<input name=gzip_level size=3 value='"<< conf.gzip_level << "'><br>";
 
 		
 		s << klang["hostname"]	<< "<input type=text name='hostname' value='";
@@ -609,12 +571,6 @@ bool KHttpManage::config() {
 		s << ">" << klang["unix_socket"];
 		s << "<br>";
 #endif
-		s << "<input type=checkbox name='remove_accept_encoding' value='1' ";
-                if (conf.removeAcceptEncoding) {
-                        s << "checked";
-                }
-                s << ">" << klang["remove_accept_encoding"];
-                s << "<br>";
 #ifdef MALLOCDEBUG
 		s << "<input type=checkbox name='mallocdebug' value='1' ";
 		if (conf.mallocdebug) {
@@ -688,8 +644,7 @@ bool KHttpManage::configsubmit() {
 #endif
 		conf.mem_cache = get_size(getUrlValue("mem_cache").c_str());
 		conf.refresh_time = atoi(getUrlValue("refresh_time").c_str());
-		conf.max_cache_size = (unsigned) get_size(
-				getUrlValue("max_cache_size").c_str());
+		conf.max_cache_size = (unsigned) get_size(getUrlValue("max_cache_size").c_str());
 		conf.default_cache = atoi(getUrlValue("default_cache").c_str());
 		
 	} else if (item == 2) {
@@ -732,8 +687,10 @@ bool KHttpManage::configsubmit() {
 
 		conf.worker_io = atoi(getUrlValue("worker_io").c_str());
 		conf.worker_dns = atoi(getUrlValue("worker_dns").c_str());
-		conf.ioWorker->setWorker(conf.worker_io);
-		conf.dnsWorker->setWorker(conf.worker_dns);
+		conf.max_io = atoi(getUrlValue("max_io").c_str());
+		conf.io_timeout = atoi(getUrlValue("io_timeout").c_str());
+		conf.ioWorker->setWorker(conf.worker_io,conf.max_io);
+		conf.dnsWorker->setWorker(conf.worker_dns,512);
 	} else if (item == 4) {
 		//data exchange
 #ifdef ENABLE_TF_EXCHANGE
@@ -745,7 +702,7 @@ bool KHttpManage::configsubmit() {
 #endif
 		conf.max_post_size = get_size(getUrlValue("max_post_size").c_str());
 #endif
-		conf.async_io = (getUrlValue("async_io")=="1");
+		//conf.async_io = (getUrlValue("async_io")=="1");
 	} else if (item == 5) {
 #ifdef MALLOCDEBUG
 		if(getUrlValue("mallocdebug")=="1"){
@@ -761,11 +718,6 @@ bool KHttpManage::configsubmit() {
 			conf.unix_socket = false;
 		}
 #endif
-		if (getUrlValue("remove_accept_encoding") == "1") {
-                        conf.removeAcceptEncoding = true;
-                } else {
-                        conf.removeAcceptEncoding = false;
-                }
 		if (getUrlValue("path_info") == "1") {
 			conf.path_info = true;
 		} else {
@@ -912,7 +864,7 @@ bool KHttpManage::sendHttp(const char *msg, INT64 content_length,
 #ifdef ENABLE_HTTP2
 	}
 #endif
-	if (content_length > 512 && msg && TEST(rq->flags, RQ_HAS_GZIP)) {
+	if (content_length > conf.min_gzip_length && msg && TEST(rq->raw_url.encoding, KGL_ENCODING_GZIP)) {
 		buff in;
 		memset(&in, 0, sizeof(in));
 		in.data = (char *)msg;
@@ -928,24 +880,24 @@ bool KHttpManage::sendHttp(const char *msg, INT64 content_length,
 	//同步模式发送header
 	if (rq->send_ctx.getBufferSize()>0) {
 		if (!rq->sync_send_header()) {
+			if (gzipOut) {
+				KBuffer::destroy(gzipOut);
+			}
 			return false;
 		}
 	}	
     if (gzipOut) {
 		bool result = (send_buff(rq, gzipOut) == STREAM_WRITE_SUCCESS);
         KBuffer::destroy(gzipOut);
-		if (!result) {
-			return false;
-		}
-    } else if (msg) {
-        if (content_length > 0) {
-			if (rq->write_all(msg, (int)content_length) != STREAM_WRITE_SUCCESS)
-                 return false;
-		} else if (rq->write_all(msg, strlen(msg)) != STREAM_WRITE_SUCCESS) {
-                return false;
-        }
-    }
-    return true;
+		return result;
+    } 
+	if (msg == NULL) {
+		return true;
+	}
+	if (content_length <= 0) {
+		content_length = strlen(msg);
+	}
+	return rq->write_all(msg, (int)content_length) == STREAM_WRITE_SUCCESS; 
 }
 bool KHttpManage::sendHttp(const string &msg) {
 	return sendHttp(msg.c_str(), msg.size());
@@ -986,7 +938,7 @@ bool KHttpManage::sendErrorSaveConfig(int file) {
 bool KHttpManage::sendErrPage(const char *err_msg, int close_flag) {
 	stringstream s;
 	s
-			<< "<html><LINK href=/kangle.css type='text/css' rel=stylesheet><body><h1><font color=red>"
+			<< "<html><LINK href=/main.css type='text/css' rel=stylesheet><body><h1><font color=red>"
 			<< err_msg;
 	if (close_flag == 1) {
 		s << "</font></h1><br><a href=\"javascript:window.close();\">close</a>";
@@ -1000,7 +952,7 @@ bool KHttpManage::sendLeftMenu() {
 	stringstream s;
 	s << "<html><head><title>" << PROGRAM_NAME << "(" << VER_ID << ") "
 			<< LANG_MANAGE
-			<< "</title><LINK href=/kangle.css type='text/css' rel=stylesheet></head><body>";
+			<< "</title><LINK href=/main.css type='text/css' rel=stylesheet></head><body>";
 	
 	s << "<img border=0 src='/logo.gif' alt='logo'>";
 	
@@ -1058,7 +1010,7 @@ bool KHttpManage::sendMainFrame() {
 	get_cache_size(total_mem_size, total_disk_size);
 	s << "<html><head><title>" << PROGRAM_NAME << "(" << VER_ID << ") "
 			<< LANG_INFO
-			<< "</title><LINK href=/kangle.css type='text/css' rel=stylesheet></head><body>";
+			<< "</title><LINK href=/main.css type='text/css' rel=stylesheet></head><body>";
 	if(conf.autoupdate != AUTOUPDATE_OFF && !autoupdate_thread_started){
 		//检查有没有更新
 		string update_file = conf.path;
@@ -1152,8 +1104,13 @@ bool KHttpManage::sendMainFrame() {
 	s << "<tr><td>" << klang["request_worker_info"] << "</td><td>" << globalRequestQueue.getWorkerCount() << "/" << globalRequestQueue.getQueueSize() << "</td></tr>";
 	s << "<!-- queue refs=" << globalRequestQueue.getRef() << " -->\n";
 #endif
+	s << "<tr><td>async io</td><td>" << katom_get((void *)&kgl_aio_count) << "</td></tr>\n";
 	s << "<tr><td>" << klang["io_worker_info"] << "</td><td>" << conf.ioWorker->getWorker() << "/" << conf.ioWorker->getQueue() << "</td></tr>\n";
 	s << "<tr><td>" << klang["dns_worker_info"] << "</td><td>" << conf.dnsWorker->getWorker() << "/" << conf.dnsWorker->getQueue() << "</td></tr>\n";
+#ifdef ENABLE_DB_DISK_INDEX
+	s << "<tr><td>dci queue:</td><td>" << (dci?dci->getWorker()->getQueue():0) << "</td></tr>\n";
+	s << "<tr><td>dci mem:</td><td>" << (dci ? dci->memory_used():0) << "</td></tr>\n";
+#endif
 	s << "</table>\n";
 
 	//KSelector *selector = selectorManager.newSelector();
@@ -1161,7 +1118,7 @@ bool KHttpManage::sendMainFrame() {
 	s << "<table>" ;
 	s << "<tr><td>" << LANG_NAME << "</td><td>";
 	s << selectorManager.getName() << "</td></tr>";
-	s << "<tr><td>" << klang["worker_process"] << "</td><td>" << conf.worker << "</td></tr>";
+	//s << "<tr><td>" << klang["worker_process"] << "</td><td>" << conf.worker << "</td></tr>";
 	s << "<tr><td>" << klang["worker_thread"] << "</td><td>";
 	s << selectorManager.getSelectorCount() << "</td></tr>";
 	s << "</table>";
@@ -1434,7 +1391,7 @@ bool KHttpManage::start_listen(bool &hit) {
 			}
 		}
 		conf.admin_lock.Unlock();
-		conf.gvm->startStaticListen(conf.service,true);
+		conf.gvm->flush_static_listens(conf.service);
 		return sendRedirect("/config");
 	}	
 	if (strcmp(rq->url->path, "/newlisten") == 0) {
@@ -1479,7 +1436,7 @@ bool KHttpManage::start_listen(bool &hit) {
 		host->model = model;
 		//host->name = getUrlValue("name");
 		conf.admin_lock.Unlock();
-		conf.gvm->startStaticListen(conf.service,true);
+		conf.gvm->flush_static_listens(conf.service);
 		if (!saveConfig()) {
 			return sendErrorSaveConfig();
 		}
@@ -1498,7 +1455,7 @@ bool KHttpManage::start_listen(bool &hit) {
 			host = conf.service[id];
 		}
 		s
-				<< "<html><head><LINK href=/kangle.css type='text/css' rel=stylesheet></head><body>";
+				<< "<html><head><LINK href=/main.css type='text/css' rel=stylesheet></head><body>";
 #ifdef KSOCKET_SSL
         s << "<script language='javascript'>"
                 "function $(id) \
@@ -1640,9 +1597,6 @@ bool KHttpManage::start_obj(bool &hit)
 			if(TEST(obj->index.flags,ANSW_HAS_EXPIRES)){
 				s << "has_expires,";
 			}
-			if(TEST(obj->index.flags,OBJ_GZIPED)){
-				s << "gzip,";
-			}
 			if(TEST(obj->index.flags,FLAG_NO_BODY)){
 				s << "no_body,";
 			}
@@ -1663,7 +1617,7 @@ bool KHttpManage::start_obj(bool &hit)
 			}
 			s << "memory length:" << len << "<br>";	
 #ifdef ENABLE_DISK_CACHE
-			bool result = obj->swapout();
+			bool result = obj->swapout(false);
 			if(result){
 				const char *file = obj->getFileName();
 				s << "disk file:" << file << "<br>";
@@ -1844,7 +1798,7 @@ bool KHttpManage::start_access(bool &hit)
 	}
 	/*	if(strcmp(rq->url->path,"/tableaddform")==0) {
 	 stringstream s;
-	 s << "<html><head><title></title><LINK href=/kangle.css type='text/kangle.css' rel=stylesheet></head><body><form action=tableadd method=get>\n";
+	 s << "<html><head><title></title><LINK href=/main.css type='text/main.css' rel=stylesheet></head><body><form action=tableadd method=get>\n";
 	 s << LANG_TABLE << LANG_NAME << "<input name=table_name><input type=submit value=" << LANG_SUBMIT << "></form></body></html>";
 	 return sendHttp(s.str());
 
@@ -1953,7 +1907,7 @@ bool KHttpManage::sendProcessInfo() {
 	stringstream s;
 	s << "<html><head><title>" << PROGRAM_NAME << "(" << VER_ID << ") "
 			<< LANG_MANAGE
-			<< "</title><LINK href=/kangle.css type='text/css' rel=stylesheet></head><body>";
+			<< "</title><LINK href=/main.css type='text/css' rel=stylesheet></head><body>";
 	s << klang["process_info"] << "<br>";
 	spProcessManage.getProcessInfo(s);
 #ifdef ENABLE_VH_RUN_AS
@@ -1999,7 +1953,7 @@ bool KHttpManage::start(bool &hit) {
 		return false;
 	}
 	/*
-	 if (strcmp(rq->url->path, "/kangle.css") == 0) {
+	 if (strcmp(rq->url->path, "/main.css") == 0) {
 	 return send_css();
 	 }
 	 */
@@ -2188,7 +2142,7 @@ bool KHttpManage::start(bool &hit) {
 		stringstream s;
 		int totalCount;
 		string connectString = selectorManager.getConnectionInfo(totalCount,debug,NULL);
-		s << "<html><head><LINK href=/kangle.css type='text/css' rel=stylesheet></head><body>\n";
+		s << "<html><head><LINK href=/main.css type='text/css' rel=stylesheet></head><body>\n";
 		s << "<!-- total_connect=" << total_connect << " -->\n<h3>";
 		s << LANG_CONNECTION << "(total:" << totalCount;
 		s << ")</h3>\n";
@@ -2409,7 +2363,7 @@ function sortrq(index)\
 	}
 	if (strcmp(rq->url->path,"/flush_disk_cache.km")==0) {
 		cache.flush_mem_to_disk();
-		saveCacheIndex(false);
+		saveCacheIndex();
 		return sendMainFrame();
 	}
 	void create_cache_dir(const char *disk_dir);

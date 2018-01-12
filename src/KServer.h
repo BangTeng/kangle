@@ -30,35 +30,45 @@
 #include "KCountable.h"
 class KHttpRequest;
 class KVirtualHost;
-class KServer : public KSelectable,public KAtomCountable {
+class KServer;
+class KServerSelectable : public KSelectable {
+public:
+	KServerSelectable(KServer *server, KServerSocket *server_socket);
+	~KServerSelectable();
+	KServer *server;
+	KServerSocket *server_socket;
+	KServerSelectable *next;
+	void remove_socket_event();
+	void listen_event();
+	
+};
+class KServer :  public KAtomCountable {
 public:
 	KServer();
-	KSocket *getSocket()
+	bool is_opened()
 	{
-		return server;
+		return server_selectable != NULL;
 	}
-	bool isOpened()
-	{
-		if (server==NULL) {
-			return false;
-		}
-		return server->get_socket() != INVALID_SOCKET;
-	}
-	bool open(const char *ip,int port,int flag);
+	bool open();
 	void close();
-	KServerSocket *server;
+	bool start();
+	bool is_multi_selectale()
+	{
+		assert(server_selectable);
+		return (server_selectable->next!=NULL);
+	}
+	KServerSelectable *server_selectable;
 	char ip[MAXIPLEN];
 	u_short model;
 	u_short port;
-	//std::string name;
+	bool ipv4;
 	//是否是动态的，即可删除的
 	bool dynamic;
 	bool static_flag;
+	bool remove_static_flag;
 	//是否已经开始
 	bool started;
-	//bool event_driven;
 #ifdef KSOCKET_SSL
-	bool sslParsed;
 	bool sni;
 	bool http2;
 	std::string certificate;
@@ -79,19 +89,21 @@ public:
 	{
 		closed = true;
 	}
-	void removeSocket();
 	bool isEmpty();
 	KVirtualHostContainer *vhc;
 #ifdef ENABLE_CNAME_BIND
 	KVirtualHostContainer *cname_vhc;
 #endif
-	void addVirtualHost(KVirtualHost *vh);
+	void add_static(KVirtualHost *vh);
+	void remove_static(KVirtualHost *vh);
 	void removeVirtualHost(KVirtualHost *vh);
 	void bindVirtualHost(KVirtualHost *vh,bool high);
 	void unbindAllVirtualHost();
 private:
+	static int failedTries;
+	bool internal_open(int flag);
+	void add_server_socket(KServerSocket *socket);
 	virtual ~KServer();
 	volatile bool closed;
-
 };
 #endif /* KSERVER_H_ */

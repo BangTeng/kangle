@@ -69,7 +69,7 @@ void resultTempFileRequestWrite(void *arg,int got)
 		stageTempFileWriteEnd(rq);
 		return;
 	}
-	rq->addFlow(got, (TEST(rq->flags, RQ_HIT_CACHE)>0 ? FLOW_UPDATE_TOTAL | FLOW_UPDATE_CACHE : FLOW_UPDATE_TOTAL));
+	rq->addFlow(got, rq->ctx->cache_hit );
 	rq->send_size += got;
 	if (rq->tf->readSuccess(got)) {
 		startTempFileWriteRequest(rq);
@@ -127,7 +127,6 @@ void resultRequestWrite(void *arg,int got)
 	KHttpRequest *rq = (KHttpRequest *)arg;
 	switch(rq->canWrite(got)){
 		case WRITE_FAILED:
-			//removeSocket(rq);
 			SET(rq->flags,RQ_CONNECTION_CLOSE);
 			rq->buffer.clean();
 			stageEndRequest(rq);
@@ -136,6 +135,7 @@ void resultRequestWrite(void *arg,int got)
 			rq->buffer.clean();
 			if (rq->fetchObj && !rq->fetchObj->isClosed()) {
 				//读数据
+				
 				rq->fetchObj->readBody(rq);
 			} else {
 				stageEndRequest(rq);
@@ -170,12 +170,6 @@ void resultRequestRead(void *arg,int got)
 
 void stageWriteRequest(KHttpRequest *rq,buff *buf,int start,int len)
 {
-	 if (rq->fetchObj) {
-		 KUpstreamSelectable *st = rq->fetchObj->getSelectable();
-		if (st) {
-			st->upstream_remove();
-		}
-	}
 	rq->send_ctx.body_append(buf,(int)start,(int)len);
 	if (rq->send_ctx.getBufferSize()==0) {
 #ifdef ENABLE_HTTP2
@@ -187,6 +181,7 @@ void stageWriteRequest(KHttpRequest *rq,buff *buf,int start,int len)
 			}
 		}
 #endif
+		
 		stageEndRequest(rq);
 	} else {
 		startWriteRequest(rq);
@@ -252,6 +247,7 @@ void KHttpRequest::resetFetchObject()
 void KHttpRequest::closeFetchObject(bool destroy)
 {
 
+	//printf("~KHttpRequest closeFetchObject [%p]\n", this);
 	if (fetchObj) {
 		fetchObj->close(this);
 		if (destroy) {
@@ -288,7 +284,7 @@ StreamState KHttpRequest::write_all(const char *buf, int len) {
 			my_msleep(sleepTime);
 		}
 		send_size += len;
-		addFlow(len, (TEST(flags, RQ_HIT_CACHE)>0 ? FLOW_UPDATE_TOTAL | FLOW_UPDATE_CACHE : FLOW_UPDATE_TOTAL));
+		addFlow(len, ctx->cache_hit);
 		if(c->write_all(this,buf, len)){
 			return STREAM_WRITE_SUCCESS;
 		}
@@ -341,7 +337,7 @@ WriteState KHttpRequest::canWrite(int got)
 	if (got<=0) {
 		return WRITE_FAILED;
 	}
-	addFlow(got, (TEST(flags, RQ_HIT_CACHE)>0 ? FLOW_UPDATE_TOTAL | FLOW_UPDATE_CACHE : FLOW_UPDATE_TOTAL));
+	addFlow(got, ctx->cache_hit);
 	send_size += got;
 	if (send_ctx.readSuccess(got)) {
 		return WRITE_CONTINUE;
@@ -425,7 +421,8 @@ void KHttpRequest::beginRequest() {
 	if (http2_ctx) {
 		//对于spdy,我们假定客户端一定支持gzip
 		//有些浏览器(firefox)不会发送accept-encoding头过来
-		SET(flags, RQ_HAS_GZIP);
+		//SET(flags, RQ_HAS_GZIP);
+		//SET(raw_url.encoding, KGL_ENCODING_GZIP);
 	}
 #endif
 }
@@ -542,8 +539,8 @@ void KHttpRequest::init() {
 	memset(data,0,sizeof(KHttpRequestData));
 	assert(pool == NULL);
 	pool = kgl_create_pool(KGL_REQUEST_POOL_SIZE);
-	http_major = 0;
-	http_minor = 0;
+	http_major = 1;
+	http_minor = 1;
 	setState(STATE_IDLE);
 	hot = readBuf;
 	parser.start();
@@ -718,7 +715,7 @@ void KHttpRequest::beginSubRequest(KUrl *url,sub_request_call_back callBack,void
 	nsr->fetchObj = fetchObj;
 	nsr->file = file;
 	nsr->flags = flags;
-	CLR(flags,RQ_HAVE_RANGE|RQ_HAS_GZIP|RQ_HAS_IF_MOD_SINCE|RQ_HAS_IF_NONE_MATCH|RQ_OBJ_STORED);
+	CLR(flags,RQ_HAVE_RANGE|RQ_HAS_IF_MOD_SINCE|RQ_HAS_IF_NONE_MATCH|RQ_OBJ_STORED);
 	nsr->url = this->url;
 	nsr->ctx = ctx;
 	assert(ctx);
@@ -735,7 +732,7 @@ void KHttpRequest::beginSubRequest(KUrl *url,sub_request_call_back callBack,void
 	this->url = url;
 	sr = nsr;
 	//在调用子请求太多时，要切断堆栈调用,否则会堆栈溢出
-	c->next(this,resultNextSubRequest);
+	c->next(resultNextSubRequest, this);
 	//c->handler = handleNextSubRequest;
 	//c->selector->addRequest(this,KGL_LIST_RW,STAGE_OP_NEXT);
 }
@@ -883,25 +880,37 @@ int KHttpRequest::parseHeader(const char *attr, char *val,int &val_len, bool isF
 		return PARSE_HEADER_SUCCESS;
 	}
 	if (!strcasecmp(attr, "Accept-Encoding")) {
-		
-		if (strstr(val, "gzip") != NULL) {
-			flags |= RQ_HAS_GZIP;
-		}
-		if (conf.removeAcceptEncoding) {
+		if (!*val) {
 			return PARSE_HEADER_NO_INSERT;
 		}
-		return 1;
+		KHttpFieldValue field(val);
+		do {
+			if (field.is2(kgl_expand_string("gzip"))) {
+				SET(raw_url.encoding, KGL_ENCODING_GZIP);
+			} else if (field.is2(kgl_expand_string("deflate"))) {
+				SET(raw_url.encoding, KGL_ENCODING_DEFLATE);
+			} else if (field.is2(kgl_expand_string("compress"))) {
+				SET(raw_url.encoding, KGL_ENCODING_COMPRESS);
+			} else if (field.is2(kgl_expand_string("br"))) {
+				SET(raw_url.encoding, KGL_ENCODING_BR);
+			} else if (!field.is2(kgl_expand_string("identity"))) {
+				SET(raw_url.encoding, KGL_ENCODING_UNKNOW);
+			}
+		} while (field.next());
+		return PARSE_HEADER_SUCCESS;
 	}
 	if (!strcasecmp(attr,"If-Range")) {
 		time_t try_time = parse1123time(val);
 		if (try_time==-1) {
 			flags |= RQ_IF_RANGE_ETAG;
-			return PARSE_HEADER_INSERT_BEGIN;
+			if (this->ctx->if_none_match == NULL) {
+				ctx->set_if_none_match(val, val_len);
+			}
 		} else {
 			if_modified_since = try_time;
 			flags |= RQ_IF_RANGE_DATE;
-			return PARSE_HEADER_NO_INSERT;
 		}
+		return PARSE_HEADER_NO_INSERT;
 	}
 	if (!strcasecmp(attr, "If-Modified-Since")) {
 		if_modified_since = parse1123time(val);
@@ -913,7 +922,7 @@ int KHttpRequest::parseHeader(const char *attr, char *val,int &val_len, bool isF
 		if (this->ctx->if_none_match==NULL) {
 			ctx->set_if_none_match(val,val_len);
 		}
-		return PARSE_HEADER_INSERT_BEGIN;
+		return PARSE_HEADER_NO_INSERT;
 	}
 
 	//	printf("attr=[%s],val=[%s]\n",attr,val);
@@ -1005,7 +1014,9 @@ int KHttpRequest::parseHeader(const char *attr, char *val,int &val_len, bool isF
 			val += 6;
 			range_from = -1;
 			range_to = -1;
-			range_from = string2int(val);
+			if (*val != '-') {
+				range_from = string2int(val);
+			}
 			char *p = strchr(val, '-');
 			if (p && *(p+1)) {
 				range_to = string2int(p + 1);
@@ -1060,14 +1071,6 @@ int KHttpRequest::checkFilter(KHttpObject *obj) {
 			of_ctx->charset = obj->getCharset();
 		}
 		buff *bodys = obj->data->bodys;
-		bool unziped = false;
-		INT64 len;
-		if (TEST(obj->index.flags,OBJ_GZIPED)) {
-			//压缩过的数据
-			//解压它再进行内容过滤
-			bodys = inflate_buff(obj->data->bodys, len, true);
-			unziped = true;
-		}
 		buff *head = bodys;
 		while (head && head->used > 0) {
 			action = of_ctx->checkFilter(this,head->data, head->used);
@@ -1075,9 +1078,6 @@ int KHttpRequest::checkFilter(KHttpObject *obj) {
 				break;
 			}
 			head = head->next;
-		}
-		if (unziped) {
-			KBuffer::destroy(bodys);
 		}
 	}
 	return action;
@@ -1132,7 +1132,7 @@ void KHttpRequest::startResponseBody(INT64 body_len)
 #ifdef ENABLE_HTTP2
 	if (http2_ctx) {
 		int got = c->startResponse(this,body_len);
-		addFlow(got, (TEST(flags, RQ_HIT_CACHE)>0 ? FLOW_UPDATE_TOTAL | FLOW_UPDATE_CACHE : FLOW_UPDATE_TOTAL));
+		addFlow(got, ctx->cache_hit);
 		send_size += got;
 		return;
 	}

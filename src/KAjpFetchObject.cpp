@@ -66,10 +66,12 @@ KAjpFetchObject::~KAjpFetchObject() {
 //创建发送头到buffer中。
 void KAjpFetchObject::buildHead(KHttpRequest *rq)
 {
+	assert(buffer == NULL);
+	buffer = new KSocketBuffer(AJP_BUFF_SIZE);
 	char tmpbuff[50];
 	KHttpObject *obj = rq->ctx->obj;
 	SET(obj->index.flags,ANSW_LOCAL_SERVER);
-	KAjpMessage b(&buffer);
+	KAjpMessage b(buffer);
 	b.putByte(JK_AJP13_FORWARD_REQUEST);
 	b.putByte(rq->meth);
 	b.putString("HTTP/1.1");
@@ -156,8 +158,8 @@ void KAjpFetchObject::buildHead(KHttpRequest *rq)
 		h[3] = (dlen & 0xFF);
 		h[4] = (len>>8 & 0xFF);
 		h[5] = (len & 0xFF);
-		buffer.write_all((char *)h,6);
-		buffer.write_all(rq->parser.body,len);
+		buffer->write_all((char *)h,6);
+		buffer->write_all(rq->parser.body,len);
 		rq->left_read -= len;
 		rq->parser.bodyLen -= len;
 		rq->parser.body += len;
@@ -177,7 +179,7 @@ void KAjpFetchObject::appendPostEnd()
 	d[1] = 0x34;
 	d[2] = 0;
 	d[3] = 0;
-	buffer.appendBuffer(ebuff);
+	buffer->appendBuffer(ebuff);
 }
 //解析head
 Parse_Result KAjpFetchObject::parseHead(KHttpRequest *rq,char *data,int len)
@@ -284,7 +286,7 @@ unsigned char KAjpFetchObject::parseMessage(KHttpRequest *rq,KAjpMessage *msg)
 //创建post数据到buffer中。
 void KAjpFetchObject::buildPost(KHttpRequest *rq)
 {
-	unsigned len = buffer.getLen();
+	unsigned len = buffer->getLen();
 	//printf("buildpost len = %d\n",len);
 	assert(len>0 && len<=AJP_PACKAGE);
 
@@ -299,7 +301,7 @@ void KAjpFetchObject::buildPost(KHttpRequest *rq)
 	h[3] = (dlen & 0xFF);
 	h[4] = (len>>8 & 0xFF);
 	h[5] = (len & 0xFF);
-	buffer.insertBuffer(nbuf);
+	buffer->insertBuffer(nbuf);
 	if (rq->left_read==0) {
 		appendPostEnd();
 	}

@@ -155,7 +155,7 @@ KTHREAD_FUNCTION cnameAsyncWorkerCallBack(void *data,int msec)
 	kgl_cname_node *cn  = (kgl_cname_node *)data;
 	struct addrinfo *res = NULL;
 	assert(cn->queue->rq);
-	if (msec > 10000) {
+	if (msec<0 || msec > 10000) {
 		//10 second time out
 		find_cname_result(cn,NULL,false);
 		KTHREAD_RETURN;
@@ -222,7 +222,9 @@ inline kgl_cname_node *kgl_find_cache_cname(const char *hostname,bool &create_fl
 				cn->last_verify = kgl_current_sec;
 				char *name = strdup(hostname);
 				if (name) {
-					conf.dnsWorker->start(name,cnameCacheAsyncWorkerCallBack);
+					if (!conf.dnsWorker->tryStart(name, cnameCacheAsyncWorkerCallBack)) {
+						free(name);
+					}
 				}
 			}
 		}
@@ -267,7 +269,9 @@ void kgl_find_cname(const char *hostname,cname_call_back cb,KHttpRequest *rq)
 	cn->queue = arg;
 	cname_lock.Unlock();
 	if (create_flag) {
-		conf.dnsWorker->start(cn,cnameAsyncWorkerCallBack,true);
+		if (!conf.dnsWorker->tryStart(cn, cnameAsyncWorkerCallBack, true)) {
+			cnameAsyncWorkerCallBack(cn, -1);
+		}
 	}
 }
 int kgl_find_cache_cname(const char *hostname,char *cname,int cname_size)

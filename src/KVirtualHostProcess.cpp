@@ -16,7 +16,9 @@ void handleVProcessPower(VProcessPowerParam *vpp,std::list<KHttpRequest *> &queu
 {
 	if (vpp->rq) {
 		//如果有第一个请求，把首次连接给他
-
+		if (socket) {
+			vpp->rq->c->selector->bindSelectable(socket);
+		}
 		if (success){
 			if (socket==NULL) {
 				half_connect = false;

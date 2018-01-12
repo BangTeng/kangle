@@ -43,10 +43,10 @@ void KKqueueSelector::select() {
 			klog(KLOG_DEBUG,"select st=%p,st_flags=%d,events=%d at %p\n",st,st->st_flags,events[n].filter,pthread_self());
 			assert(TEST(st->st_flags,STF_READ|STF_WRITE)>0);
 #endif
-			if (events[n].filter==EVFILT_READ) {
-				st->eventRead(st->e[OP_READ].arg,st->e[OP_READ].result,st->e[OP_READ].buffer);
-			} else if (events[n].filter==EVFILT_WRITE) {
+			if (events[n].filter==EVFILT_WRITE) {
 				st->eventWrite(st->e[OP_WRITE].arg,st->e[OP_WRITE].result,st->e[OP_WRITE].buffer);
+			} else if(events[n].filter == EVFILT_READ) {
+				st->eventRead(st->e[OP_READ].arg, st->e[OP_READ].result, st->e[OP_READ].buffer);
 			} else {
 				assert(false);
 			}		
@@ -71,8 +71,8 @@ void KKqueueSelector::removeSocket(KSelectable *st) {
 	}
 	struct kevent changes[1]; 
 	EV_SET(&changes[0], sockfd, ev, EV_DELETE, 0, 0, NULL); 
-      	kevent(kdpfd, changes, 1, NULL, 0, NULL);
-	CLR(st->st_flags,STF_EV|STF_READ|STF_WRITE);
+    kevent(kdpfd, changes, 1, NULL, 0, NULL);
+	CLR(st->st_flags,STF_EV|STF_READ|STF_WRITE|STF_ALWAYS_READ);
 }
 bool KKqueueSelector::read(KSelectable *st,resultEvent result,bufferEvent buffer,void *arg)
 {
@@ -119,18 +119,18 @@ bool KKqueueSelector::write(KSelectable *st,resultEvent result,bufferEvent buffe
 		EV_SET(&changes[ev_count++], sockfd, EVFILT_WRITE, EV_ADD, 0, 0, (kqueue_udata_t)st);
 		SET(st->st_flags,STF_WRITE|STF_EV);
 	}
-	if (TEST(st->st_flags,STF_READ)) {
-                EV_SET(&changes[ev_count++], sockfd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
-                CLR(st->st_flags,STF_READ);
-        }
-        if (ev_count==0) {
-                return true;
-        }
-        if(kevent(kdpfd, changes, ev_count, NULL, 0, NULL)==-1){
-                klog(KLOG_ERR,"cann't addSocket sockfd=%d for write\n",sockfd);
-                return false;
-        }
-        return true;
+	if (TEST(st->st_flags,STF_READ|STF_ALWAYS_READ)==STF_READ) {
+            EV_SET(&changes[ev_count++], sockfd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
+            CLR(st->st_flags,STF_READ);
+    }
+    if (ev_count==0) {
+            return true;
+    }
+    if(kevent(kdpfd, changes, ev_count, NULL, 0, NULL)==-1){
+            klog(KLOG_ERR,"cann't addSocket sockfd=%d for write\n",sockfd);
+            return false;
+    }
+    return true;
 
 }
 bool KKqueueSelector::listen(KServer *st,resultEvent result)

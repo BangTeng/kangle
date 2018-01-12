@@ -18,6 +18,18 @@
 /*
  * 连接池容器类
  */
+class KPoolableSocketContainerImp {
+public:
+	KPoolableSocketContainerImp();
+	~KPoolableSocketContainerImp();
+	void refresh(bool clean);
+	void refreshList(kgl_list *l, bool clean);
+	kgl_list *getPopList(KConnectionSelectable *st);
+	kgl_list *getPushList(KUpstreamSelectable *st);
+	unsigned size;
+protected:
+	kgl_list **l;
+};
 class KPoolableSocketContainer: public KCountableEx {
 public:
 	KPoolableSocketContainer();
@@ -50,8 +62,11 @@ public:
 	 * 得到连接数
 	 */
 	unsigned getSize() {
+		unsigned size = 0;
 		lock.Lock();
-		unsigned size = pools.size();	
+		if (imp) {
+			size = imp->size;
+		}
 		lock.Unlock();
 		return size;
 	}
@@ -62,9 +77,12 @@ public:
 	virtual void isGood(KUpstreamSelectable *st)
 	{
 	}
-	virtual void addHeader(KHttpEnv *s)
+
+#ifdef HTTP_PROXY
+	virtual void addHeader(KHttpRequest *rq,KHttpEnv *s)
 	{
 	}
+#endif
 protected:
 	/*
 	 * 把连接真正放入池中
@@ -75,30 +93,20 @@ protected:
 		ev = 0 关闭
 		ev = 1 放入pool
 	*/
-	//virtual void noticeEvent(int ev,KPoolableSocket *st)
-	//{
-
-	//}
 
 	KUpstreamSelectable *internalGetPoolSocket(KHttpRequest *rq);
-	int lifeTime;
-	std::list<KUpstreamSelectable *> pools;
+	int lifeTime;	
 	KMutex lock;
 private:
-	void refreshPool(std::list<KUpstreamSelectable *> *pools)
+	time_t getHttp2ExpireTime()
 	{
-		std::list<KUpstreamSelectable *>::iterator it2;
-		for (it2 = pools->end(); it2 != pools->begin();) {
-			it2--;
-			if ((*it2)->expireTime <= kgl_current_msec) {
-				assert((*it2)->container == NULL);
-				(*it2)->destroy();
-				it2 = pools->erase(it2);
-			} else {
-				break;
-			}
+		int lifeTime = this->lifeTime;
+		if (lifeTime <= 30) {
+			//http2最少60秒连接时间
+			lifeTime = 30;
 		}
+		return kgl_current_sec + lifeTime;
 	}
-
+	KPoolableSocketContainerImp *imp;
 };
 #endif /* KPOOLABLESTREAMCONTAINER_H_ */

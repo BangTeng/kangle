@@ -1,16 +1,21 @@
 #include "KDiskCacheIndex.h"
 #include "KHttpObject.h"
+#include "KCache.h"
 #ifdef ENABLE_DB_DISK_INDEX
+#define AUTO_FLUSH_COUNT   10000
 KDiskCacheIndex *dci = NULL;
-void loadDiskCacheIndex(const char *url,const char *data,int dataLen)
+void loadDiskCacheIndex(unsigned filename1, unsigned filename2, const char *url,const char *data,int dataLen)
 {
-	if (dataLen!=sizeof(HttpObjectIndex)) {
-		klog(KLOG_ERR,"dataLen = %d is not eq sizeof(HttpObjectIndex)=%d\n",dataLen,sizeof(HttpObjectIndex));
+	if (dataLen!=sizeof(KHttpObjectDbIndex)) {
+		klog(KLOG_ERR,"dataLen = %d is not eq sizeof(KHttpObjectDbIndex)=[%d]\n",dataLen,sizeof(KHttpObjectDbIndex));
 		return;
 	}
+	KHttpObjectDbIndex *db_index = (KHttpObjectDbIndex *)data;
 	KHttpObject *obj = new KHttpObject;
-	memcpy(&obj->index,data,dataLen);
-	cor_result result = create_http_object(obj,url);
+	obj->dk.filename1 = filename1;
+	obj->dk.filename2 = filename2;
+	memcpy(&obj->index, &db_index->index,sizeof(obj->index));
+	cor_result result = create_http_object(obj,url,db_index->url_flag_encoding);
 	if (result==cor_success) {
 		dci->load_count++;
 	}
@@ -26,8 +31,10 @@ KTHREAD_FUNCTION diskCacheIndexCallBack(void *data,int msec)
 }
 KDiskCacheIndex::KDiskCacheIndex()
 {
-	worker = new KAsyncWorker(1);
+	worker = new KAsyncWorker(1,0);
 	load_count = 0;
+	shutdown_flag = false;
+	transaction_count = 0;
 }
 KDiskCacheIndex::~KDiskCacheIndex()
 {
@@ -35,54 +42,51 @@ KDiskCacheIndex::~KDiskCacheIndex()
 }
 void KDiskCacheIndex::work(diskCacheOperatorParam *param)
 {
-	insertTranscation();
+	if (transaction_count > AUTO_FLUSH_COUNT) {
+		transaction_count = 0;
+		this->commit();
+		this->begin();
+	}
 	bool result = false;
 	switch (param->op) {
 	case ci_add:
 	{
+		transaction_count++;
 		assert(param->url);
-		result = add(param->filename1,param->filename2,param->url,kgl_current_sec,(char *)&param->data,sizeof(param->data));
+		result = add(param->filename1,param->filename2,param->url,(char *)&param->data,sizeof(param->data));
 		free(param->url);
 		break;
 	}
 	case ci_update:
 	{
+		transaction_count++;
 		result = update(param->filename1,param->filename2,(char *)&param->data,sizeof(param->data));
 		break;
 	}
 	case ci_del:
+		transaction_count++;
 		result = del(param->filename1,param->filename2);
 		break;
-	case ci_updateLast:
-		result = updateLast(param->filename1,param->filename2,kgl_current_sec);
-		break;
 	case ci_close:
+		this->commit();
 		this->close();
 		result = true;
 		break;
-	case ci_begin:
-		result = this->begin();
-		break;
-	case ci_commit:
-		result = this->commit();
-		transaction = false;
+	case ci_flush:
+		if (transaction_count > 0) {
+			transaction_count = 0;
+			this->commit();
+			this->begin();
+		}
 		break;
 	case ci_load:
 		result = this->load(loadDiskCacheIndex);
-		transaction = false;
+		cache.shutdown_disk(false);
+		this->begin();
 		break;
 	default:
 		break;
 	}
-}
-void KDiskCacheIndex::insertTranscation()
-{
-	if (transaction == true) {
-		return;
-	}
-	this->begin();
-	transaction = true;
-	start(ci_commit,NULL);	
 }
 void KDiskCacheIndex::start(ci_operator op,KHttpObject *obj)
 {
@@ -93,30 +97,23 @@ void KDiskCacheIndex::start(ci_operator op,KHttpObject *obj)
 	case ci_add:
 		param->url = obj->url->getUrl();
 	case ci_update:
-		param->filename1 = obj->index.filename1;
-		param->filename2 = obj->index.filename2;		
-		memcpy(&param->data,&obj->index,sizeof(param->data));
+		param->filename1 = obj->dk.filename1;
+		param->filename2 = obj->dk.filename2;
+		param->data.url_flag_encoding = obj->url->flag_encoding;
+		memcpy(&param->data.index,&obj->index,sizeof(param->data.index));
 		break;
 	case ci_del:
-	case ci_updateLast:
-		param->filename1 = obj->index.filename1;
-		param->filename2 = obj->index.filename2;			
+		param->filename1 = obj->dk.filename1;
+		param->filename2 = obj->dk.filename2;
 		break;
 	case ci_close:
-		break;
-	case ci_begin:
-		transaction = true;
-		break;
-	case ci_commit:
-		break;
 	case ci_load:
-		transaction = true;
+	case ci_flush:
 		break;
 	default:
 		delete param;
 		return;
 	}
-	//diskCacheIndexCallBack(param);
-	worker->start(param,diskCacheIndexCallBack);
+	worker->tryStart(param,diskCacheIndexCallBack);
 }
 #endif

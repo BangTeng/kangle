@@ -5,55 +5,13 @@
 #include "KHttpRequest.h"
 #include "KFile.h"
 #include <stdio.h>
+#include "KAsyncFile.h"
 #include <list>
 #define INDEX_STATE_UNCLEAN 0
 #define INDEX_STATE_CLEAN   1
-#define CURRENT_DISK_VERSION 1
-#define CACHE_FIX_STR "KLJW"
-enum swap_in_result {
-	swap_in_success,
-	swap_in_failed,
-	swap_in_busy
-};
-typedef void (*swap_http_obj_call_back)(KHttpRequest *rq, swap_in_result result);
-class KHttpObjectSwapTask {
-public:
-	KHttpRequest *rq;
-	swap_http_obj_call_back cb;
-	KHttpObjectSwapTask *next;
-};
-class KHttpObjectSwaping
-{
-public:
-	KHttpObjectSwaping()
-	{
-		queue = NULL;
-	}
-	~KHttpObjectSwaping()
-	{
-		assert(queue==NULL);
-	}
-	void addTask(KHttpRequest *rq,swap_http_obj_call_back cb)
-	{
-		KHttpObjectSwapTask *task = new KHttpObjectSwapTask();
-		task->rq = rq;
-		task->cb = cb;
-		task->next = queue;
-		queue = task;
-	}
-	void swapResult(swap_in_result result)
-	{
-		KHttpObjectSwapTask *next;
-		while (queue) {
-			next = queue->next;
-			queue->cb(queue->rq,result);
-			delete queue;
-			queue = next;
-		}
-	}
-private:
-	KHttpObjectSwapTask *queue;
-};
+#define CACHE_DISK_VERSION  3
+#define CACHE_FIX_STR      "KLJW"
+
 struct HttpObjectIndexHeader
 {
 	int head_size;
@@ -70,25 +28,34 @@ struct HttpObjectIndexHeader
 		};
 	};
 };
-struct HttpObjectIndex
+struct KHttpObjectKey
 {
 	unsigned filename1;//从kgl_current_sec得到
 	unsigned filename2;//每次累加
-	INT64 content_length; //obj的总长度
-	INT64 have_length;    //kangle已有的大小
-	time_t last_modified;
-	time_t last_verified;
+};
+struct HttpObjectIndex
+{
+	unsigned head_size;
 	unsigned flags;
+	INT64 content_length; //obj的总长度
+	time_t last_modified;
+	time_t last_verified;	
 	unsigned max_age;
 };
 struct KHttpObjectFileHeader
 {
-	int head_size;
-	unsigned short version;
-	unsigned short body_complete;
 	char fix_str[4];
-	char reserv[8];
+	u_short version;
+	u_short url_flag_encoding;
 	HttpObjectIndex index;
+	unsigned short body_complete;
+	unsigned short status_code;	
+};
+struct KHttpObjectDbIndex
+{
+	HttpObjectIndex index;
+	u_short url_flag_encoding;
+	u_short reserv;
 };
 struct index_scan_state_t
 {
@@ -97,12 +64,21 @@ struct index_scan_state_t
 	int need_index_progress;
 	time_t last_scan_time;
 };
+inline bool is_valide_dc_head_size(unsigned head_size)
+{
+	return head_size >= sizeof(KHttpObjectFileHeader) && head_size < 4048576;
+}
+inline bool is_valide_dc_sign(KHttpObjectFileHeader *header)
+{
+	return memcmp(header->fix_str, CACHE_FIX_STR, sizeof(header->fix_str)) == 0 &&
+		header->version== CACHE_DISK_VERSION;
+}
 bool skipString(char **hot,int &hotlen);
 char *readString(char **hot,int &hotlen,int &len);
 bool skipString(KFile *file);
-int writeString(KFile *fp,const char *str,int len=0);
+int writeString(KBufferFile *fp,const char *str,int len=0);
+int write_string(char *hot, const char *str, int len);
 char *getCacheIndexFile();
-void stage_swapin(KHttpRequest *rq);
 class KHttpObjectBody;
 bool read_obj_head(KHttpObjectBody *data,KFile *fp);
 bool read_obj_head(KHttpObjectBody *data,char **hot,int &hotlen);
@@ -120,7 +96,7 @@ enum cor_result
 	cor_success,
 	cor_incache,
 };
-cor_result create_http_object(KHttpObject *obj,const char *url,const char *verified_filename=NULL);
+cor_result create_http_object(KHttpObject *obj,const char *url, u_short flag_encoding,const char *verified_filename=NULL);
 extern volatile bool index_progress;
 extern index_scan_state_t index_scan_state;
 #endif

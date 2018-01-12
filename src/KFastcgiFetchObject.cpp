@@ -45,12 +45,13 @@ KFastcgiFetchObject::~KFastcgiFetchObject() {
 }
 void KFastcgiFetchObject::buildHead(KHttpRequest *rq)
 {
+	buffer = new KSocketBuffer(NBUFF_SIZE);
 	KHttpObject *obj = rq->ctx->obj;
 	SET(obj->index.flags,ANSW_LOCAL_SERVER);
 	hook.init(obj,rq);
 	hook.setProto(Proto_fcgi);
 	KFastcgiStream<KSocketBuffer> fbuf;
-	fbuf.setStream(&buffer);
+	fbuf.setStream(buffer);
 	fbuf.extend = isExtend();
 	if (fbuf.extend) {
 		FCGI_BeginRequestRecord package;
@@ -59,7 +60,7 @@ void KFastcgiFetchObject::buildHead(KHttpRequest *rq)
 		package.header.contentLength = htons(sizeof(FCGI_BeginRequestBody));
 		KApiRedirect *ard = static_cast<KApiRedirect *>(brd->rd);
 		package.body.id = ard->id;
-		buffer.write_all((char *)&package,sizeof(FCGI_BeginRequestRecord));
+		buffer->write_all((char *)&package,sizeof(FCGI_BeginRequestRecord));
 	}else{
 		fbuf.beginRequest(client->getLifeTime()>0);
 	}
@@ -84,7 +85,7 @@ void KFastcgiFetchObject::buildHead(KHttpRequest *rq)
 #endif
 	bool sendResult = make_http_env(rq,brd, rq->ctx->lastModified, rq->file, &fbuf, chrooted);
 	if (!sendResult) {//send error
-		buffer.destroy();
+		buffer->destroy();
 		return;
 	}
 	if (rq->pre_post_length>0) {
@@ -117,12 +118,12 @@ void KFastcgiFetchObject::appendPostEnd()
 	fcgiheader->type = FCGI_STDIN;
 	fcgiheader->contentLength = 0;
 	fcgiheader->requestIdB0 = 1;
-	buffer.appendBuffer(fcgibuff);
+	buffer->appendBuffer(fcgibuff);
 }
 void KFastcgiFetchObject::buildPost(KHttpRequest *rq)
 {
 
-	unsigned postLen = buffer.getLen();
+	unsigned postLen = buffer->getLen();
 	assert(postLen>0);
 	buff *fcgibuff = (buff *)malloc(sizeof(buff));
 	fcgibuff->data = (char *)malloc(sizeof(FCGI_Header));
@@ -134,7 +135,7 @@ void KFastcgiFetchObject::buildPost(KHttpRequest *rq)
 	fcgiheader->type = FCGI_STDIN;
 	fcgiheader->contentLength = htons(postLen);
 	fcgiheader->requestIdB0 = 1;
-	buffer.insertBuffer(fcgibuff);
+	buffer->insertBuffer(fcgibuff);
 	if(!rq->has_post_data()){
 		appendPostEnd();
 	}

@@ -60,6 +60,7 @@
 #include "KHttpFilterManage.h"
 #include "KHttpProxyFetchObject.h"
 #include "KSimulateRequest.h"
+#include "KHttpObjectSwaping.h"
 
 kgl_str_t know_http_headers[] = {
 	{ kgl_expand_string("Server") },
@@ -104,6 +105,7 @@ buff *inflate_buff(buff *in_buf, INT64 &len, bool fast) {
 		}
 		in_buf = in_buf->next;
 	}
+	gzip.write_end();
 	len = buffer.getLen();
 	return buffer.stealBuffFast();
 }
@@ -144,14 +146,7 @@ char * skip_next_line(char *str, int &str_len) {
 */
 KWStream *makeWriteStream(KHttpRequest *rq, KHttpObject *obj, KWStream *st,
 		bool &autoDelete) {
-
-	if (TEST(obj->index.flags,OBJ_DEFLATED)) {
-		//上游是deflate压缩，则解压
-		CLR(obj->index.flags,OBJ_DEFLATED|ANSW_HAS_CONTENT_LENGTH);
-		KHttpStream *st2 = new KGzipDecompress(true,st, autoDelete);
-		st = st2;
-		autoDelete = true;
-	}
+#if 0
 	if (TEST(obj->index.flags,OBJ_GZIPED)) {
 		rq->ctx->stream_gziped = true;
 		if (rq->needFilter() || !TEST(rq->flags,RQ_HAS_GZIP) || TEST(rq->workModel,WORK_MODEL_SIMULATE)) {
@@ -173,6 +168,7 @@ KWStream *makeWriteStream(KHttpRequest *rq, KHttpObject *obj, KWStream *st,
 	} else {
 		rq->ctx->stream_gziped = false;
 	}
+#endif
 	if (TEST(obj->index.flags,ANSW_CHUNKED)) {
 		CLR(obj->index.flags,ANSW_CHUNKED);
 		rq->ctx->upstream_chunked = true;
@@ -211,6 +207,20 @@ bool send_http(KHttpRequest *rq, KHttpObject *obj, int code, KReadWriteBuffer *b
 	if (body) {
 		rq->responseHeader(kgl_expand_string("Content-Type"),kgl_expand_string("text/html; charset=utf-8"));
 	}
+	if (TEST(rq->filter_flags, RF_X_CACHE)) {
+		KStringBuf b;
+		if (rq->ctx->cache_hit_part) {
+			b.WSTR("HIT-PART from ");
+		}
+		else if (rq->ctx->cache_hit) {
+			b.WSTR("HIT from ");
+		}
+		else {
+			b.WSTR("MISS from ");
+		}
+		b << conf.hostname;
+		rq->responseHeader(kgl_expand_string("X-Cache"), b.getBuf(), b.getSize());
+	}
 	INT64 send_len = 0;
 	if (obj) {
 		if (!obj->checkNobody()) {
@@ -240,7 +250,7 @@ bool send_auth(KHttpRequest *rq,KReadWriteBuffer *body) {
 */
 bool send_error(KHttpRequest *rq, KHttpObject *obj, int code,const char* reason) 
 {
-	if (TEST(rq->flags,RQ_HAS_SEND_HEADER) || rq->c->is_read_hup()) {
+	if (TEST(rq->flags,RQ_HAS_SEND_HEADER) || rq->ctx->read_huped) {
 		if (!TEST(rq->flags,RQ_SYNC)) {
 			stageEndRequest(rq);
 		}
@@ -261,7 +271,13 @@ bool send_error(KHttpRequest *rq, KHttpObject *obj, int code,const char* reason)
 		return send_http(rq, obj, code, &s);
 	}
 	assert(rq);
-	assert(rq->c->socket);	
+	assert(rq->c->socket);
+	KStringBuf event_id(32);
+	if (conf.log_event_id) {
+		event_id.add(rq->request_msec, INT64_FORMAT_HEX);
+		event_id.WSTR("-");
+		event_id.add((INT64)rq, INT64_FORMAT_HEX);
+	}
 	
 	const char *status = KHttpKeyValue::getStatus(code);
 	s << "<html>\n<head>\n";
@@ -275,7 +291,13 @@ bool send_error(KHttpRequest *rq, KHttpObject *obj, int code,const char* reason)
 	s << reason;
 	s << "</font></h3></p>\n<p>Please check or <a href='javascript:location.reload()'>try again</a> later.</p>\n";
 	if (*conf.hostname) {
-		s << "hostname: " << conf.hostname ;
+		s << "<div>hostname: " << conf.hostname << "</div>";
+	}
+	if (conf.log_event_id) {
+		s << "<div>event id: ";
+		s.write_all(event_id.getBuf(), event_id.getSize());
+		s << "</div>";
+		rq->responseHeader(kgl_expand_string("x-event-id"), event_id.getBuf(), event_id.getSize());
 	}
 	s << "<hr>\n";
 	s << "<div id='pb'>";
@@ -317,8 +339,7 @@ void insert_via(KHttpRequest *rq, KWStream &s, char *old_via) {
 /*************************
 * 创建回应http头信息
 *************************/
-bool build_obj_header(KHttpRequest *rq, KHttpObject *obj,
-		INT64 content_len, INT64 &start, INT64 &send_len) {
+bool build_obj_header(KHttpRequest *rq, KHttpObject *obj,INT64 content_len, INT64 &start, INT64 &send_len) {
 	start = 0;
 	send_len = content_len;
 	assert(!TEST(rq->flags,RQ_HAS_SEND_HEADER));
@@ -332,17 +353,15 @@ bool build_obj_header(KHttpRequest *rq, KHttpObject *obj,
 		&& obj->data->status_code == STATUS_OK 
 		&& content_len>0) {
 		send_len = content_len;
-		if(!adjust_range(rq,send_len)){			
-			//rq->status_code = 416;
+		if (!adjust_range(rq,send_len)) {			
 			build_first = false;
 			rq->responseStatus(416);
 			rq->range_from = -1;
 			start = -1;
 		} else {
-			if (!TEST(rq->raw_url.flags,KGL_URL_RANGED)) {
-				rq->status_code = STATUS_CONTENT_PARTIAL;
+			if (!TEST(rq->raw_url.flags,KGL_URL_RANGED)) {				
 				build_first = false;
-				rq->responseStatus(206);
+				rq->responseStatus(STATUS_CONTENT_PARTIAL);
 				KStringBuf s;
 				s.WSTR("bytes ");
 				s.add(rq->range_from,INT64_FORMAT);
@@ -363,6 +382,7 @@ bool build_obj_header(KHttpRequest *rq, KHttpObject *obj,
 			rq->status_code = obj->data->status_code;
 		}
 		ss->sendHeader(rq->status_code,obj->data->headers);
+		SET(rq->flags, RQ_HAS_SEND_HEADER);
 		return true;
 	}
 #endif
@@ -387,7 +407,7 @@ bool build_obj_header(KHttpRequest *rq, KHttpObject *obj,
 		rq->responseHeader(header->attr,header->attr_len,header->val,header->val_len);
 		header = header->next;
 	}
-	//发送Age头	
+	//发送Age头
 	if (TEST(rq->filter_flags,RF_AGE) && !TEST(obj->index.flags,FLAG_DEAD|ANSW_NO_CACHE)) {
 		int current_age = (int)obj->getCurrentAge(kgl_current_sec);
 		if (current_age > 0) {
@@ -409,22 +429,15 @@ bool build_obj_header(KHttpRequest *rq, KHttpObject *obj,
 	}	
 	if (TEST(rq->filter_flags,RF_X_CACHE)) {
 		KStringBuf b;
-		if (TEST(rq->flags,RQ_HIT_CACHE)) {
-			b.WSTR("HIT from ");			
+		if (rq->ctx->cache_hit_part) {
+			b.WSTR("HIT-PART from ");			
+		} else if (rq->ctx->cache_hit) {
+			b.WSTR("HIT from ");
 		} else {
 			b.WSTR("MISS from ");
-		}
+		}	
 		b << conf.hostname;
-		
 		rq->responseHeader(kgl_expand_string("X-Cache"),b.getBuf(),b.getSize());
-	}
-	//gzip压缩
-	if (TEST(rq->flags,RQ_HAS_GZIP) && rq->ctx->stream_gziped) {
-		SET(rq->flags,RQ_TE_GZIP);
-	}
-	if (TEST(rq->flags,RQ_TE_GZIP)) {
-		//transfer need compress and object already compress.
-		rq->responseHeader(kgl_expand_string("Content-Encoding"),kgl_expand_string("gzip"));
 	}
 	if (!TEST(obj->index.flags,FLAG_NO_BODY)) {
 		/*
@@ -457,6 +470,7 @@ bool build_obj_header(KHttpRequest *rq, KHttpObject *obj,
 //试图发送，如果rq->buffer有数据就发送,并返回true，否则返回false
 bool try_send_request(KHttpRequest *rq)
 {
+	
 	if (rq->buffer.getLen() > 0) {
 		stageWriteRequest(rq);
 		return true;
@@ -489,7 +503,7 @@ void stage_rdata_end(KHttpRequest *rq,StreamState result)
 		stageEndRequest(rq);
 		return;
 	}
-	if (rq->ctx->know_length && rq->ctx->left_read != 0) {
+	if (rq->ctx->know_length && rq->ctx->left_read != 0 && obj->data->type==MEMORY_OBJECT) {
 		//	printf("content 没读完[%s],总共有[%d],剩下[%d]\n",rq->getInfo().c_str(),obj->index.content_length,left_read);
 		SET(obj->index.flags,FLAG_DEAD|OBJ_INDEX_UPDATE);	
 	}
@@ -506,7 +520,10 @@ void stage_rdata_end(KHttpRequest *rq,StreamState result)
 	}
 	if (!try_send_request(rq)) {
 #ifdef  ENABLE_BIG_OBJECT
-		if (rq->bo_ctx==NULL)
+		if (rq->bo_ctx) {
+			rq->bo_ctx->write_request_end(rq);
+			return;
+		}
 #endif
 		if (rq->send_ctx.getBufferSize()>0) {
 				stageWriteRequest(rq);
@@ -555,7 +572,7 @@ bool sync_load_body(KHttpRequest *rq, KHttpObject *obj) {
 	int read_len = sizeof(answer);
 	assert(rq->ctx->left_read == 0);
 	assert(rq->ctx->know_length==false);
-	if (TEST(obj->index.flags,ANSW_HAS_CONTENT_LENGTH)) {
+	if (TEST(obj->index.flags,ANSW_HAS_CONTENT_LENGTH) && !rq->ctx->connection_upgrade) {
 		rq->ctx->know_length = true;
 		rq->ctx->left_read = obj->index.content_length;
 		rq->ctx->left_read -= rq->buffer.getLen();
@@ -603,7 +620,7 @@ bool sync_load_body(KHttpRequest *rq, KHttpObject *obj) {
 	if (TEST(obj->index.flags,ANSW_CHUNKED) && result != STREAM_WRITE_END) {
 		SET(obj->index.flags,FLAG_DEAD|OBJ_INDEX_UPDATE);
 	}
-	if (rq->ctx->know_length && rq->ctx->left_read!=0) {
+	if (rq->ctx->know_length && rq->ctx->left_read!=0 && obj->data->type==MEMORY_OBJECT) {
 		//	printf("content 没读完[%s],总共有[%d],剩下[%d]\n",rq->getInfo().c_str(),obj->index.content_length,left_read);
 		SET(obj->index.flags,FLAG_DEAD|OBJ_INDEX_UPDATE);
 	}
@@ -639,7 +656,7 @@ bool push_redirect_header(KHttpRequest *rq, const char *url,int url_len,int code
 bool send_not_modify_from_mem(KHttpRequest *rq) {
 	return send_http(rq, NULL, STATUS_NOT_MODIFIED);
 }
-void processCacheReadyRequest(KHttpRequest *rq, swap_in_result result) {
+void processCacheReadyRequest(KHttpRequest *rq,KHttpObject *obj, swap_in_result result) {
 	switch (result) {
 	case swap_in_busy:
 		klog(KLOG_ERR,"obj swap in busy drop request.\n");
@@ -647,8 +664,13 @@ void processCacheReadyRequest(KHttpRequest *rq, swap_in_result result) {
 		//stageEndRequest(rq);
 		break;
 	case swap_in_failed:
+	{
+#ifdef ENABLE_DISK_CACHE
 		//不能swap in就从源上去取
-		klog(KLOG_ERR,"obj swap in failed.\n");
+		char *filename = obj->getFileName();
+		klog(KLOG_ERR, "obj swap in failed cache file [%s].\n", filename);
+		free(filename);
+#endif
 		rq->ctx->clean_obj(rq);
 		rq->ctx->new_object = true;
 		rq->ctx->lastModified = 0;
@@ -661,12 +683,11 @@ void processCacheReadyRequest(KHttpRequest *rq, swap_in_result result) {
 		rq->resetFetchObject();
 		asyncLoadHttpObject(rq);
 		break;
+	}
 	case swap_in_success:
 	{
 		KHttpObject *obj = rq->ctx->obj;
-		if (!TEST(obj->index.flags, OBJ_IS_DELTA)) {
-			SET(rq->flags, RQ_HIT_CACHE);
-		}
+		rq->ctx->cache_hit = true;
 		
 		processCacheWithCheckExpire(rq, obj);
 		break;
@@ -681,12 +702,13 @@ void processCacheRequest(KHttpRequest *rq) {
 		lock->Lock();
 		if (obj->data==NULL) {
 #ifdef ENABLE_DISK_CACHE
+			KHttpObjectSwaping *obj_swap = new KHttpObjectSwaping;
 			obj->data = new KHttpObjectBody();
 			obj->data->type = SWAPING_OBJECT;
-			obj->data->os = new KHttpObjectSwaping;
+			obj->data->os = obj_swap;
 			obj->data->os->addTask(rq,processCacheReadyRequest);
 			lock->Unlock();
-			stage_swapin(rq);
+			obj_swap->swapin(rq,obj);
 			return;
 #else
 			lock->Unlock();
@@ -696,6 +718,7 @@ void processCacheRequest(KHttpRequest *rq) {
 			stageEndRequest(rq);
 			return;
 #endif
+#ifdef ENABLE_DISK_CACHE
 		} else if(obj->data->type == SWAPING_OBJECT) {
 			//已经有其它线程在swap
 			KHttpObjectSwaping *os = obj->data->os;
@@ -703,10 +726,11 @@ void processCacheRequest(KHttpRequest *rq) {
 			os->addTask(rq,processCacheReadyRequest);
 			lock->Unlock();
 			return;
+#endif
 		}
 		lock->Unlock();		
 	}
-	processCacheReadyRequest(rq,swap_in_success);
+	processCacheReadyRequest(rq,obj,swap_in_success);
 }
 /**
 * 发送在内存中的object.
@@ -729,9 +753,6 @@ void sendMemoryObject(KHttpRequest *rq,KHttpObject *obj)
 			return;
 		}
 	}
-	if (TEST(obj->index.flags,OBJ_GZIPED)) {
-		rq->ctx->stream_gziped = true;
-	}
 	if (obj->data->type==MEMORY_OBJECT && !obj->isNoBody(rq)) {
 		if (rq->needFilter()) {
 			if (rq->ctx->st == NULL) {
@@ -740,30 +761,6 @@ void sendMemoryObject(KHttpRequest *rq,KHttpObject *obj)
 				rq->ctx->st = makeWriteStream(rq,obj,tr,autoDelete);			
 			}
 			rq->fetchObj = new KCacheFetchObject(obj);
-			rq->fetchObj->open(rq);
-			return;
-		}
-		bool rq_has_gzip = TEST(rq->flags,RQ_HAS_GZIP)>0;
-		int test_obj_gzip_flag = (rq_has_gzip?FLAG_RQ_GZIP:OBJ_GZIPED);
-		if (rq_has_gzip != (TEST(obj->index.flags,test_obj_gzip_flag)>0)) {
-			//不是最佳gzip缓存
-			//printf("@@@@@@@@@不是最佳gzip缓存 rq_has_gzip=[%d],obj_flags=[%d]\n",rq_has_gzip,obj->index.flags);
-			rq->fetchObj = new KCacheFetchObject(obj);
-			cache.rate(obj);
-			rq->ctx->clean_obj(rq,false);
-			KHttpObject *new_obj = new KHttpObject(obj);		
-			rq->ctx->pushObj(new_obj);
-			rq->ctx->new_object = true;
-			if (!TEST(rq->workModel, WORK_MODEL_MANAGE | WORK_MODEL_INTERNAL | WORK_MODEL_SKIP_ACCESS)
-				&& checkResponse(rq, obj) == JUMP_DENY) {
-				handleError(rq, STATUS_FORBIDEN, "access denied by response control");
-				return;
-			}
-			if (rq->ctx->st == NULL) {
-				bool autoDelete = true;
-				KHttpTransfer *tr = new KHttpTransfer(rq,new_obj);
-				rq->ctx->st = makeWriteStream(rq,new_obj,tr,autoDelete);
-			}
 			rq->fetchObj->open(rq);
 			return;
 		}
@@ -791,9 +788,6 @@ void sendMemoryObject(KHttpRequest *rq,KHttpObject *obj)
 }
 
 
-void swap_http_obj(KHttpRequest *rq,swap_http_obj_call_back)
-{
-}
 void send_memory_object_swap_call_back(KHttpRequest *rq,bool result) {
 		if (!result) {
 		//不能swap in就从源上去取
@@ -853,16 +847,13 @@ bool sendHttpObject(KHttpRequest *rq, KHttpObject *obj) {
 		if (!obj->swapin(data)) {
 			SET(obj->index.flags,FLAG_DEAD|OBJ_INDEX_UPDATE);
 			lock->Unlock();
-			cache.dead(obj);
+			cache.dead(obj, __FILE__, __LINE__);
 			//objList[obj->list_state].dead(obj);
-			return send_error(rq, NULL, STATUS_SERVER_ERROR,
-					"Cann't swap in object!");
-		} else {
-			SET(obj->index.flags,FLAG_IN_MEM);
-			
-				cache.getHash(obj->h)->incSize(obj->index.content_length);
-			
+			return send_error(rq, NULL, STATUS_SERVER_ERROR,"Cann't swap in object!");
 		}
+		SET(obj->index.flags,FLAG_IN_MEM);
+		
+			cache.getHash(obj->h)->incSize(obj->index.content_length);		
 	}
 #endif	
 	send_buffer = obj->data->bodys;
@@ -1012,6 +1003,7 @@ void handleUpstreamRecvedHead(KHttpRequest *rq)
 		obj->data->status_code = STATUS_OK;
 	}
 	int status_code = obj->data->status_code;
+	context->us_code = obj->data->status_code;
 	if (status_code != STATUS_OK && status_code != STATUS_CONTENT_PARTIAL) {
 		SET(obj->index.flags,ANSW_NO_CACHE|OBJ_INDEX_UPDATE|OBJ_NOT_OK);
 	}
@@ -1049,7 +1041,7 @@ void handleUpstreamRecvedHead(KHttpRequest *rq)
 		handleUpstreamNoBody(rq);
 		return;
 	default:
-		CLR(rq->flags,RQ_HIT_CACHE);
+		rq->ctx->cache_hit = false;
 		if (rq->meth == METH_HEAD || TEST(context->obj->index.flags,FLAG_NO_BODY)) {
 			//没有http body的情况
 			SET(obj->index.flags,FLAG_DEAD|OBJ_INDEX_UPDATE);
@@ -1058,7 +1050,7 @@ void handleUpstreamRecvedHead(KHttpRequest *rq)
 			handleUpstreamNoBody(rq);
 			return;
 		}
-		if (TEST(rq->ctx->obj->index.flags,ANSW_HAS_CONTENT_LENGTH)) {
+		if (TEST(rq->ctx->obj->index.flags,ANSW_HAS_CONTENT_LENGTH) && !rq->ctx->connection_upgrade) {
 			rq->ctx->know_length = true;
 			rq->ctx->left_read = rq->ctx->obj->index.content_length;
 		} else {
@@ -1091,7 +1083,6 @@ error:
 }
 
 void handleError(KHttpRequest *rq,int code,const char *msg) {
-	rq->closeFetchObject(false);
 	
 	if (TEST(rq->filter_flags,RF_ALWAYS_ONLINE)) {
 		//always on
@@ -1133,7 +1124,7 @@ void handleError(KHttpRequest *rq,int code,const char *msg) {
 		return;
 	}
 	const char *errorPage = errorPage2.c_str();
-	if (strncasecmp(errorPage, "http://", 7) == 0) {
+	if (strncasecmp(errorPage, "http://", 7) == 0 || strncasecmp(errorPage, "https://", 8) == 0) {
 		stringstream s;
 		if (rq->svh->vh->status!=0) {
 			s << errorPage << "?name=" << rq->svh->vh->name << "&status=" << rq->svh->vh->status << "&url=" << rq->getInfo();
@@ -1410,14 +1401,18 @@ void asyncLoadHttpObject(KHttpRequest *rq) {
 		if (TEST(rq->flags,RQ_IF_RANGE_DATE)) {
 			context->mt = modified_if_range_date;
 		}
-	} else if (context->if_none_match==NULL
-		&& context->old_obj
-		&& !TEST(context->old_obj->index.flags,OBJ_NOT_OK|OBJ_IS_DELTA)) {
+	} else if (context->if_none_match) {
+		context->mt = modified_if_none_match;
+		if (TEST(rq->flags, RQ_IF_RANGE_ETAG)) {
+			context->mt = modified_if_range_etag;
+		}
+	} else if (context->old_obj	&& !TEST(context->old_obj->index.flags,OBJ_NOT_OK)) {
 		if (context->old_obj->index.last_modified>0) {
 			context->lastModified = context->old_obj->index.last_modified;
 		} else if (TEST(context->old_obj->index.flags,OBJ_HAS_ETAG)) {
 			KHttpHeader *h = context->old_obj->findHeader("Etag",sizeof("Etag")-1);
 			if (h) {
+				context->mt = modified_if_none_match;
 				context->set_if_none_match(h->val,h->val_len);
 			}
 		} else {
@@ -1606,10 +1601,6 @@ bool make_http_env(KHttpRequest *rq, KBaseRedirect *brd,time_t lastModified,KFil
 		}
 #endif
 		if (TEST(rq->flags,RQ_HAVE_EXPECT) && is_attr(av, "Expect")) {
-			goto do_not_insert;
-		}
-		if (is_attr(av,"If-None-Match",sizeof("If-None-Match")-1) ||
-			is_attr(av,"If-Range",sizeof("If-Range")-1)) {
 			goto do_not_insert;
 		}
 		if (is_attr(av,"SCHEME")) {

@@ -477,6 +477,7 @@ int WINAPI WhmCoreCall(const char *callName, const char *event, WHM_CONTEXT *con
 #ifdef UPDATE_CODE
 			ctx->add("update_code", UPDATE_CODE);
 #endif
+			ctx->add("disk_cache_shutdown", (int)cache.is_disk_shutdown());
 			return WHM_OK;
 		}
 #if 0
@@ -594,8 +595,6 @@ int WINAPI WhmCoreCall(const char *callName, const char *event, WHM_CONTEXT *con
 			if (cmd==CALL_CACHE_INFO) {
 				ctx->add("mem_size",ci.mem_size);
 				ctx->add("disk_size",ci.disk_size);
-				ctx->add("have_length",ci.have_length);
-				ctx->add("content_length",ci.content_length);
 			}
 			ctx->add("count",result);
 			return WHM_OK;

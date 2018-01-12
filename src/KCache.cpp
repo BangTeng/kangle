@@ -6,6 +6,8 @@ void init_cache() {
 KCache::KCache()
 {
 	count = 0;
+	clean_blocked = false;
+	disk_shutdown = true;
 }
 void KCache::init(bool firstTime)
 {
@@ -33,7 +35,5 @@ void handle_purge_object(KHttpObject *obj,void *param)
 void handle_cache_info(KHttpObject *obj,void *param)
 {
 	KCacheInfo *ci = (KCacheInfo *)param;
-	obj->count_size(ci->mem_size,ci->disk_size);
-	ci->have_length += obj->index.have_length;
-	ci->content_length += obj->index.content_length;
+	obj->count_size(ci->mem_size,ci->disk_size);	
 }

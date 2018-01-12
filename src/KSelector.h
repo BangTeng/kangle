@@ -22,6 +22,7 @@
 #include "log.h"
 #include "rbtree.h"
 #include "KRequestList.h"
+#include "KFile.h"
 #include "ksapi.h"
 #include "forwin32.h"
 #include "KList.h"
@@ -35,7 +36,6 @@
 #define STAGE_OP_LISTEN            16
 #define STAGE_OP_ASYNC_READ        17
 #define STAGE_OP_TRANSMIT          17
-//新的事件,以后上面的废除
 #define STAGE_OP_NEW_READ          23
 #define STAGE_OP_NEW_WRITE         24
 #define IS_SECOND_OPERATOR(op)     (op==18)
@@ -75,7 +75,9 @@ FUNC_TYPE FUNC_CALL stageRequest(void *param) ;
 #endif
 class KSelectable;
 class KServer;
+class KServerSelectable;
 class KHttpRequest;
+class KAsyncFile;
 void stage_prepare(KHttpRequest *rq);
 void handleAccept(KSelectable *st,int got);
 //void handleRequestRead(KSelectable *st,int got);
@@ -92,19 +94,12 @@ void stageEndRequest(KHttpRequest *rq);
 #ifdef ENABLE_TF_EXCHANGE
 void stageTempFileWriteEnd(KHttpRequest *rq);
 #endif
+typedef void(*aio_callback)(KAsyncFile *fp, void *arg, char *buf, int length);
 class KSelector {
 public:
 	KSelector();
 	virtual ~KSelector();
-	//	void setMaxRequest(int maxRequest);
-	//	bool addRequest(KClientSocket *socket,int model);
 	virtual const char *getName() = 0;
-	//void sslAccept(KHttpRequest *rq);
-	/*
-	其它线程调用，加list和addSocket为原子操作
-	*/
-	//void addRequest(KHttpRequest *rq,int list,int op);
-	//void removeRequest(KHttpRequest *rq);
 	virtual void bindSelectable(KSelectable *st);
 	bool startSelect();
 	void selectThread();
@@ -118,31 +113,34 @@ public:
 	int tmo_msec;
 	int sid;
 	int count;
-	//超时时间，单位msec
+	//msec
 	int timeout[KGL_LIST_BLOCK];
 	void callback(KSelectable *st, resultEvent func, void *arg);
 	void addTimer(KSelectable *rq, timer_func func, void *arg, int msec);
 	void addTimer(KSelectable *rq, resultEvent func, void *arg, int msec);
 	virtual bool next(KSelectable *st,resultEvent result,void *arg) = 0;
-	virtual bool listen(KServer *st,resultEvent result) {
+	virtual bool listen(KServerSelectable *st,resultEvent result) {
 		return false;
-	}
-	virtual void removeListenSocket(KSelectable *st) {
-		
 	}
 	unsigned getConnection(std::stringstream &s,const char *vh_name,bool translate, volatile uint32_t *total_count);
 	void adjustTime(INT64 t);
-	/*
-	增加事件
-	*/
-	//virtual bool addSocket(KSelectable *st,int op) = 0;	
-	//void addList(KHttpRequest *rq,int list);
-	//void removeList(KHttpRequest *rq);
+	virtual bool aio_read(KAsyncFile *file,char *buf,INT64 offset,int length,aio_callback cb,void *arg)
+	{
+		return false;
+	}
+	virtual bool aio_write(KAsyncFile *file, char *buf, INT64 offset, int length, aio_callback cb, void *arg)
+	{
+		return false;
+	}
+	virtual KAsyncFile *aio_open(KFile *fp)
+	{
+		return NULL;
+	}
 	void removeList(KSelectable *st);
 	void addList(KSelectable *rq, int list);
 	friend class KSelectable;
 	friend class KConnectionSelectable;
-	friend class KServer;
+	friend class KServerSelectable;
 	friend class KUpstreamSelectable;
 	friend class KHttp2;
 	friend class KHttp2ConnectionPreface;
@@ -159,8 +157,13 @@ protected:
 #ifdef MALLOCDEBUG
 	bool can_close()
 	{
-		return quit_program_flag > PROGRAM_QUIT_IMMEDIATE && count == 0 && blockList.rb_node == NULL;
+		return quit_program_flag > PROGRAM_QUIT_IMMEDIATE && count == 0 && blockList.rb_node == NULL && closed_flag;
 	}
+	void close()
+	{
+		closed_flag = true;
+	}
+	bool closed_flag;
 #endif
 private:
 	void getConnectionTr(KHttpRequest *rq, std::stringstream &s,time_t now_time,bool translate);
@@ -171,7 +174,7 @@ private:
 		return false;
 	}
 	virtual bool write(KSelectable *st,resultEvent result,bufferEvent buffer,void *arg) = 0;
-	//先调用halfconnect,再调用connect事件.
+	//鍏堣皟鐢╤alfconnect,鍐嶈皟鐢╟onnect浜嬩欢.
 	virtual bool connect(KSelectable *st,resultEvent result,void *arg) = 0;
 	rb_root blockList;
 	rb_node *blockBeginNode;

@@ -128,46 +128,81 @@ public:
 	}
 	~KParentMark()
 	{
-		if (upstream_sign.data) {
-			free(upstream_sign.data);
+		for (int i = 0; i < 2; i++) {
+			if (upstream_sign[i].data) {
+				free(upstream_sign[i].data);
+			}
 		}
 	}
 	bool mark(KHttpRequest *rq, KHttpObject *obj,
 					const int chainJumpType, int &jumpType)
 	{
-		if (upstream_sign.data) {
-			KHttpHeader *h = rq->parser.removeHeader("x-real-ip-sign");
-			if (h == NULL) {
-				return false;
-			}
-			bool matched = false;
-			if (h->val_len == upstream_sign.len && memcmp(h->val,upstream_sign.data,h->val_len)==0) {
-				matched = true;
-			}
+		KHttpHeader *h = rq->parser.removeHeader("x-real-ip-sign");
+		if (h == NULL) {
+			return false;
+		}
+		char *sign = strchr(h->val, '|');
+		if (sign == NULL) {
 			free(h->attr);
 			free(h->val);
 			free(h);
-			if (!matched) {
-				return false;
+			return false;
+		}
+		*sign = '\0';		
+		bool matched = false;
+		KMD5_CTX context;
+		unsigned char digest[17];
+		char buf[33];
+		KMD5Init(&context);
+		KMD5Update(&context, (unsigned char *)h->val, sign - h->val);
+		for (int i = 0; i < 2; i++) {
+			if (upstream_sign[i].data == NULL) {
+				continue;
+			}
+			KMD5_CTX ctx2 = context;
+			KMD5Update(&ctx2, (unsigned char *)upstream_sign[i].data, upstream_sign[i].len);
+			KMD5Final(digest, &ctx2);
+			make_digest(buf, digest);
+			if (strcmp(buf, sign + 1) == 0) {
+				matched = true;
+				break;
 			}
 		}
-		KHttpHeader *h = rq->parser.removeHeader("X-Real-Ip");
-		if (h == NULL) {
-			return true;
+		if (matched) {
+			rq->ctx->parent_signed = true;
+			char *hot = h->val;
+			for (;;) {
+				char *p = strchr(hot, ',');
+				if (p) {
+					*p = '\0';
+				}
+				char *val = strchr(hot, '=');
+				if (val) {
+					*val = '\0';
+					val++;
+					if (strcmp(hot, "ip") == 0) {
+						if (rq->client_ip) {
+							free(rq->client_ip);
+						}
+						rq->client_ip = strdup(val);
+					} else if (strcmp(hot, "p") == 0) {
+						if (strcmp(val, "https") == 0) {
+							SET(rq->raw_url.flags, KGL_URL_SSL);
+						} else {
+							CLR(rq->raw_url.flags, KGL_URL_SSL);
+						}
+					}
+				}
+				if (p == NULL) {
+					break;
+				}
+				hot = p + 1;
+			}
 		}
-		if (rq->client_ip) {
-			free(rq->client_ip);
-		}
-		//steal
-		rq->client_ip = h->val;
 		free(h->attr);
+		free(h->val);
 		free(h);
-		if (TEST(rq->raw_url.flags, KGL_URL_ORIG_SSL)) {
-			SET(rq->raw_url.flags, KGL_URL_SSL);
-		} else {
-			CLR(rq->raw_url.flags, KGL_URL_SSL);
-		}
-		return true;
+		return matched;
 	}
 	KMark *newInstance()
 	{
@@ -180,10 +215,17 @@ public:
 	std::string getHtml(KModel *model)
 	{
 		std::stringstream s;
-		s << "parent sign:<input name='upstream_sign' value='";
+		s << "sign:<input name='sign' value='";
 		KParentMark *m = (KParentMark *)model;
-		if (m && m->upstream_sign.data) {
-			s.write(m->upstream_sign.data,m->upstream_sign.len);
+		if (m) {
+			for (int i = 0; i < 2; i++) {
+				if (m->upstream_sign[i].data) {
+					s.write(m->upstream_sign[i].data, m->upstream_sign[i].len);
+					if (i == 0) {
+						s << "|";
+					}
+				}
+			}
 		}
 		s << "'>";
 		return s.str();
@@ -191,34 +233,58 @@ public:
 	std::string getDisplay()
 	{
 		std::stringstream s;
-		if (upstream_sign.data) {
-			s.write(upstream_sign.data, upstream_sign.len);
+		for (int i = 0; i < 2; i++) {
+			if (upstream_sign[i].data) {
+				s.write(upstream_sign[i].data, upstream_sign[i].len);
+				if (i == 0) {
+					s << "|";
+				}
+			}
 		}
 		return s.str();
 	}
 	void editHtml(std::map<std::string, std::string> &attribute) throw (KHtmlSupportException)
 	{
-		std::string upstream_sign = attribute["upstream_sign"];
-		if (this->upstream_sign.data) {
-			free(this->upstream_sign.data);
-			this->upstream_sign.data = NULL;
+		
+		for (int i = 0; i < 2; i++) {
+			if (this->upstream_sign[i].data) {
+				free(this->upstream_sign[i].data);
+				this->upstream_sign[i].data = NULL;
+			}
 		}
-		this->upstream_sign.len = upstream_sign.size();
-		if (this->upstream_sign.len > 0) {
-			this->upstream_sign.data = strdup(upstream_sign.c_str());
+		char *upstream_sign = strdup(attribute["sign"].c_str());
+		char *hot = upstream_sign;
+		for (int i = 0; i < 2; i++) {
+			char *p = strchr(hot, '|');
+			if (p) {
+				*p = '\0';
+			}
+			this->upstream_sign[i].len = strlen(hot);
+			if (this->upstream_sign[i].len > 0) {
+				this->upstream_sign[i].data = strdup(hot);
+			}
+			if (p == NULL) {
+				break;
+			}
+			hot = p + 1;
 		}
+		free(upstream_sign);
 	}
 	void buildXML(std::stringstream &s)
 	{
-		if (upstream_sign.data) {
-			s << " upstream_sign='";
-			s.write(upstream_sign.data, upstream_sign.len);
-			s << "'";
+		s << " sign='";
+		for (int i = 0; i < 2; i++) {
+			if (upstream_sign[i].data) {
+				s.write(upstream_sign[i].data, upstream_sign[i].len);
+				if (i == 0) {
+					s << "|";
+				}
+			}
 		}
-		s << "> ";
+		s << "'> ";
 	}
 private:
-	kgl_str_t upstream_sign;
+	kgl_str_t upstream_sign[2];
 };
 class KSelfIPMark : public KMark
 {

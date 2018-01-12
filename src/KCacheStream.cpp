@@ -1,6 +1,7 @@
 #include<vector>
 #include "KCacheStream.h"
 #include "do_config.h"
+#include "KCache.h"
 
 KCacheStream::KCacheStream(KWStream *st,bool autoDelete) : KHttpStream(st,autoDelete)
 {
@@ -42,3 +43,51 @@ StreamState KCacheStream::write_all(const char *buf,int len)
 	return result;
 }
 
+#if 0
+KDiskCacheStream::KDiskCacheStream(KWStream *st, bool autoDelete) : KHttpStream(st, autoDelete)
+{
+	obj = NULL;
+}
+StreamState KDiskCacheStream::write_end()
+{
+	if (obj->data->fp) {
+		SET(obj->index.flags, OBJ_IS_READY);
+	}
+	return KHttpStream::write_end();
+}
+StreamState KDiskCacheStream::write_all(const char *buf, int len)
+{
+	if (obj->data->fp) {
+		if (len != obj->data->fp->write(buf, len)) {
+			SET(obj->index.flags, FLAG_DEAD);
+			delete obj->data->fp;
+			obj->data->fp = NULL;
+		}
+	}
+	return KHttpStream::write_all(buf, len);
+}
+void KDiskCacheStream::init(KHttpObject *obj)
+{
+	assert(obj);
+	this->obj = obj;
+
+	char *filename = obj->getFileName();
+	if (filename == NULL) {
+		return;
+	}
+	KFile *fp = new KFile;
+	if (!fp->open(filename, fileWrite)) {
+		free(filename);
+		delete fp;
+		return;
+	}
+	free(filename);
+	obj->data->type = SAVING_OBJECT;
+	obj->data->fp = fp;	
+	SET(obj->index.flags, FLAG_IN_DISK| FLAG_BIG_OBJECT);
+	int body_start = obj->saveHead(fp);
+	if (body_start > 0) {
+		fp->seek(body_start, seekBegin);
+	}
+}
+#endif

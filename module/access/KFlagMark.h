@@ -113,10 +113,6 @@ public:
 		if (attibute["upstream_nosni"] == "1") {
 			flag |= RF_UPSTREAM_NOSNI;
 		}
-		if (attibute["cache_no_length"]=="1") {
-			flag |= RF_CACHE_NO_LENGTH;
-		}
-		
 		if (attibute["log_drill"] == "1") {
 			flag |= RF_LOG_DRILL;
 		}
@@ -234,12 +230,6 @@ public:
 			s << "checked";
 		}
 		s << ">age";
-		/* cache_no_length */
-		s << "<input type=checkbox name='cache_no_length' value='1' ";
-		if (m_chain && TEST(m_chain->flag,RF_CACHE_NO_LENGTH)) {
-			s << "checked";
-		}
-		s << ">cache_no_length";
 #if (ENABLE_UPSTREAM_SSL && SSL_CTRL_SET_TLSEXT_HOSTNAME)
 		s << "<input type=checkbox name='upstream_nosni' value='1' ";
 		if (m_chain && TEST(m_chain->flag, RF_UPSTREAM_NOSNI)) {
@@ -247,7 +237,6 @@ public:
 		}
 		s << ">upstream_nosni";
 #endif
-		
 		s << "<input type=checkbox name='log_drill' value='1' ";
 		if (m_chain && TEST(m_chain->flag, RF_LOG_DRILL)) {
 			s << "checked";
@@ -336,10 +325,6 @@ public:
 		if (TEST(flag,RF_AGE)) {
 			s << "age='1' ";
 		}
-		if (TEST(flag,RF_CACHE_NO_LENGTH)) {
-			s << "cache_no_length='1' ";
-		}
-		
 		if (TEST(flag, RF_LOG_DRILL)) {
 			s << "log_drill='1' ";
 		}

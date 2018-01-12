@@ -93,7 +93,7 @@ static KGL_RESULT WINAPI global_support_function(
 	}
 	case KGL_REQ_CREATE_WORKER:	{
 			int *max_worker = (int *)data;
-			KAsyncWorker *worker = new KAsyncWorker(*max_worker);
+			KAsyncWorker *worker = new KAsyncWorker(*max_worker,0);
 			*ret = (void *)worker;
 			return KGL_OK;
 	}
@@ -106,7 +106,7 @@ static KGL_RESULT WINAPI global_support_function(
 			kgl_thread *thread = (kgl_thread *)data;
 			if (thread->worker) {
 				KAsyncWorker *worker = (KAsyncWorker *)thread->worker;
-				worker->start(thread->param, thread->thread_function);
+				worker->tryStart(thread->param, thread->thread_function);
 				return KGL_OK;
 			}
 			if (thread_start_worker(thread->param, thread->thread_function)) {

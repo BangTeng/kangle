@@ -513,6 +513,7 @@ public:
 #define KSOCKET_ONLY_IPV4         0
 #define KSOCKET_PROTO_AUTO        1
 #define KSOCKET_ONLY_IPV6         2
+#define KSOCKET_REUSEPORT         4
 #ifdef ENABLE_TPROXY
 #define KSOCKET_TPROXY            8
 #endif

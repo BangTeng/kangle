@@ -8,6 +8,12 @@ public:
 	KReadWriteBuffer()
 	{
 		memset(this,0,sizeof(KReadWriteBuffer));
+		this->chunk_size = NBUFF_SIZE;
+	}
+	KReadWriteBuffer(int chunk_size)
+	{
+		memset(this, 0, sizeof(KReadWriteBuffer));
+		this->chunk_size = chunk_size;
 	}
 	~KReadWriteBuffer()
 	{
@@ -17,7 +23,7 @@ public:
 			xfree(head);
 			head = next;
 		}
-	}
+	}	
 	inline KReadWriteBuffer & operator <<(const char *str)
 	{
 		write_all(str, (int)strlen(str));
@@ -53,8 +59,11 @@ public:
 	inline void appendBuffer(buff *buf)
 	{
 		if (write_hot_buf==NULL) {
+			assert(head == NULL && read_hot == NULL);
 			head = buf;
+			read_hot = buf->data;
 		} else {
+			assert(read_hot && head);
 			write_hot_buf->next = buf;
 		}
 		buf->next = NULL;
@@ -87,7 +96,7 @@ public:
 			xfree(head);
 			head = next;
 		}
-		memset(this,0,sizeof(KReadWriteBuffer));
+		init();
 	}
 	inline void clean()
 	{
@@ -104,7 +113,7 @@ public:
 	buff *stealBuff()
 	{
 		buff *ret = head;
-		memset(this,0,sizeof(*this));
+		init();
 		return ret;
 	}
 	void insert(const char *str, int len) {
@@ -118,11 +127,19 @@ public:
 		head = buf;
 	}
 private:
+	void init()
+	{
+		head = NULL;
+		write_hot_buf = NULL;
+		read_hot = write_hot = NULL;
+		totalLen = 0;
+		assert(chunk_size > 0);
+	}
 	inline buff *newbuff()
 	{
 		buff *buf = (buff *)malloc(sizeof(buff));
 		buf->flags = 0;
-		buf->data = (char *)malloc(NBUFF_SIZE);
+		buf->data = (char *)malloc(chunk_size);
 		buf->used = 0;
 		buf->next = NULL;
 		return buf;
@@ -132,5 +149,6 @@ private:
 	char *read_hot;
 	char *write_hot;
 	int totalLen;
+	int chunk_size;
 };
 #endif

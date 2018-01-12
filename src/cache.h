@@ -39,20 +39,17 @@
 //0xF 0x1F 0x3F 0x7F 0xFF 0x1FF 0x3FF 0x7FF 0xFFF
 #define CACHE_DIR_MASK1    0x7F
 #define CACHE_DIR_MASK2    0x7F
-//@deprecated use KCache
+//#define CACHE_DIR_MASK1    0x1
+//#define CACHE_DIR_MASK2    0x1
 
-bool saveCacheIndex(bool fast);
+
+bool saveCacheIndex();
 bool loadCacheIndex();
 FUNC_TYPE FUNC_CALL load_cache_index(void *param);
 
 void init_cache();
-int get_count_in_hash();
-void dead_obj(KHttpObject *obj);
 void release_obj(KHttpObject *);
 void dead_all_obj();
-std::string get_disk_cache_file(KHttpObject *obj);
-std::string get_cache_index_file();
-void clean_disk(int m_size);
 void get_cache_size(INT64 &total_mem_size,INT64 &total_disk_size);
 void caculateCacheSize(INT64 &csize,INT64 &cdsize,INT64 &hsize,INT64 &hdsize);
 
@@ -72,7 +69,11 @@ inline bool objCanCache(KHttpRequest *rq,KHttpObject *obj)
 	if (TEST(obj->index.flags,FLAG_DEAD|ANSW_NO_CACHE)) {
 		//死物件和标记为不缓存的
 		return false;
-	}	
+	}
+	if (TEST(obj->url->encoding ,(KGL_ENCODING_UNKNOW | KGL_ENCODING_YES)) == (KGL_ENCODING_UNKNOW | KGL_ENCODING_YES)) {
+		//未知的content-encoding
+		return false;
+	}
 	return true;
 }
 inline KHttpObject * findHttpObject(KHttpRequest *rq, bool create_flags, bool *new_object) {

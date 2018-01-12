@@ -5,6 +5,7 @@
 #include "ksapi.h"
 
 #include <stdlib.h>
+#define kgl_align_floor(d, a)     ((d) & ~(a - 1))
 
 #define kgl_align(d, a)     (((d) + (a - 1)) & ~(a - 1))
 #define kgl_align_ptr(p, a)                                                   \

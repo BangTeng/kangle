@@ -2,6 +2,7 @@
 #include "KScgiFetchObject.h"
 void KScgiFetchObject::buildHead(KHttpRequest *rq)
 {
+	buffer = new KSocketBuffer(NBUFF_SIZE);
 	KHttpObject *obj = rq->ctx->obj;
 	SET(obj->index.flags,ANSW_LOCAL_SERVER);
 	bool chrooted = false;
@@ -13,13 +14,13 @@ void KScgiFetchObject::buildHead(KHttpRequest *rq)
 	if (rq->content_length==0) {
 		addEnv("CONTENT_LENGTH","0");
 	}
-	int len = buffer.getLen();
+	int len = buffer->getLen();
 	buff *buf = (buff *)malloc(sizeof(buff));
 	buf->data = (char *)malloc(16);
 	len = snprintf(buf->data,16,"%d:",len);
 	buf->used = len;
-	buffer.insertBuffer(buf);
-	buffer.write_all(",",1);
+	buffer->insertBuffer(buf);
+	buffer->write_all(",",1);
 	hook.init(rq->ctx->obj,rq);
 	hook.setProto(Proto_scgi);
 }
@@ -45,9 +46,9 @@ bool KScgiFetchObject::addEnv(const char *attr, const char *val)
 		content_length_added = true;
 	}
 	int len = strlen(attr);
-	buffer.write_all(attr,len+1);
+	buffer->write_all(attr,len+1);
 	len = strlen(val);
-	buffer.write_all(val,len+1);
+	buffer->write_all(val,len+1);
 	return true;
 }
 bool KScgiFetchObject::addHttpHeader(char *attr, char *val)
@@ -65,9 +66,9 @@ bool KScgiFetchObject::addHttpHeader(char *attr, char *val)
 		return addEnv(attr,val);
 	}
 	int len = strlen(attr);
-	buffer.write_all("HTTP_",5);
-	buffer.write_all(attr,len+1);
+	buffer->write_all("HTTP_",5);
+	buffer->write_all(attr,len+1);
 	len = strlen(val);
-	buffer.write_all(val,len+1);
+	buffer->write_all(val,len+1);
 	return true;
 }

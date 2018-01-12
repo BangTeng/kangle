@@ -34,8 +34,8 @@ public:
 	void getAutoName(std::string &name);
 	void inheritVirtualHost(KVirtualHost *vh,bool clearFlag);
 	void addAllVirtualHost();
-	void startStaticListen(std::vector<KListenHost *> &services,bool start);
-	bool startService(KListenHost *service, bool start);
+	void flush_static_listens(std::vector<KListenHost *> &services);
+	//bool startService(KListenHost *service);
 	int getCount();
 public:
 	/*
@@ -54,7 +54,8 @@ public:
 	/*
 	 * 查找虚拟主机并绑定在rq上。
 	 */
-	void bindVirtualHost(KServer *server);
+	void add_static(KServer *server);
+	void remove_static(KServer *server);
 	query_vh_result queryVirtualHost(KServer *ls,KSubVirtualHost **rq_svh,const char *site,int site_len,bool cname);
 	int find_domain(const char *domain, WhmContext *ctx);
 	void getAllVh(std::list<std::string> &vhs,bool status,bool onlydb);

@@ -211,7 +211,7 @@ bool KThreadPool::start(void *param, ThreadFunc work, bool usePool) {
 		}
 		m_thread->param = param;
 		m_thread->work = work;
-		ret = pthread_create(&id, &attr, run_thread, (void *) m_thread);//
+		ret = pthread_create(&id, &attr, run_thread, (void *) m_thread);
 		if (!PTHREAD_CREATE_SUCCESSED(ret)) {
 			klog(KLOG_ERR, "create thread error.result=%d,errno=%d\n", ret,
 					errno);

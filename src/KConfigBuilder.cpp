@@ -88,9 +88,6 @@ void KConfigBuilder::build(std::stringstream &s) {
 		s << "\t<mallocdebug>0</mallocdebug>\n";
 	}
 #endif
-	if (conf.worker>1) {
-		s << "\t<worker_process>" << conf.worker << "</worker_process>\n";
-	}
 	if(conf.select_count>0){
 		s << "\t<worker_thread>" << conf.select_count << "</worker_thread>\n";
 	}
@@ -161,8 +158,7 @@ void KConfigBuilder::build(std::stringstream &s) {
 			<< conf.only_gzip_cache << "' min_gzip_length='"
 			<< conf.min_gzip_length << "' gzip_level='" << conf.gzip_level
 			<< "'/>\n";
-	s << "\t<cache default='" << conf.default_cache << "'"
-		<< " max_cache_size='" << get_size(conf.max_cache_size) << "'";
+	s << "\t<cache default='" << conf.default_cache << "' max_cache_size='" << get_size(conf.max_cache_size) << "'";
 		
 	s << " memory='" <<  get_size(conf.mem_cache) << "'";
 #ifdef ENABLE_DISK_CACHE
@@ -214,9 +210,7 @@ void KConfigBuilder::build(std::stringstream &s) {
 	//s << "\t<tempfile>" << conf.tmpfile << "</tempfile>\n";
 	s << "\t<max_post_size>" << get_size(conf.max_post_size) << "</max_post_size>\n";
 #endif
-	if (conf.async_io) {
-		s << "\t<async_io>1</async_io>\n";
-	}
+	//s << "\t<async_io>" << (conf.async_io?1:0) << "</async_io>\n";
 #ifdef ENABLE_REQUEST_QUEUE
 	unsigned max_worker = globalRequestQueue.getMaxWorker();
 	if(max_worker>0){
@@ -230,9 +224,6 @@ void KConfigBuilder::build(std::stringstream &s) {
 	}
 #endif
 	s << "\t<path_info>" << (conf.path_info?1:0) << "</path_info>\n";
-	if (conf.removeAcceptEncoding) {
-		s << "\t<remove_accept_encoding>1</remove_accept_encoding>\n";
-	}
 	s << "\t<access_log>" << conf.access_log << "</access_log>\n";
 	if (*conf.logHandle) {
 		s << "\t<access_log_handle>";
@@ -272,6 +263,8 @@ void KConfigBuilder::build(std::stringstream &s) {
 		s << "\t<hostname>" << conf.hostname << "</hostname>\n";
 	}
 	s << "\t<worker_io>" << conf.worker_io << "</worker_io>\n";
+	s << "\t<max_io>" << conf.max_io << "</max_io>\n";
+	s << "\t<io_timeout>" << conf.io_timeout << "</io_timeout>\n";
 	s << "\t<worker_dns>" << conf.worker_dns << "</worker_dns>\n";	
 	conf.gam->buildXML(s, CHAIN_SKIP_EXT);	
 #ifdef ENABLE_WRITE_BACK

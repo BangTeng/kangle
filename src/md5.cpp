@@ -310,8 +310,9 @@ void KMD5 (const char *buf,char *result,int len)
 {
   	KMD5_CTX context;
  	unsigned char digest[17];
-	if(len==0)
-		len=strlen(buf);
+	if (len == 0) {
+		len = strlen(buf);
+	}
  	KMD5Init (&context);
   	KMD5Update(&context,(unsigned char *)buf, len);
 	KMD5Final (digest, &context);

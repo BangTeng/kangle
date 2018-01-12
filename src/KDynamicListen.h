@@ -53,7 +53,7 @@ public:
 	KServer *refsServer(u_short port);
 	void add_dynamic(const char *listen,KVirtualHost *vh);
 	void remove(const char *listen,KVirtualHost *vh);
-	bool add_static(KListenHost *lh,bool start);
+	bool add_static(KListenHost *lh);
 	void addStaticVirtualHost(KVirtualHost *vh);
 	void removeStaticVirtualHost(KVirtualHost *vh);
 	void flush(const char *listen);

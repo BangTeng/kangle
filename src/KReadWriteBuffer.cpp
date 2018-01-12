@@ -39,14 +39,14 @@ char *KReadWriteBuffer::getWriteBuffer(int &len)
 		write_hot_buf = head;
 		write_hot = head->data;
 	}
-	len = NBUFF_SIZE - write_hot_buf->used;
+	len = chunk_size - write_hot_buf->used;
 	if (len == 0) {
 		buff *nbuf = newbuff();
 		assert(write_hot_buf->next==NULL);
 		write_hot_buf->next = nbuf;
 		write_hot_buf = nbuf;
 		write_hot = write_hot_buf->data;
-		len = NBUFF_SIZE;
+		len = chunk_size;
 	}
 	assert(len>0);
 	return write_hot;
@@ -79,7 +79,7 @@ bool KReadWriteBuffer::readSuccess(int got)
 			head = next;
 			if (head==NULL) {
 				assert(totalLen == 0);
-				memset(this,0,sizeof(*this));
+				init();
 				return false;
 			}
 			read_hot = head->data;

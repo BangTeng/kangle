@@ -1,6 +1,9 @@
 #ifndef	KANGLE_RBTREE_H
 #define	KANGLE_RBTREE_H
 #include <stdlib.h>
+#ifndef _WIN32
+#include <stdint.h>
+#endif
 typedef int (*comprbt) (void *key1, void *key2);
 enum iterator_ret
 {
@@ -13,7 +16,7 @@ typedef iterator_ret (*iteratorbt) (void *data,void *argv);
 
 struct rb_node
 {
-	unsigned long  rb_parent_color;
+	uintptr_t  rb_parent_color;
 #define	RB_RED		0
 #define	RB_BLACK	1
 	struct rb_node *rb_right;
@@ -45,10 +48,10 @@ void rbtree_test();
 /////////////////////////////////////////////////////////////
 inline void rb_link_node(struct rb_node * node, struct rb_node * parent,	struct rb_node ** rb_link)
 {
-	node->rb_parent_color = (unsigned long )parent;
+	node->rb_parent_color = (uintptr_t)parent;
 	node->rb_left = node->rb_right = NULL;
 	*rb_link = node;
 }
 void rb_insert_color(struct rb_node *node, struct rb_root *root);
-void rb_erase(struct rb_node *, struct rb_root *);
+void rb_erase(struct rb_node *node, struct rb_root *root);
 #endif

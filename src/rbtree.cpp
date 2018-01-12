@@ -13,7 +13,7 @@
 
 static inline void rb_set_parent(struct rb_node *rb, struct rb_node *p)
 {
-	rb->rb_parent_color = (rb->rb_parent_color & 3) | (unsigned long)p;
+	rb->rb_parent_color = (rb->rb_parent_color & 3) | (uintptr_t)p;
 }
 static inline void rb_set_color(struct rb_node *rb, int color)
 {

@@ -6,7 +6,6 @@ inline void set_buffer_obj(KBuffer *buffer,KHttpObject *obj)
 {
 	assert(obj->data->bodys==NULL);
 	obj->index.content_length = buffer->getLen();
-	obj->index.have_length = obj->index.content_length;
 	obj->data->bodys = buffer->stealBuff();
 	SET(obj->index.flags,OBJ_IS_READY);
 }
@@ -25,4 +24,16 @@ private:
 	KHttpObject *obj;
 	KBuffer buffer;
 };
+#if 0
+class KDiskCacheStream : public KHttpStream
+{
+public:
+	KDiskCacheStream(KWStream *st, bool autoDelete);
+	void init(KHttpObject *obj);
+	StreamState write_all(const char *buf, int len);
+	StreamState write_end();
+private:
+	KHttpObject *obj;
+};
+#endif
 #endif

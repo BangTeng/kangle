@@ -175,7 +175,10 @@ public:
 	KSelectorManager();
 	virtual ~KSelectorManager();
 	bool listen(KServer *st,resultEvent result);
+#ifdef MALLOCDEBUG
 	void destroy();
+	void close();
+#endif
 	void init(unsigned size);
 	inline KSelector *getSelectorByIndex(int index)
 	{
@@ -229,6 +232,7 @@ public:
 				SSL_set_ex_data(socket->getSSL(), kangle_ssl_conntion_index, c);
 				//ssl accept				
 				c->read(rq, resultSSLAccept, NULL, (conf.keep_alive > 0 ? KGL_LIST_KA : KGL_LIST_RW));
+				//resultSSLAccept(rq,0);
 			} else {
 #endif
 				KHttpRequest *rq = new KHttpRequest(c);
@@ -275,7 +279,6 @@ public:
 		return sizeHash+1;
 	}
 	void flush(time_t nowTime);
-	void closeKeepAliveConnection();
 	const char *getName()
 	{
 		return selectors[0]->getName();

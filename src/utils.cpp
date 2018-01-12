@@ -65,6 +65,7 @@ volatile uint64_t kgl_total_servers = 0;
 volatile uint32_t kgl_reading = 0;
 volatile uint32_t kgl_writing = 0;
 volatile uint32_t kgl_waiting = 0;
+volatile uint32_t kgl_aio_count = 0;
 #endif
 /*
  const char ap_month_snames[12][4] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",

@@ -42,9 +42,19 @@ public:
 		return expireTime == 0;
 	}
 	int getLifeTime();
+	int get_delay_read()
+	{
+		return this->delay_read_msec;
+	}
+	void set_delay_read(int delay_read_msec)
+	{
+		this->delay_read_msec = delay_read_msec;
+	}
 	void isBad(BadStage stage);
 	void isGood();
 	void connect(KHttpRequest *rq,resultEvent result);
+	bool is_upstream_event(uint16_t flag);
+	bool is_upstream_locked();
 	void upstream_remove();
 	/* 异步读 */
 	bool upstream_read(KHttpRequest *rq,resultEvent result,bufferEvent buffer);
@@ -63,8 +73,8 @@ public:
 	/*
 	 * 连接过期时间
 	 */
-	INT64 expireTime;
-	int use_count;
+	time_t expireTime;
+	//int use_count;	
 	/*
 	 * 关连的连接池容器
 	 */
@@ -74,6 +84,7 @@ public:
 	KHttpObjectParserHook *hook;
 	
 protected:
-	~KUpstreamSelectable();	
+	~KUpstreamSelectable();
+	int delay_read_msec;
 };
 #endif /* KPOOLABLESTREAM_H_ */

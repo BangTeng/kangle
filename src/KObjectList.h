@@ -4,6 +4,14 @@
 #include "KMutex.h"
 #include "KHttpObject.h"
 class KVirtualHost;
+class KObjectList;
+struct KTempHttpObject
+{
+	KHttpObject *obj;
+	bool is_dead;
+	INT64 decSize;
+	KTempHttpObject *next;
+};
 class KObjectList
 {
 public:
@@ -15,9 +23,11 @@ public:
 	void move(INT64 size,bool swapout);
 	void dead_count(int &count);
 	void dead_all_obj();
+#ifdef ENABLE_DISK_CACHE
 	void swap_all_obj();
+	//int save_disk_index(KFile *fp);
+#endif
 	void dump_refs_obj(std::stringstream &s);
-	int save_disk_index(KFile *fp);
 	unsigned char list_state;
 	void getSize(INT64 &csize,INT64 &cdsiz);
 	KHttpObject *getHead()
@@ -28,6 +38,8 @@ public:
 	void free_all_cache();
 #endif
 private:
+	void swapout(KTempHttpObject *tho, int gc_used_msec);
+	void swapout_result(KTempHttpObject *tho,int gc_used_msec, bool result);
 	void checkList()
 	{
 		if (l_head==NULL) {

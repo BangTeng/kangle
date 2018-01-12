@@ -31,6 +31,7 @@
 #include "KSubRequest.h"
 #include "KHttpFilterManage.h"
 #include "cache.h"
+
 KHttpTransfer::KHttpTransfer(KHttpRequest *rq, KHttpObject *obj) {
 	init(rq, obj);
 }
@@ -57,7 +58,6 @@ KHttpTransfer::~KHttpTransfer() {
 	if (wstDelete && wst) {
 		delete wst;
 	}
-	
 }
 KWStream *KHttpTransfer::getWStream()
 {
@@ -118,12 +118,12 @@ StreamState KHttpTransfer::sendHead(bool isEnd) {
 	StreamState result = STREAM_WRITE_SUCCESS;
 	isHeadSend = true;
 	INT64 content_len = (isEnd?0:-1);
-	cache_layer = true;
+	cache_layer = cache_memory;
 	CLR(rq->flags,RQ_HAVE_RANGE);
 	if (TEST(obj->index.flags,ANSW_HAS_CONTENT_LENGTH)) {
 		content_len = obj->index.content_length;
 		if (content_len > conf.max_cache_size) {
-			cache_layer = false;
+			cache_layer = cache_none;
 		}
 	}
 #ifdef ENABLE_KSAPI_FILTER
@@ -142,29 +142,29 @@ StreamState KHttpTransfer::sendHead(bool isEnd) {
 		 检查是否需要加载内容变换层，如果要，则长度未知
 		 */
 		content_len = -1;
-		cache_layer = true;
+		cache_layer = cache_memory;
 	}
 	gzip_layer = false;
 	if (TEST(workModel,WORK_MODEL_INTERNAL) && !TEST(workModel,WORK_MODEL_REPLACE)) {
 		/* 子请求,内部但不是替换模式 */
 	} else {
-		
 		if (check_need_gzip(rq, obj)) {
 			if (content_len==-1 || content_len>=conf.min_gzip_length) {	
 				SET(rq->flags,RQ_TE_GZIP);
 				content_len = -1;
 				gzip_layer = true;
-				cache_layer = true;
+				cache_layer = cache_memory;
+				obj->insertHttpHeader(kgl_expand_string("Content-Encoding"), kgl_expand_string("gzip"));
+				obj->url->set_content_encoding(KGL_ENCODING_GZIP);
 			}
 		}
 		
 		build_obj_header(rq, obj, content_len, start, send_len);
 #ifndef NDEBUG
 		if (TEST(rq->flags,RQ_TE_GZIP)) {
-			assert(rq->ctx->stream_gziped || gzip_layer);
+			assert(gzip_layer);
 		} else {
-			assert(gzip_layer == false);
-			assert(!rq->ctx->stream_gziped);
+			assert(gzip_layer == false);		
 		}
 #endif
 		if (TEST(rq->flags,RQ_SYNC) && rq->send_ctx.getBufferSize()>0) {
@@ -175,8 +175,8 @@ StreamState KHttpTransfer::sendHead(bool isEnd) {
 		}
 	}
 	if (obj->in_cache) {
-		cache_layer = false;
-	} else if (TEST(rq->filter_flags,RF_ALWAYS_ONLINE)) {
+		cache_layer = cache_none;
+	} else if (TEST(rq->filter_flags,RF_ALWAYS_ONLINE) && status_code_can_cache(obj->data->status_code)) {
 		//永久在线模式
 		if (TEST(obj->index.flags, ANSW_NO_CACHE)) {
 			//如果是动态网页，并且无Cookie(游客模式)
@@ -218,21 +218,19 @@ bool KHttpTransfer::loadStream() {
 	}
 	//检测是否加载cache层
 	
-	if (cache_layer && TEST(obj->index.flags,ANSW_NO_CACHE)==0) {
-		KCacheStream *st_cache = new KCacheStream(st, autoDelete);
-		if (st_cache) {
-			st_cache->init(obj);
-			st = st_cache;
-			autoDelete = true;
+	if (TEST(obj->index.flags,ANSW_NO_CACHE)==0) {
+		if (cache_layer == cache_memory) {
+			KCacheStream *st_cache = new KCacheStream(st, autoDelete);
+			if (st_cache) {
+				st_cache->init(obj);
+				st = st_cache;
+				autoDelete = true;
+			}
 		}
 	}
-	
 	//检测是否要加载gzip压缩层
 	if (gzip_layer) {
 		KGzipCompress *st_gzip = new KGzipCompress(false,st, autoDelete);
-		if (!obj->in_cache) {
-			SET(obj->index.flags,OBJ_GZIPED);
-		}
 		//debug("加载gzip压缩层=%p,up=%p\n",st_gzip,st);
 		if (st_gzip) {
 			st = st_gzip;

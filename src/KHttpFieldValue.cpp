@@ -40,6 +40,10 @@ bool KHttpFieldValue::have(const char *field) {
 		}
 	}
 }
+bool KHttpFieldValue::is2(const char *field, int n)
+{
+	return strncasecmp(val, field, n) == 0;
+}
 bool KHttpFieldValue::is(const char *field) {
 	if (strncasecmp(val, field, strlen(field)) == 0) {
 		return true;

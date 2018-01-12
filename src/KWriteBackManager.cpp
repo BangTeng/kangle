@@ -107,7 +107,7 @@ std::vector<std::string> KWriteBackManager::getWriteBackNames() {
 std::string KWriteBackManager::writebackList(std::string name) {
 	stringstream s;
 	std::map<std::string,KWriteBack *>::iterator it;
-	s << "<html><LINK href=/kangle.css type='text/css' rel=stylesheet><body>\n";
+	s << "<html><LINK href=/main.css type='text/css' rel=stylesheet><body>\n";
 	KWriteBack *m_a=NULL;
 	s << "<table border=1><tr><td>" << LANG_OPERATOR << "</td><td>"
 			<< LANG_NAME << "</td><td>" << LANG_REFS << "</td></tr>\n";

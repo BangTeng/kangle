@@ -26,19 +26,27 @@
 #include "KStream.h"
 #include "forwin32.h"
 #include "KBuffer.h"
-#define NBUFF_CHUNK NBUFF_SIZE
 #ifdef _WIN32
 #pragma warning(disable:4200)
 #endif
 class KSocketBuffer : public KStream
 {
 public:
+	KSocketBuffer(int chunk_size)
+	{
+		hot_buf = NULL;
+		head = NULL;
+		hot = NULL;
+		totalLen = 0;
+		this->chunk_size = chunk_size;
+	}
 	KSocketBuffer()
 	{
 		hot_buf = NULL;
 		head = NULL;
 		hot = NULL;
 		totalLen = 0;
+		this->chunk_size = NBUFF_SIZE;
 	}
 	~KSocketBuffer()
 	{
@@ -160,14 +168,15 @@ private:
 	inline buff *newbuff()
 	{
 		buff *buf = (buff *)malloc(sizeof(buff));
-		buf->data = (char *)malloc(NBUFF_SIZE);
+		buf->data = (char *)malloc(chunk_size);
 		buf->used = 0;
 		buf->next = NULL;
 		return buf;
 	}
 	buff *hot_buf;
 	buff *head;
-	unsigned totalLen;
 	char *hot;
+	unsigned totalLen;
+	int chunk_size;
 };
 #endif

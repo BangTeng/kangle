@@ -31,7 +31,6 @@ private:
 	KRedirect *findRedirect(const char *name);
 	void addRedirect(KRedirectNode *rn);
 	KMutex lock;
-	KList serverList;
 	KRedirectNode rd_list;
 	rb_tree *rd_map;
 };

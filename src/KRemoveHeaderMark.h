@@ -39,7 +39,7 @@ public:
 			KHttpHeader *last = NULL;
 			while (h) {
 				KHttpHeader *next = h->next;
-				if (strcasecmp(h->attr,attr)==0 && revers != (val==NULL || val->match(h->val,strlen(h->val),0)>0) ) {
+				if (is_attr(h,attr) && revers != (val==NULL || val->match(h->val,h->val_len,0)>0) ) {
 					if (last) {
 						last->next = next;
 					} else {
@@ -52,6 +52,9 @@ public:
 					if (!obj) {
 						if (strcasecmp(attr,"Range")==0) {
 							CLR(rq->flags,RQ_HAVE_RANGE);
+						} else if (strcasecmp(attr, "Accept-Encoding") == 0) {
+							rq->raw_url.encoding = 0;
+							rq->url->encoding = 0;
 						}
 					}
 					free(h->attr);

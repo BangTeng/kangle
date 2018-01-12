@@ -1,6 +1,7 @@
 #ifndef KASYNCWORKER_H
 #define KASYNCWORKER_H
 #include "KMutex.h"
+#include "KCondWait.h"
 #include "KCountable.h"
 #include "ksapi.h"
 //Òì²½¹¤×÷
@@ -12,6 +13,7 @@ typedef KTHREAD_FUNCTION (* asyncWorkerCallBack)(void *data,int msec);
 
 struct KAsyncParam {
 	void *data;
+	KCondWait *wait;
 	INT64 startTime;
 	asyncWorkerCallBack callBack;
 	KAsyncParam *next;
@@ -26,29 +28,28 @@ public:
 		maxWorker = 1;
 		worker = 0;
 		queue = 0;
+		maxQueue = 0;
 		head = NULL;
 		last = NULL;
 	}
-	KAsyncWorker(int maxWorker)
+	KAsyncWorker(int maxWorker,int maxQueue)
 	{
 		this->maxWorker = maxWorker;
+		this->maxQueue = maxQueue;
 		worker = 0;
 		queue = 0;
 		if (this->maxWorker<=0) {
 			this->maxWorker = 1;
 		}
+		if (this->maxQueue > 0 && this->maxQueue < this->maxWorker) {
+			this->maxQueue = this->maxWorker;
+		}
 		head = NULL;
 		last = NULL;
 	}
-	void start(void *data,asyncWorkerCallBack callBack,bool high=false);
+	bool tryStart(void *data,asyncWorkerCallBack callBack,bool high=false);
+	void start(void *data, asyncWorkerCallBack callBack);
 	void workThread();
-	int getBusyCount()
-	{
-		lock.Lock();
-		int count = worker + queue;
-		lock.Unlock();
-		return count;
-	}
 	bool isEmpty()
 	{
 		lock.Lock();
@@ -58,21 +59,40 @@ public:
 	}
 	int getQueue()
 	{
-		return queue;
+		lock.Lock();
+		int ret = queue;
+		lock.Unlock();
+		return ret;
 	}
 	int getWorker()
 	{
-		return worker;
+		lock.Lock();
+		int ret = worker;
+		lock.Unlock();
+		return ret;
 	}
-	void setWorker(int maxWorker)
+	int get_max_queue()
+	{
+		return maxQueue;
+	}
+	int get_max_worker()
+	{
+		return maxWorker;
+	}
+	void setWorker(int maxWorker,int maxQueue)
 	{
 		this->maxWorker = maxWorker;
+		this->maxQueue = maxQueue;
 		if (this->maxWorker<=0) {
 			this->maxWorker = 1;
+		}
+		if (this->maxQueue > 0 && this->maxQueue < this->maxWorker) {
+			this->maxQueue = this->maxWorker;
 		}
 	}
 	~KAsyncWorker()
 	{
+		assert(head == NULL);
 		while (head) {
 			last = head->next;
 			delete head;
@@ -80,10 +100,12 @@ public:
 		}
 	}
 private:
+	void add(KAsyncParam *rq, bool high);
 	KMutex lock;
 	KAsyncParam *head;
 	KAsyncParam *last;
 	int maxWorker;
+	int maxQueue;
 	int worker;
 	int queue;
 };

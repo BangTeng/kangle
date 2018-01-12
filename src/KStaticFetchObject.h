@@ -3,24 +3,31 @@
 #include <stdlib.h>
 #include "global.h"
 #include "KFetchObject.h"
-#include "KAsyncSelectable.h"
+#include "KAsyncFile.h"
 #include "KFile.h"
 class KAsyncData
 {
 public:
-	KAsyncData(KFile *fp)
+	KAsyncData(KAsyncFile *fp,int buf_size)
 	{
 		memset(this,0,sizeof(KAsyncData));
-		as = new KAsyncSelectable(fp);
+		this->aio_fp = fp;
+		buf = (char *)aio_alloc_buffer(buf_size);
+		this->buf_size = buf_size;
 	}
 	~KAsyncData()
 	{
-		if (as) {
-			delete as;
+		if (aio_fp) {
+			delete aio_fp;
+		}
+		if (buf) {
+			aio_free_buffer(buf);
 		}
 	}
-	char buf[8192];
-	KAsyncSelectable *as;
+	INT64 offset;
+	int buf_size;
+	char *buf;
+	KAsyncFile *aio_fp;
 };
 class KStaticFetchObject : public KFetchObject 
 {
@@ -41,7 +48,7 @@ public:
 	}
 	void open(KHttpRequest *rq);
 	void readBody(KHttpRequest *rq);
-	void handleAsyncReadBody(KHttpRequest *rq,int got);	
+	void handleAsyncReadBody(KHttpRequest *rq,char *buf,int got);	
 	void asyncReadBody(KHttpRequest *rq);
 	void syncReadBody(KHttpRequest *rq);
 	void getAsyncBuffer(KHttpRequest *rq,iovec *buf,int &bufCount)

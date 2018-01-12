@@ -220,8 +220,10 @@ buff *KBuffer::stealBuffFast() {
 	}
 	if (hot_buf == NULL) {
 		hot_buf = (buff *) malloc(sizeof(buff));
+		assert(out_buf == NULL);
 		out_buf = hot_buf;
 	} else {
+		assert(out_buf != NULL);
 		hot_buf->next = (buff *) malloc(sizeof(buff));
 		hot_buf = hot_buf->next;
 	}
@@ -229,12 +231,11 @@ buff *KBuffer::stealBuffFast() {
 	hot_buf->next = NULL;
 	hot_buf->used = used;
 	hot_buf->flags = 0;
-	hot_buf = out_buf;
+	ret_buf = out_buf;
 	out_buf = NULL;
 	hotData = NULL;
 	used = 0;
 	totalLen = 0;
-	ret_buf = hot_buf;
 	hot_buf = NULL;
 	return ret_buf;
 }
@@ -245,9 +246,11 @@ StreamState KBuffer::write_direct(char *buf, int len) {
 }
 void KBuffer::internelAdd(char *buf, int len) {
 	if (hot_buf == NULL) {
+		assert(out_buf == NULL);
 		hot_buf = (buff *) xmalloc(sizeof(buff));
 		out_buf = hot_buf;
 	} else {
+		assert(out_buf != NULL);
 		hot_buf->next = (buff *) xmalloc(sizeof(buff));
 		hot_buf = hot_buf->next;
 	}

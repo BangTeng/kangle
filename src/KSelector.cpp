@@ -74,6 +74,14 @@ FUNC_TYPE FUNC_CALL selectorThread(void *param) {
 void KSelector::selectThread()
 {
 	thread_id = pthread_self();
+#ifndef _WIN32
+	cpu_set_t mask;
+	CPU_ZERO(&mask);
+        CPU_SET(sid, &mask);
+	if (pthread_setaffinity_np(thread_id, sizeof(mask), &mask) < 0) {
+            klog(KLOG_ERR,"sched_setaffinity error. errno=[%d]\n",errno);
+        }
+#endif
 	select();
 }
 KSelector::KSelector() {
@@ -85,6 +93,9 @@ KSelector::KSelector() {
 	for (int i = 0; i < KGL_LIST_BLOCK; i++) {
 		klist_init(&list[i]);
 	}
+#ifdef MALLOCDEBUG
+	closed_flag = false;
+#endif
 }
 KSelector::~KSelector() {
 	
@@ -168,7 +179,7 @@ void KSelector::checkTimeOut() {
 			if ((kgl_current_msec - rq->active_msec) < (time_t)timeout[i]) {
 				break;
 			}
-			klist_remove(l);			
+			klist_remove(l);
 			if (rq->tmo_left > 0) {
 				//还有额外超时时间
 				rq->tmo_left--;

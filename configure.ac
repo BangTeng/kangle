@@ -1,5 +1,5 @@
 # Process this file with autoconf to produce a configure script.
-AC_INIT([kangle],[3.5.11])
+AC_INIT([kangle],[3.5.12.11])
 AC_CANONICAL_SYSTEM
 AM_INIT_AUTOMAKE
 AM_CONFIG_HEADER([src/config.h])
@@ -115,6 +115,7 @@ AH_TEMPLATE([ENABLE_LARGE_FILE],[large files support])
 AH_TEMPLATE([ENABLE_VH_RS_LIMIT],[virtualhost resource limit])
 AH_TEMPLATE([ENABLE_DISK_CACHE],[enable disk cache support])
 AH_TEMPLATE([ENABLE_TCMALLOC],[tcmalloc])
+AH_TEMPLATE([ENABLE_JEMALLOC],[jemalloc])
 
 #AH_TEMPLATE([ONLY_HTTP],[only compiled http proxy])
 #AC_CHECK_HEADER([dlfcn.h],
@@ -241,6 +242,16 @@ AC_CHECK_FUNCS([gethostbyname_r gettimeofday inet_ntoa localtime_r memchr memset
 AC_CHECK_LIB(iconv,iconv_open,[
         LIBS="$LIBS -liconv"
 ],[])
+
+AC_ARG_WITH([jemalloc],
+ [AS_HELP_STRING([--with-jemalloc=dir],
+                 [compile program use jemalloc.])],
+ [
+	LIBS="$LIBS -ljemalloc -lrt -L$withval/lib/"
+        CXXFLAGS="$CXXFLAGS -I$withval/include/"
+	AC_DEFINE(ENABLE_JEMALLOC,1)
+],[])
+
 AC_ARG_WITH([tcmalloc],
  [AS_HELP_STRING([--with-tcmalloc=dir],
                  [compile program use tcmalloc.])],

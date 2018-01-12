@@ -192,6 +192,17 @@ public:
 	unsigned max_queue;
 #endif
 #ifdef ENABLE_VH_RS_LIMIT
+	KSpeedLimit *refsSpeedLimit()
+	{
+		KSpeedLimit *sl = NULL;
+		lock.Lock();
+		sl = this->sl;
+		if (sl) {
+			sl->addRef();
+		}
+		lock.Unlock();
+		return sl;
+	}
 	void setSpeedLimit(const char *speed_limit_str,KVirtualHost *ov);
 	void setSpeedLimit(int speed_limit,KVirtualHost *ov);
 	
@@ -229,12 +240,22 @@ public:
 	int max_connect;
 	//带宽限制
 	int speed_limit;
-	//当前带宽信息
-	KSpeedLimit *sl;
 #endif
 #ifdef ENABLE_VH_FLOW
+	KFlowInfo *refsFlowInfo()
+	{
+		KFlowInfo *flow = NULL;
+		lock.Lock();
+		flow = this->flow;
+		if (flow) {
+			flow->addRef();
+		}
+		lock.Unlock();
+		return flow;
+	}
 	void setFlow(bool fflow,KVirtualHost *ov)
 	{
+		lock.Lock();
 		if (flow) {
 			flow->release();
 			flow = NULL;
@@ -250,6 +271,7 @@ public:
 				flow = new KFlowInfo;
 			}
 		}
+		lock.Unlock();
 	}
 	int getSpeed(bool reset)
 	{
@@ -260,8 +282,6 @@ public:
 	}
 	//统计流量
 	bool fflow;
-	//流量表
-	KFlowInfo *flow;
 #endif
 	/*
 	虚拟主机状态，0表示开通状态，其它表示暂停状态
@@ -365,6 +385,14 @@ public:
 	std::string getKeyfile();
 #endif
 private:
+#ifdef ENABLE_VH_RS_LIMIT
+	//当前带宽信息
+	KSpeedLimit *sl;
+#endif
+#ifdef ENABLE_VH_FLOW
+	//流量表
+	KFlowInfo *flow;
+#endif
 	bool loadApiRedirect(KRedirect *rd,KApiPipeStream *st,int workType);
 #ifdef ENABLE_VH_RUN_AS
 #ifdef _WIN32

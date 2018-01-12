@@ -6,7 +6,7 @@ incdir=$(includedir)
 webadmindir=$(DEFAULT_WEBADMIN_DIR)
 dist_sysconf_DATA=$(sysconf_DATA) etc/config.xml etc/config-default.xml 
 dist_www_DATA=www/index.html 
-dist_webadmin_DATA=webadmin/kangle.css webadmin/core.whm webadmin/logo.gif webadmin/lang.xml webadmin/lang_en.xml webadmin/lang_zh.xml webadmin/lang_tw.xml
+dist_webadmin_DATA=webadmin/main.css webadmin/core.whm webadmin/logo.gif webadmin/lang.xml webadmin/lang_en.xml webadmin/lang_zh.xml webadmin/lang_tw.xml
 dist_inc_DATA=src/ksapi.h
 #dist_doc_DATA=doc/zh_CN/*.html doc/zh_CN/*.css
 install-dist_sysconfDATA:

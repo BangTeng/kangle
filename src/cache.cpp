@@ -40,9 +40,6 @@
 #include "KCache.h"
 #include "KSimulateRequest.h"
 using namespace std;
-void dead_obj(KHttpObject *obj) {
-	cache.dead(obj);
-}
 void dump_object(KHttpObject *obj) {
 
 }
@@ -77,39 +74,61 @@ void clean_static_obj_header(KHttpObject *obj) {
 		h = next;
 	}
 }
-bool stored_obj(KHttpObject *obj,KHttpObject *old_obj, int list_state) {
-	if (old_obj) {
-		SET(old_obj->index.flags,FLAG_DEAD|OBJ_INDEX_UPDATE);
+bool stored_obj(KHttpObject *obj, int list_state) {
+#ifdef ENABLE_DISK_CACHE
+	if (TEST(obj->index.flags, FLAG_IN_DISK) &&
+		obj->index.head_size != kgl_align(obj->index.head_size, kgl_aio_align_size)) {
+		char *url = obj->url->getUrl();
+		char *filename = obj->getFileName();
+		klog(KLOG_ERR, "disk cache file head_size=[%d] is not align by size=[%d], url=[%s] file=[%s] now dead it.\n", obj->index.head_size, kgl_aio_align_size, url, filename);
+		free(filename);
+		free(url);
+		SET(obj->index.flags, FLAG_DEAD);
 	}
-	//printf("stored_obj [%s%s] gziped=[%d]\n",obj->url->host,obj->url->path,TEST(obj->index.flags,OBJ_GZIPED));
+#endif
 	return cache.add(obj,list_state);
 }
-/*
- 把obj存入到内存
- */
 bool stored_obj(KHttpRequest *rq, KHttpObject *obj,KHttpObject *old_obj) {
 	//	printf("try stored obj now,path=%s\n",obj->url.path);
 	if (obj == NULL){
 		return false;
 	}
 	if (!TEST(obj->index.flags,OBJ_IS_READY)) {
-		//object还没有准备好。
 		return false;
 	}
 	if (!objCanCache(rq,obj)) {
 		return false;
 	}
+	/*
 	if (TEST(rq->flags,RQ_HAS_GZIP)) {
 		SET(obj->index.flags,FLAG_RQ_GZIP);
+	}
+	*/
+	if (TEST(rq->filter_flags, RF_NO_DISK_CACHE)) {
+		SET(obj->index.flags, FLAG_NO_DISK_CACHE);
 	}
 	if (TEST(rq->workModel,WORK_MODEL_INTERNAL)) {
 		SET(obj->index.flags,FLAG_RQ_INTERNAL);
 	}
 	if (TEST(obj->index.flags,OBJ_IS_STATIC2)) {
-		//清除静态化的一些http头
 		clean_static_obj_header(obj);
 	}
-	if (stored_obj(obj,old_obj, (TEST(obj->index.flags,FLAG_IN_MEM)?LIST_IN_MEM:LIST_IN_DISK))) {
+#if 0
+	if (obj->data && obj->data->type == SAVING_OBJECT && obj->data->fp) {
+		obj->saveFileIndex(obj->data->fp);
+		obj->data->fp->close();
+		delete obj->data->fp;
+		obj->data->fp = NULL;
+		obj->data->type = MEMORY_OBJECT;
+		if (dci) {
+			dci->start(ci_add, obj);
+		}
+	}
+#endif
+	if (old_obj) {
+		SET(old_obj->index.flags, FLAG_DEAD|OBJ_INDEX_UPDATE );
+	}
+	if (stored_obj(obj,(TEST(obj->index.flags,FLAG_IN_MEM)?LIST_IN_MEM:LIST_IN_DISK))) {
 		SET(rq->flags,RQ_OBJ_STORED);
 		return true;
 	}

@@ -55,6 +55,7 @@ extern volatile uint64_t kgl_total_servers;
 extern volatile uint32_t kgl_reading;
 extern volatile uint32_t kgl_writing;
 extern volatile uint32_t kgl_waiting;
+extern volatile uint32_t kgl_aio_count;
 #endif
 #define READ_BUFF_SZ	8192
 
@@ -442,7 +443,7 @@ public:
 
 	//限速(叠加)
 	KSpeedLimitHelper *slh;
-	void addSpeedLimit(KSpeedLimit *sl)
+	void pushSpeedLimit(KSpeedLimit *sl)
 	{
 		KSpeedLimitHelper *helper = new KSpeedLimitHelper(sl);
 		helper->next = slh;
@@ -495,15 +496,15 @@ public:
 #endif
 	//流量统计
 	KFlowInfoHelper *fh;
-	void addFlow(INT64 flow,int flowFlag)
+	void addFlow(INT64 flow,bool cache_hit)
 	{
 		KFlowInfoHelper *helper = fh;
 		while (helper) {
-			helper->fi->addFlow(flow,flowFlag);
+			helper->fi->addFlow(flow, cache_hit);
 			helper = helper->next;
 		}
 	}
-	void addFlowInfo(KFlowInfo *fi)
+	void pushFlowInfo(KFlowInfo *fi)
 	{
 		KFlowInfoHelper *helper = new KFlowInfoHelper(fi);
 		helper->next = fh;

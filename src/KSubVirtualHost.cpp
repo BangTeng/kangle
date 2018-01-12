@@ -281,7 +281,7 @@ bool KSubVirtualHost::bindFile(KHttpRequest *rq, KHttpObject *obj,bool &exsit,KA
 		}
 		if (http_proxy) {
 			KRedirect *rd = NULL;
-			if (TEST(rq->workModel, WORK_MODEL_SSL)) {
+			if (TEST(rq->raw_url.flags, KGL_URL_SSL)) {
 				 rd = cdnContainer.refsRedirect(https_proxy);
 			} else {
 				rd = cdnContainer.refsRedirect(http_proxy);
@@ -347,7 +347,7 @@ bool KSubVirtualHost::makeHtaccess(const char *prefix,KFileName *file,KAccess *r
 			fprintf(stderr,"%s",e.what());
 			return false;
 		}
-		return true;
+		return result;
 	}
 	return false;
 }

@@ -36,7 +36,7 @@ bool checkQueuedRequestTimeOut(KHttpRequest *rq)
 		//cut the stack call.
 		//rq->c->handler = handleQueuedRequestTimeOut;
 		//rq->c->selector->addRequest(rq,KGL_LIST_RW,STAGE_OP_NEXT);
-		rq->c->next(rq,resultQueuedRequestTimeOut);
+		rq->c->next(resultQueuedRequestTimeOut,rq);
 		return true;
 	}
 	return false;
@@ -70,9 +70,7 @@ void async_queue_destroy(KRequestQueue *queue)
 		}
 	} else {
 		//这里要切断堆栈，否则有可能会有过多的调用。
-		//rq->c->handler = handleAsyncNextRequest;
-		//rq->c->selector->addRequest(rq,KGL_LIST_RW,STAGE_OP_NEXT);
-		rq->c->next(rq,resultAsyncNextRequest);
+		rq->c->next(resultAsyncNextRequest,rq);
 	}
 }
 FUNC_TYPE FUNC_CALL thread_queue(void *param)

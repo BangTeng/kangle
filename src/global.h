@@ -23,10 +23,8 @@
  */
 #ifndef GLOBAL_H_asdfkjl23kj4234
 #define GLOBAL_H_asdfkjl23kj4234
-#ifdef HAVE_CONFIG_H
 #ifndef _WIN32
 #include "config.h"
-#endif
 #endif
 #ifndef _WIN32
 #define INT64  long long
@@ -43,7 +41,7 @@
 #endif
 #endif
 #ifndef VERSION
-#define VERSION         "3.5.11"
+#define VERSION         "3.5.12.11"
 #endif
 #define VER_ID   VERSION
 #ifndef MAX
@@ -52,11 +50,9 @@
 #ifndef MIN
 #define MIN(a,b)  ((a)>(b)?(b):(a))
 #endif
-#define	 GC_SLEEP_TIME	10
+#define	 GC_SLEEP_TIME	5
 
-//不能超过8K,ajp协议最大的包为8k
-//#define  NBUFF_SIZE     8192
-#define  NBUFF_SIZE     8186
+#define  NBUFF_SIZE     8192
 
 #define  JUMP_ALLOW     0
 #define  JUMP_DENY      1
@@ -86,9 +82,7 @@
 #define WORK_MODEL_SSL       (1<<2)
 #define WORK_MODEL_INTERNAL  (1<<3)
 #define WORK_MODEL_REPLACE   (1<<5)
-#ifdef  ENABLE_TPROXY
 #define WORK_MODEL_TPROXY    (1<<7)
-#endif
 
 #define WORK_MODEL_SIMULATE  (1<<9)
 #define WORK_MODEL_UNIX_SOCKET (1<<11)
@@ -153,7 +147,7 @@
 #define FLAG_URL_FREE           (1<<1) /* 物件中的url要负责清理 */
 #define FLAG_IN_MEM             (1<<2) /* 物件存在于内存中 */
 #define FLAG_IN_DISK            (1<<3) /* 物件存于磁盘上 */
-#define OBJ_GZIPED              (1<<4) /* gzip压缩了 */
+//#define OBJ_GZIPED              (1<<4) /* gzip压缩了 */
 #define FLAG_NO_BODY            (1<<5) /* 物件无body */
 #define OBJ_MUST_REVALIDATE     (1<<6) /* must-revalidate */
 #define OBJ_IS_STATIC2          (1<<7) /* 静态化2 */
@@ -164,26 +158,28 @@
 #define ANSW_HAS_MAX_AGE        (1<<11) /* 回应有Max-Age头 */
 #define ANSW_LAST_MODIFIED      (1<<12) /* 物件有Last-Modified */
 #define ANSW_HAS_CONTENT_LENGTH (1<<13) /* 有Content-Length头 */
-#define OBJ_DEFLATED            (1<<14) /* deflate压缩了*/
+//#define OBJ_DEFLATED            (1<<14) /* deflate压缩了*/
 #define ANSW_HAS_CONTENT_RANGE  (1<<15) /* 有Content-Range */
 #define ANSW_CHUNKED            (1<<16) /* 回应是chunk数据 */
 /////////////////////////////////////////////////////////////////////
 #define FLAG_RQ_INTERNAL        (1<<17) /* 内部请求产生的物件 */
-#define FLAG_RQ_GZIP            (1<<18) /* gzip请求产生的数据 */
+//#define FLAG_RQ_GZIP            (1<<18) /* gzip请求产生的数据 */
 /////////////////////////////////////////////////////////////////////
 #define FLAG_NO_DISK_CACHE      (1<<19) /* 不用磁盘缓存 */
 #define FLAG_NO_NEED_CACHE      ANSW_NO_CACHE /*@deprecate 不需缓存 */
-#define FLAG_NEED_GZIP          (1<<20)  /* 需要gzip压缩 */
+//#define FLAG_NEED_GZIP          (1<<20)  /* 需要gzip压缩 */
 #define OBJ_IS_GUEST            (1<<21)  /* 游客缓存 */
 /////////////////////////////////////////////////////////////////////
-#define OBJ_IS_DELTA            (1<<22)
+//#define OBJ_IS_DELTA            (1<<22)
 #define OBJ_HAS_ETAG            (1<<23)
 /////////////////////////////////////////////////////////////////////
 #define OBJ_CACHE_RESPONSE      (1<<24) /* 缓存了也要检查response检查 */
 #define ANSW_LOCAL_SERVER       (1<<25) /* 本地应用(fastcgi等) */
 #define ANSW_XSENDFILE          (1<<26) /* x-accel-redirect */
 /////////////////////////////////////////////////////////////////////
-
+#define FLAG_BIG_OBJECT_PROGRESS (1<<27) /* 未完大物件*/
+#define FLAG_BIG_OBJECT          (1<<28) /* 大物件 */
+#define OBJ_INDEX_SAVED          (1<<29)
 #define OBJ_INDEX_UPDATE         (1<<30)
 #define OBJ_NOT_OK               (1<<31)
 
@@ -220,7 +216,6 @@
 #define RQ_HAS_IF_MOD_SINCE    (1<<1)
 #define RQ_HAS_IF_NONE_MATCH   (1<<2)
 #define RQ_HAS_NO_CACHE        (1<<3)
-#define RQ_NET_BIG_OBJECT      (1<<4)
 #define RQ_BIG_OBJECT_CTX      (1<<5)
 #define RQ_INPUT_CHUNKED       (1<<6)
 #define RQ_SYNC                (1<<7)
@@ -228,7 +223,6 @@
 #define RQ_HAS_AUTHORIZATION   (1<<9)
 #define RQ_HAS_PROXY_AUTHORIZATION (1<<10)
 #define RQ_HAS_KEEP_CONNECTION (1<<11)
-
 #define RQ_IF_RANGE_DATE       (1<<14)
 #define RQ_IF_RANGE_ETAG       (1<<15)
 #define RQ_HAS_CONTENT_LEN     (1<<16)
@@ -242,16 +236,14 @@
 #define RQ_CONNECTION_CLOSE    (1<<24)
 #define RQ_OBJ_STORED          (1<<25)
 #define RQ_HAVE_EXPECT         (1<<26)
-#define RQ_HIT_CACHE           (1<<27)
 #define RQ_TEMPFILE_HANDLED    (1<<28)
-#define RQ_HAS_GZIP            (1<<29)
 #define RQ_IS_ERROR_PAGE       (1<<30)
 #define RQ_UPSTREAM_ERROR      (1<<31)
 
 
 
 ///////////////////////////////////////////////
-//设置rq->filter_flag
+//rq->filter_flag
 ///////////////////////////////////////////////
 #define  RF_TPROXY_UPSTREAM  (1)
 #ifdef ENABLE_TPROXY
@@ -274,11 +266,9 @@
 #define  RF_UPSTREAM_NOSNI   (1<<17)
 #define  RQ_SEND_AUTH        (1<<18)
 #define  RF_PROXY_FULL_URL   (1<<19)
-
 #define  RF_FOLLOWLINK_ALL   (1<<21)
 #define  RF_FOLLOWLINK_OWN   (1<<22)
 #define  RF_NO_X_SENDFILE    (1<<23)
-#define  RF_CACHE_NO_LENGTH  (1<<24)
 #define  RQ_URL_QS           (1<<25)
 #define  RQ_FULL_PATH_INFO   (1<<26)
 #define  RF_AGE              (1<<27)
@@ -349,6 +339,7 @@
 	#define ENABLE_STATIC_ENGINE       1
 #endif
 #define DEFAULT_COOKIE_STICK_NAME  "kangle_runat"
+#define X_REAL_IP_SIGN             "x-real-ip-sign"
 #define VARY_URL_KEY               1
 enum Proto_t {
 	Proto_http, Proto_fcgi, Proto_ajp,Proto_uwsgi,Proto_scgi,Proto_hmux,Proto_spdy,Proto_tcp
@@ -375,7 +366,7 @@ enum Proto_t {
 //end define likely and unlikely
 
 #ifndef DISABLE_KSAPI_FILTER
-	//打开ksapi filter
+	//enable ksapi filter
 	#define ENABLE_KSAPI_FILTER 1
 #endif //DISABLE_KSAPI_FILTER
 #endif //global.h

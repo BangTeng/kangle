@@ -28,15 +28,7 @@
 */
 bool KFetchObject::pushHttpBody(KHttpRequest *rq,char *buf,int len)
 {
-	
-//	KHttpRequest *rq = (KHttpRequest *)param;
-	//printf("body = [%s],len=[%d]\n",buf,len);
-	//assert(rq->send_ctx.body==NULL);
-	//KHttpObject *obj = rq->ctx->obj;
-	//rq->buffer.clean();
-	//printf("handle body len=%d\n",len);
-	//assert(rq->fetchObj);
-	if (rq->ctx->know_length) {
+	if (!rq->ctx->connection_upgrade && rq->ctx->know_length) {
 		len = (int)MIN(rq->ctx->left_read, (INT64)len);
 		rq->ctx->left_read -= len;
 	}
@@ -55,8 +47,6 @@ bool KFetchObject::pushHttpBody(KHttpRequest *rq,char *buf,int len)
 			return false;
 		}
 		stage_rdata_end(rq,STREAM_WRITE_FAILED);
-		return false;
-	case STREAM_WRITE_HANDLED:
 		return false;
 	default:
 		if(try_send_request(rq)){

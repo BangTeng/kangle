@@ -11,6 +11,7 @@
 #include "KVirtualHostProcess.h"
 #include "KList.h"
 #include "KListenPipeStream.h"
+#include "KSelectorManager.h"
 /*
 多线程命令进程
 */
@@ -56,7 +57,7 @@ protected:
 };
 class KSingleListenPipeStream;
 //多进程命令扩展
-class KMPCmdProcess: public KVirtualHostProcess,public KList {
+class KMPCmdProcess: public KVirtualHostProcess {
 public:
 	KMPCmdProcess();
 	~KMPCmdProcess();
@@ -72,11 +73,12 @@ public:
 	
 	bool canDestroy(time_t nowTime);
 private:
-	std::list<KSingleListenPipeStream *> freeProcess;
+	KSingleListenPipeStream *freeProcessList;
+	KSingleListenPipeStream *busyProcessList;
 	KMutex stLock;
 	KMutex cmdLock;
 };
-class KSingleListenPipeStream : public KListenPipeStream,public KPoolableSocketContainer,public KListNode
+class KSingleListenPipeStream : public KListenPipeStream,public KPoolableSocketContainer
 {
 public:
 	KSingleListenPipeStream()
@@ -91,11 +93,16 @@ public:
 		}
 		unlink_unix();
 	}
-	KUpstreamSelectable *getPoolSocket(bool &isHalf)
+	KUpstreamSelectable *getConnection(KHttpRequest *rq,bool &isHalf)
 	{
 		lastActive = kgl_current_sec;
 		KUpstreamSelectable *st = socket;
 		if(socket == NULL) {
+			st = KPoolableSocketContainer::getPoolSocket(rq);
+			if (st) {
+				isHalf = false;
+				return st;
+			}
 			st = new KUpstreamSelectable(new KClientSocket);
 #ifdef KSOCKET_UNIX
 			if(unix_path.size()>0){
@@ -104,7 +111,7 @@ public:
 #endif
 				st->socket->halfconnect(addr);
 			isHalf = true;
-		}else {	
+		} else {	
 			isHalf = false;
 			socket = NULL;
 		}
@@ -115,24 +122,18 @@ public:
 	}
 	void gcSocket(KUpstreamSelectable *st,int lifeTime)
 	{
-		
-	//	if(close || socket){
-		st->destroy();
+#ifdef _WIN32
+		if (selectorManager.getSelectorCount() == 1) {
+			//windows下只有一个selector时才使用长连接
+			KPoolableSocketContainer::gcSocket(st, lifeTime);
+		} else {
+			st->destroy();
+		}
+#else
+		KPoolableSocketContainer::gcSocket(st, lifeTime);
+#endif
 		kassert(vprocess!=NULL);
 		vprocess->gcProcess(this);
-		/*
-		}else{
-			socket = st;
-			st->container = NULL;
-			unconnectStream(st);
-		}
-		*/
-		/*
-		assert(container);
-		if (container) {
-			container->gcStream(this,process.isKilled(),lifeTime);
-		}
-		*/
 	}
 	void isBad(KUpstreamSelectable *st,BadStage stage)
 	{
@@ -148,6 +149,8 @@ private:
 	KMPCmdProcess *vprocess;
 	sockaddr_i addr;
 	time_t lastActive;
+	KSingleListenPipeStream *next;
+	KSingleListenPipeStream *prev;
 };
 struct MPVProcessPowerParam
 {

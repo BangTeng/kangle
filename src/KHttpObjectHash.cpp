@@ -53,7 +53,6 @@ void set_obj_size(KHttpObject *obj, INT64 content_length) {
 
 	//设置obj的长度
 	obj->index.content_length = content_length;
-	obj->index.have_length = content_length;
 	return;
 }
 

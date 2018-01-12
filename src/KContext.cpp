@@ -9,6 +9,7 @@ void KContext::clean()
 		delete st;
 		st = NULL;
 	}
+	clean_if_none_match();
 	memset(this,0,sizeof(KContext));
 }
 
@@ -29,34 +30,35 @@ void KContext::store_obj(KHttpRequest *rq)
 			//删除新obj
 			assert(old_obj->in_cache);
 			cache.rate(old_obj);
+			return;
+		}
+		if (obj->in_cache == 0) {
+			if (stored_obj(rq, obj, old_obj)) {
+				cache.dead(old_obj, __FILE__, __LINE__);
+				return;
+			}
+		}
+		if (TEST(rq->filter_flags, RF_ALWAYS_ONLINE) ||
+			(TEST(old_obj->index.flags, OBJ_IS_GUEST) && !TEST(rq->filter_flags, RF_GUEST))
+			) {
+			//永久在线，并且新网页没有存储
+			//或者是会员访问了游客缓存
+			//旧网页继续使用
+			cache.rate(old_obj);
 		} else {
-			if (obj->in_cache == 0) {
-				if (stored_obj(rq, obj, old_obj)) {
-					cache.dead(old_obj);
-					return;
-				}
-			}
-			if (TEST(rq->filter_flags, RF_ALWAYS_ONLINE)
-				|| (TEST(old_obj->index.flags, OBJ_IS_GUEST) && !TEST(rq->filter_flags, RF_GUEST))
-				) {
-				//永久在线，并且新网页没有存储
-				//或者是会员访问了游客缓存
-				//旧网页继续使用
-				cache.rate(old_obj);
-			} else {
-				cache.dead(old_obj);
-			}
+			cache.dead(old_obj,__FILE__,__LINE__);
 		}
 		return;
-	} 
-	if(obj) {
-		//check can store
-		if (obj->in_cache==0) {
-			stored_obj(rq, obj,old_obj);			
-		} else {
-			assert(obj->in_cache==1);
-			cache.rate(obj);
-		}
+	}
+	if (obj == NULL) {
+		return;
+	}
+	//check can store
+	if (obj->in_cache==0) {
+		stored_obj(rq, obj,old_obj);
+	} else {
+		assert(obj->in_cache==1);
+		cache.rate(obj);
 	}
 }
 void KContext::clean_obj(KHttpRequest *rq,bool store_flag)

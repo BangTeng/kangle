@@ -8,6 +8,7 @@
 #ifndef KAJPMESSAGE_H_
 #define KAJPMESSAGE_H_
 #define AJP_PACKAGE   8192
+#define AJP_BUFF_SIZE 8186
 #include <string>
 #include "KStream.h"
 #include "global.h"

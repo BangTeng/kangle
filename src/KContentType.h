@@ -50,8 +50,8 @@ struct mime_type
 	}
 	char *apply(KHttpObject *obj)
 	{
-		if(gzip){
-			SET(obj->index.flags,FLAG_NEED_GZIP);
+		if (gzip) {
+			obj->need_gzip = 1;
 		}
 		if (max_age>0) {
 			obj->index.max_age = max_age;

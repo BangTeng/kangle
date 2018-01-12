@@ -105,7 +105,15 @@ char *readString(KFile *file,int &len)
 	}
 	return buf;
 }
-int writeString(KFile *file,const char *str,int len)
+int write_string(char *hot, const char *str, int len)
+{
+	memcpy(hot, (char *)&len, sizeof(int));
+	if (len > 0) {
+		memcpy(hot + sizeof(int), str, len);
+	}
+	return len + sizeof(int);
+}
+int writeString(KBufferFile *file,const char *str,int len)
 {
 	if (str) {
 		if (len==0) {
@@ -124,7 +132,9 @@ bool read_obj_head(KHttpObjectBody *data,char **hot,int &hotlen)
 	KHttpHeader *last = NULL;
 	for (;;) {
 		int attr_len,val_len;
+		//printf("before attr hotlen=[%d]\n",hotlen);
 		char *attr = readString(hot,hotlen,attr_len);
+		//printf("after attr before val hotlen=[%d]\n",hotlen);
 		if (attr_len==-1) {
 			return false;
 		}
@@ -135,11 +145,14 @@ bool read_obj_head(KHttpObjectBody *data,char **hot,int &hotlen)
 			free(attr);
 			return true;
 		}
+		//printf("attr=[%s]\n",attr);
 		char *val = readString(hot,hotlen,val_len);
+		//printf("after val hotlen=[%d]\n",hotlen);
 		if(val_len==-1){
 			xfree(attr);
 			return false;
 		}
+		//printf("val=[%s]\n",val);
 		KHttpHeader *header = (KHttpHeader *)xmalloc(sizeof(KHttpHeader));
 		if(header==NULL){
 			xfree(attr);
@@ -258,9 +271,12 @@ int get_index_scan_progress()
 {
 	return (index_scan_state.first_index * 100) / CACHE_DIR_MASK1;
 }
-bool saveCacheIndex(bool fast)
+bool saveCacheIndex()
 {
-	//clean all DEAD obj
+	klog(KLOG_ERR, "save cache index now...\n");
+#ifndef NDEBUG
+	cache.flush_mem_to_disk();
+#endif
 	cache.syncDisk();
 #ifdef ENABLE_DB_DISK_INDEX
 	if (dci) {
@@ -271,36 +287,9 @@ bool saveCacheIndex(bool fast)
 		return false;
 	}
 #endif
-	HttpObjectIndexHeader indexHeader;
-	memset(&indexHeader,0,sizeof(HttpObjectIndexHeader));
-	indexHeader.head_size = sizeof(HttpObjectIndexHeader);
-	indexHeader.block_size = sizeof(HttpObjectIndex);
-	indexHeader.cache_dir_mask1 = CACHE_DIR_MASK1;
-	indexHeader.cache_dir_mask2 = CACHE_DIR_MASK2;
-	char *file_name = getCacheIndexFile();
-	KFile fp;
-	bool result = true;
-	if(!fp.open(file_name,fileWrite)){
-		klog(KLOG_ERR,"cann't open cache index file for write [%s]\n",file_name);
-		xfree(file_name);
-		return false;
-	}
-	fp.write((char *)&indexHeader,sizeof(HttpObjectIndexHeader));
-	int save_count = cache.save_disk_index(&fp);
-	if(result){
-		//set the index file state is clean
-		indexHeader.state = INDEX_STATE_CLEAN;
-		indexHeader.object_count = save_count;
-		fp.seek(0,seekBegin);
-		fp.write((char *)&indexHeader,sizeof(HttpObjectIndexHeader));
-		klog(KLOG_ERR,"total save %d object\n",save_count);
-	}
-	if(file_name){
-		xfree(file_name);
-	}
-	return result;
+	return false;
 }
-cor_result create_http_object(KHttpObject *obj,const char *url,const char *verified_filename)
+cor_result create_http_object(KHttpObject *obj,const char *url,u_short flag_encoding,const char *verified_filename)
 {
 	KUrl m_url;
 	if (!parse_url(url,&m_url) || m_url.host==NULL) {
@@ -315,7 +304,7 @@ cor_result create_http_object(KHttpObject *obj,const char *url,const char *verif
 	obj->url->path = m_url.path;
 	obj->url->param = m_url.param;
 	obj->url->port = m_url.port;
-	obj->url->flags = m_url.flags;
+	obj->url->flag_encoding = flag_encoding;
 	if (verified_filename) {
 		obj->h = cache.hash_url(obj->url);
 		if (cache.getHash(obj->h)->find(obj->url,verified_filename)) {
@@ -324,13 +313,16 @@ cor_result create_http_object(KHttpObject *obj,const char *url,const char *verif
 			return cor_incache;
 		}
 	}
-	if (stored_obj(obj,NULL,LIST_IN_DISK)) {
+	if (!TEST(obj->index.flags, OBJ_INDEX_SAVED)) {
+		SET(obj->index.flags, FLAG_DEAD);
+	}
+	if (stored_obj(obj,LIST_IN_DISK)) {
 		return cor_success;
 	}
 	CLR(obj->index.flags,FLAG_IN_DISK);
 	return cor_failed;
 }
-cor_result create_http_object(KFile *fp,KHttpObject *obj,const char *verified_filename=NULL)
+cor_result create_http_object(KFile *fp,KHttpObject *obj,u_short url_flag_encoding,const char *verified_filename=NULL)
 {
 	int len;
 	char *url = readString(fp,len);
@@ -338,7 +330,7 @@ cor_result create_http_object(KFile *fp,KHttpObject *obj,const char *verified_fi
 		fprintf(stderr,"read url is NULL\n");
 		return cor_failed;
 	}
-	cor_result ret = create_http_object(obj,url,verified_filename);
+	cor_result ret = create_http_object(obj,url, url_flag_encoding,verified_filename);
 	free(url);
 	return ret;
 }
@@ -348,6 +340,8 @@ int create_file_index(const char *file,void *param)
 	cor_result result = cor_failed;
 	KHttpObject *obj;
 	s << (char *)param << PATH_SPLIT_CHAR << file;
+	unsigned f1 = 0;
+	unsigned f2 = 0;
 	char *file_name = s.getString();
 	KFile fp;
 	if (!fp.open(s.getString(),fileRead)) {
@@ -362,15 +356,28 @@ int create_file_index(const char *file,void *param)
 		}
 	}
 	
+	if (sscanf(file, "%x_%x", &f1, &f2)!=2) {
+		goto failed;
+	}
 	KHttpObjectFileHeader header;
 	if(fp.read((char *)&header,sizeof(KHttpObjectFileHeader))!=sizeof(KHttpObjectFileHeader)){
 		fprintf(stderr,"cann't read head size [%s]\n",file_name);
 		goto failed;
 	}
+	if (!is_valide_dc_head_size(header.index.head_size)) {
+		klog(KLOG_ERR, "disk cache [%s] head_size=[%d] is not valide\n", file_name, header.index.head_size);
+		goto failed;
+	}
+	if (!is_valide_dc_sign(&header)) {
+		klog(KLOG_ERR, "disk cache [%s] is not valide file\n", file_name);
+		goto failed;
+	}
 	obj = new KHttpObject;
 	memcpy(&obj->index,&header.index,sizeof(obj->index));
+	obj->dk.filename1 = f1;
+	obj->dk.filename2 = f2;
 	
-	result = create_http_object(&fp,obj,file_name);
+	result = create_http_object(&fp,obj,header.url_flag_encoding,file_name);
 	if (result==cor_success) {
 #ifdef ENABLE_DB_DISK_INDEX
 		if (dci) {
@@ -378,20 +385,6 @@ int create_file_index(const char *file,void *param)
 		}
 #endif
 		load_count++;
-#if 0
-		if (rebuild_cache_hash) {
-			char *file_name2 = obj->getFileName();
-			if (file_name2) {
-				if (strcmp(file_name,file_name2)!=0) {
-					if (rename(file_name,file_name2)!=0) {
-						rebuild_cache_files.insert(std::pair<std::string,std::string>(file_name,file_name2));
-					}
-					
-				}
-				free(file_name2);
-			}
-		}
-#endif
 	}
 	obj->release();
 failed:
@@ -402,7 +395,7 @@ failed:
 	}
 	return 0;
 }
-void clean_disk_orphan_files()
+void clean_disk_orphan_files(const char *cache_dir)
 {
 	
 }
@@ -411,7 +404,7 @@ void recreate_index_dir(const char *cache_dir)
 	klog(KLOG_NOTICE,"scan cache dir [%s]\n",cache_dir);
 	
 	list_dir(cache_dir,create_file_index,(void *)cache_dir);
-	clean_disk_orphan_files();
+	clean_disk_orphan_files(cache_dir);
 }
 bool recreate_index(const char *path,int &first_dir_index,int &second_dir_index,KTimeMatch *tm=NULL)
 {
@@ -420,7 +413,7 @@ bool recreate_index(const char *path,int &first_dir_index,int &second_dir_index,
 		for (;second_dir_index<=CACHE_DIR_MASK2;second_dir_index++) {
 			if (tm && !tm->checkTime(time(NULL))) {
 				return false;
-			}			
+			}
 			s << path;
 			s.addHex(first_dir_index);
 			s << PATH_SPLIT_CHAR;
@@ -459,52 +452,54 @@ void recreate_index(time_t start_time)
 	int i=0;
 	int j=0;
 	recreate_index(path.c_str(),i,j,NULL);
-#if 0
-	if (rebuild_cache_files.size()>0) {
-		klog(KLOG_ERR,"now rebuild disk cache hash.\n");
-		std::map<std::string,std::string>::iterator it;
-		for (it=rebuild_cache_files.begin();it!=rebuild_cache_files.end();it++) {
-			int ret = rename((*it).first.c_str(),(*it).second.c_str());
-			if (ret!=0) {
-				klog(KLOG_ERR,"cann't rename %s to %s\n",(*it).first.c_str(),(*it).second.c_str());
-			}
-		}
-		rebuild_cache_files.clear();
-	}
-#endif
 	klog(KLOG_ERR,"create index done. total find %d object.\n",load_count);
 	index_progress = false;
 }
 void init_disk_cache(bool firstTime)
 {
+	//printf("sizeof(KHttpObjectFileHeader)=%d\n", sizeof(KHttpObjectFileHeader));
 #ifdef ENABLE_SQLITE_DISK_INDEX
-	if (dci==NULL) {
-		memset(&index_scan_state,0,sizeof(index_scan_state));
-		load_index_scan_state();
-		dci = new KSqliteDiskCacheIndex;
-		char *file_name = getCacheIndexFile();
-		KStringBuf sqliteIndex;
+	if (dci) {
+		return;
+	}
+	memset(&index_scan_state,0,sizeof(index_scan_state));
+	load_index_scan_state();
+	dci = new KSqliteDiskCacheIndex;
+	char *file_name = getCacheIndexFile();
+	KStringBuf sqliteIndex;
+	//remove old version sqt
+	bool remove_old_index = false;
+	for (int i = 1; i < CACHE_DISK_VERSION; i++) {
 		sqliteIndex << file_name << ".sqt";
-		free(file_name);
-		KFile fp;
-		if (fp.open(sqliteIndex.getString(),fileRead)) {
-			fp.close();
-			if (dci->open(sqliteIndex.getString())) {
-				dci->start(ci_load,NULL);
-			} else {
-				klog(KLOG_ERR,"recreate the disk cache index database\n");
-				dci->close();
-				unlink(sqliteIndex.getString());
-				dci->create(sqliteIndex.getString());
-				rescan_disk_cache();
-			}
+		if (i > 1) {
+			sqliteIndex << i;
+		}
+		if (0 == unlink(sqliteIndex.getString())) {
+			remove_old_index = true;
+		}
+		sqliteIndex.clean();
+	}
+	if (remove_old_index) {
+		rescan_disk_cache();
+	}
+	sqliteIndex << file_name << ".sqt" << CACHE_DISK_VERSION;
+	free(file_name);
+	KFile fp;
+	if (fp.open(sqliteIndex.getString(),fileRead)) {
+		fp.close();
+		if (dci->open(sqliteIndex.getString())) {
+			dci->start(ci_load,NULL);
 		} else {
-			if (!dci->create(sqliteIndex.getString())) {
-				delete dci;
-				dci = NULL;
-			} else {
-				m_thread.start(NULL,load_cache_index);
-			}
+			klog(KLOG_ERR,"recreate the disk cache index database\n");
+			dci->close();
+			unlink(sqliteIndex.getString());
+			dci->create(sqliteIndex.getString());
+			rescan_disk_cache();
+		}
+	} else {
+		if (!dci->create(sqliteIndex.getString())) {
+			delete dci;
+			dci = NULL;
 		}
 	}
 #else
@@ -513,82 +508,6 @@ void init_disk_cache(bool firstTime)
 	m_thread.start(NULL,load_cache_index);
 #endif
 }
-bool loadCacheIndex()
-{
-	load_count = 0;
-	bool result = false;
-	char *file_name = getCacheIndexFile();
-#if 0
-	rebuild_cache_hash = true;
-#endif
-	KFile fp;
-	if (!fp.open(file_name,fileReadWrite)) {
-		xfree(file_name);
-#ifdef ENABLE_DB_DISK_INDEX
-		if (dci) {
-			return true;
-		}
-#endif
-		recreate_index(time(NULL));
-		return false;
-	}
-	HttpObjectIndexHeader indexHeader;
-	if(fp.read((char *)&indexHeader,sizeof(HttpObjectIndexHeader))!=sizeof(HttpObjectIndexHeader)){
-		klog(KLOG_ERR,"cann't read cache index header\n");
-		recreate_index(time(NULL));
-		goto done;
-	}
-#if 0
-	if (indexHeader.cache_dir_mask1==CACHE_DIR_MASK1 
-		&& indexHeader.cache_dir_mask2==CACHE_DIR_MASK2) {
-		rebuild_cache_hash = false;
-	}
-#endif
-	if(indexHeader.state != INDEX_STATE_CLEAN
-#if 0
-		|| rebuild_cache_hash
-#endif
-		){
-		klog(KLOG_ERR,"cache index file not clean.\n");
-		recreate_index(time(NULL));
-		goto done;
-	}
-	for(;;){
-		KHttpObject *obj = new KHttpObject;
-		if (fp.read((char *)&obj->index,sizeof(HttpObjectIndex))!=sizeof(HttpObjectIndex)) {
-			obj->release();
-			break;
-		}
-		if (create_http_object(&fp,obj)==cor_success) {
-			load_count++;
-#ifdef ENABLE_DB_DISK_INDEX
-			if (dci) {
-				dci->start(ci_add,obj);
-			}
-#endif
-		} else {
-			SET(obj->index.flags,FLAG_DEAD|FLAG_IN_DISK);		
-		}
-		obj->release();
-	}
-	result = true;
-	if(load_count!=indexHeader.object_count){
-		klog(KLOG_ERR,"Warning not all obj have loaded,total obj count=%d,loaded=%d\n",indexHeader.object_count,load_count);
-		debug("total object count=%d\n",cache.getCount());
-	}
-	//设置index为notclean
-	//fseeko(fp,0,SEEK_SET);
-	fp.seek(0,seekBegin);
-	indexHeader.state = INDEX_STATE_UNCLEAN;
-	fp.write((char *)&indexHeader,sizeof(HttpObjectIndexHeader));
-done:
-	if(file_name){
-		xfree(file_name);
-	}
-	klog(KLOG_ERR,"total load disk obj count=%d\n",load_count);
-	return result;
-}
-
 FUNC_TYPE FUNC_CALL scan_disk_cache_thread(void *param)
 {
 #if 0
@@ -615,14 +534,14 @@ FUNC_TYPE FUNC_CALL scan_disk_cache_thread(void *param)
 }
 FUNC_TYPE FUNC_CALL load_cache_index(void *param)
 {
-	time_t nowTime = time(NULL);
-	loadCacheIndex();
-	klog(KLOG_ERR,"load_cache_index use time=%d seconds\n",time(NULL)-nowTime);
+	//time_t nowTime = time(NULL);
+	//loadCacheIndex();
+	//klog(KLOG_ERR,"load_cache_index use time=%d seconds\n",time(NULL)-nowTime);
 	KTHREAD_RETURN;
 }
 void scan_disk_cache()
 {
-	if (index_progress) {
+	if (index_progress || cache.is_disk_shutdown()) {
 		return;
 	}
 	if (!index_scan_state.need_index_progress) {
@@ -637,87 +556,6 @@ void scan_disk_cache()
 	}
 }
 
-KTHREAD_FUNCTION handle_request_swapin(void *param,int msec)
-{
-	KHttpRequest *rq = (KHttpRequest *)param;
-	KHttpObject *obj = rq->ctx->obj;
-	assert(obj);
-	assert(obj->data->type == SWAPING_OBJECT);
-	KHttpObjectBody *osData = obj->data;
-	
-	assert(osData->os);
-	swap_in_result result = swap_in_busy;
-	KMutex *lock = obj->getLock();
-	if (msec < 2000) {
-		KHttpObjectBody *data = new KHttpObjectBody();
-		if (obj->swapin(data)) {
-			result = swap_in_success;
-		} else {
-			result = swap_in_failed;
-		}
-		/**
-		* swap in进来的时候是不锁的，这样尽可能的保证畅通，因为swap in可能会比较长时间
-		*/		
-		lock->Lock();
-		obj->data = data;
-		if (result == swap_in_success) {
-			SET(obj->index.flags, FLAG_IN_MEM);			
-		} else {
-			SET(obj->index.flags, FLAG_DEAD | OBJ_INDEX_UPDATE);
-		}
-		lock->Unlock();
-		if (result == swap_in_success) {
-			
-				cache.getHash(obj->h)->incSize(obj->index.content_length);
-		}
-	} else {
-		lock->Lock();
-		obj->data = NULL;
-		lock->Unlock();
-	}
-	assert(osData);
-	osData->os->swapResult(result);
-	delete osData;
-	KTHREAD_RETURN;
-}
-#if 0
-FUNC_TYPE FUNC_CALL swapin_thread(void *param)
-{
-	for (;;) {
-		KHttpRequest *rq = NULL;
-		swapinQueueLock.Lock();
-		if (swapinQueue.size()<=0) {
-			current_swapin_worker--;
-			swapinQueueLock.Unlock();
-			break;
-		}
-		rq = *swapinQueue.begin();
-		swapinQueue.pop_front();
-		swapinQueueLock.Unlock();
-		handle_request_swapin(rq);
-	}
-	KTHREAD_RETURN;
-}
-#endif
-void stage_swapin(KHttpRequest *rq)
-{
-	conf.ioWorker->start(rq,handle_request_swapin);
-	/*
-	swapinQueueLock.Lock();
-	swapinQueue.push_back(rq);
-	if (current_swapin_worker>=MAX_SWAPIN_WORKER) {
-		swapinQueueLock.Unlock();
-		return;
-	}
-	current_swapin_worker++;	
-	swapinQueueLock.Unlock();
-	if (!m_thread.start(NULL,swapin_thread)) {
-		swapinQueueLock.Lock();
-		current_swapin_worker--;
-		swapinQueueLock.Unlock();
-	}
-	*/
-}
 void rescan_disk_cache()
 {
 	index_scan_state.first_index = 0;

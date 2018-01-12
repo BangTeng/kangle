@@ -814,6 +814,7 @@ bool KVirtualHost::loadApiRedirect(KRedirect *rd, KApiPipeStream *st,
 }
 #ifdef ENABLE_VH_RS_LIMIT
 void KVirtualHost::setSpeedLimit(int speed_limit,KVirtualHost *ov) {
+	lock.Lock();
 	this->speed_limit = speed_limit;
 	if (speed_limit == 0) {
 		if (sl) {
@@ -833,6 +834,7 @@ void KVirtualHost::setSpeedLimit(int speed_limit,KVirtualHost *ov) {
 		}
 		sl->setSpeedLimit(speed_limit);
 	}
+	lock.Unlock();
 }
 void KVirtualHost::setSpeedLimit(const char * speed_limit_str,KVirtualHost *ov) {
 	setSpeedLimit((int) get_size(speed_limit_str),ov);

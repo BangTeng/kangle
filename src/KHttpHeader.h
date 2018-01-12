@@ -2,7 +2,7 @@
 #define KHTTPHEADER_H_
 #include "KSocket.h"
 #include "ksapi.h"
-
+#define MAX_HEADER_ATTR_VAL_SIZE 65500
 struct kgl_str_t
 {
 	char *data;
@@ -27,6 +27,9 @@ extern kgl_str_t know_http_headers[];
 void *kgl_memstr(char *haystack, int haystacklen, char *needle, int needlen);
 #define kgl_cpymem(dst, src, n)   (((u_char *) memcpy(dst, src, n)) + (n))
 inline KHttpHeader *new_http_header(const char *attr,int attr_len,const char *val,int val_len) {
+	if (attr_len > MAX_HEADER_ATTR_VAL_SIZE || val_len>MAX_HEADER_ATTR_VAL_SIZE) {
+		return NULL;
+	}
 	KHttpHeader *header = (KHttpHeader *)malloc(sizeof(KHttpHeader));
 	header->next = NULL;
 	header->attr = (char *)malloc(attr_len+1);

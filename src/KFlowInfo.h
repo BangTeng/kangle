@@ -2,8 +2,6 @@
 #define KFLOWINFO_H
 #include "global.h"
 #include "KCountable.h"
-#define FLOW_UPDATE_TOTAL        1
-#define FLOW_UPDATE_CACHE        2
 /**
 * 流量统计类
 */
@@ -17,15 +15,13 @@ public:
 		last_flow = 0;
 		last_time = kgl_current_msec;
 	}
-	void addFlow(INT64 flow,int flowFlag)
+	void addFlow(INT64 flow,bool cache_hit)
 	{
 		refsLock.Lock();
-		if (TEST(flowFlag,FLOW_UPDATE_CACHE)) {
+		if (cache_hit) {
 			cache += flow;
 		}
-		if (TEST(flowFlag,FLOW_UPDATE_TOTAL)) {
-			this->flow += flow;
-		}
+		this->flow += flow;
 		refsLock.Unlock();
 	}
 	void reset()
@@ -83,7 +79,6 @@ public:
 	{
 		next = NULL;
 		this->fi = fi;
-		fi->addRef();
 	}
 	~KFlowInfoHelper()
 	{

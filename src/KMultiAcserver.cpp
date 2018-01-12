@@ -356,12 +356,8 @@ std::string KMultiAcserver::nodeForm(std::string name, KMultiAcserver *as,
 	if (helper) {
 		self_ip = helper->getIp();
 	}
-	const char *upstream_sign = NULL;
-	if (helper) {
-		upstream_sign = helper->get_upstream_sign();
-	}
 	s << "self_ip: <input name='self_ip' value='" << (self_ip ? self_ip : "") << "'><br>";
-	s << "upstream_sign: <input name='upstream_sign' value='" << (upstream_sign ? upstream_sign : "") << "'><br>";
+	s << "<input type=checkbox name='sign' value='1' " << (helper && helper->sign ? "checked":"") << ">sign<br>";
 	s << "<input type='submit' value='" << LANG_SUBMIT << "'>";
 	s << "</form>";
 	if (as) {
@@ -579,12 +575,6 @@ void KMultiAcserver::parseNode(const char *nodeString)
 					if (ip) {
 						*ip = '\0';
 						ip++;
-						char *upstream_sign = strchr(ip, '|');
-						if (upstream_sign) {
-							*upstream_sign = '\0';
-							upstream_sign++;
-							sockHelper->set_upstream_sign(upstream_sign);
-						}
 						sockHelper->setIp(ip);
 					}
 				}

@@ -11,6 +11,7 @@
 #include "KUrl.h"
 #include "KHttpHeader.h"
 #include "KHttpRequest.h"
+#include "KHttpObjectSwaping.h"
 
 #include "KHttpKeyValue.h"
 #include "time_utils.h"
@@ -21,9 +22,10 @@
 #define   LIST_IN_DISK  1
 #define   LIST_IN_NONE  2
 
-extern KMutex hash_lock[HASH_SIZE+1];
+extern KMutex obj_lock[HASH_SIZE+1];
 
 class KHttpObjectHash;
+
 
 #define MEMORY_OBJECT       0
 #define BIG_OBJECT          1
@@ -48,21 +50,31 @@ public:
 				KBuffer::destroy(bodys);
 			}
 			break;
+#ifdef ENABLE_DISK_CACHE
 		case SWAPING_OBJECT:
 			if (os) {
 				delete os;
 			}
 			break;
+#endif
 		
+		default:
+			assert(bodys == NULL);
+			break;
 		}
 	}
+#ifdef ENABLE_DISK_CACHE
+	bool restore_header(KHttpObject *obj,char *buf, int len);
+	void create_type(HttpObjectIndex *index);
+#endif
 	unsigned short status_code;
 	unsigned short type;
-	int headerSize;
 	KHttpHeader *headers; /* headers */
 	union {
-		buff *bodys; /* data storage	*/
+		buff *bodys;
+#ifdef ENABLE_DISK_CACHE
 		KHttpObjectSwaping *os;
+#endif
 		
 	};
 };
@@ -75,6 +87,15 @@ inline bool is_status_code_no_body(int status_code) {
 		}
 		return false;
 }
+inline bool status_code_can_cache(u_short code) {
+	switch (code) {
+	case STATUS_OK:
+			//目前仅支持200
+			return true;
+	default:
+			return false;
+	}
+}
 /**
  * http物件。例如网页之类,缓存对象
  */
@@ -85,14 +106,16 @@ public:
 	}
 	KHttpObject(KHttpRequest *rq) {		
 		init(rq->url);
+		url->encoding = rq->raw_url.encoding;
 		data = new KHttpObjectBody();	
 		SET(index.flags,FLAG_IN_MEM);
 	}
-	KHttpObject(KHttpObject *obj);
+	KHttpObject(KHttpRequest *rq,KHttpObject *obj);
 	void init(KUrl *url) {
 		memset(&index,0,sizeof(index));
+		memset(&dk, 0, sizeof(dk));
 		list_state = LIST_IN_NONE;
-		in_cache = 0;
+		runtime_flags = 0;
 		index.last_verified = kgl_current_sec;
 		this->url = url;
 		h = HASH_SIZE;
@@ -101,42 +124,43 @@ public:
 	}
 	inline char *getCharset()
 	{
-		if(data==NULL){
+		if (data==NULL) {
 			return NULL;
 		}
 		KHttpHeader *tmp = data->headers;
-		while(tmp){
-			if(strcasecmp(tmp->attr,"Content-Type")==0){		
-				const char *p = strstr(tmp->val, "charset=");
-				if (p) {
-					p += 8;
-					while (*p && IS_SPACE((unsigned char)*p))
-						p++;
-					const char *charsetend = p;
-					while (*charsetend && !IS_SPACE((unsigned char)*charsetend)
-							&& *charsetend != ';')
-						charsetend++;
-					int charset_len = charsetend - p;
-					char *charset = (char *)malloc(charset_len+1);
-					memcpy(charset,p,charset_len);
-					charset[charset_len] = '\0';
-					return charset;		
-				}
+		while (tmp){
+			if (strcasecmp(tmp->attr, "Content-Type") != 0) {
+				tmp = tmp->next;
+				continue;
+			}
+			const char *p = strstr(tmp->val, "charset=");
+			if (p == NULL) {
 				return NULL;
 			}
-			tmp = tmp->next;
+			p += 8;
+			while (*p && IS_SPACE((unsigned char)*p))
+				p++;
+			const char *charsetend = p;
+			while (*charsetend && !IS_SPACE((unsigned char)*charsetend)
+					&& *charsetend != ';')
+				charsetend++;
+			int charset_len = charsetend - p;
+			char *charset = (char *)malloc(charset_len+1);
+			memcpy(charset,p,charset_len);
+			charset[charset_len] = '\0';
+			return charset;
 		}
 		return NULL;
 	}
 	KMutex *getLock()
 	{
-		return &hash_lock[h];
+		return &obj_lock[h];
 	}
 	int getRefs() {
 		u_short hh = h;
-		hash_lock[hh].Lock();
+		obj_lock[hh].Lock();
 		int ret = refs;
-		hash_lock[hh].Unlock();
+		obj_lock[hh].Unlock();
 		return ret;
 	}
 	KHttpHeader *findHeader(const char *attr,int len) {
@@ -164,30 +188,33 @@ public:
 	}
 	void addRef() {
 		u_short hh = h;
-		hash_lock[hh].Lock();
+		obj_lock[hh].Lock();
 		refs++;
-		hash_lock[hh].Unlock();
+		obj_lock[hh].Unlock();
 	}
 	void release()
 	{
 		u_short hh = h;
-		hash_lock[hh].Lock();
+		obj_lock[hh].Lock();
 		assert(refs>0);
 		refs--;
 		if (refs==0) {
-			hash_lock[hh].Unlock();
+			obj_lock[hh].Unlock();
 			delete this;
 			return;
 		}
-		hash_lock[hh].Unlock();
+		obj_lock[hh].Unlock();
 	}
 	unsigned getCurrentAge(time_t nowTime) {	
 		return (unsigned) (nowTime - index.last_verified);
 	}
 #ifdef ENABLE_FORCE_CACHE
 	//强制缓存
-	void forceCache(bool insertLastModified=true)
+	bool force_cache(bool insertLastModified=true)
 	{
+		if (!status_code_can_cache(data->status_code)) {
+			return false;
+		}
 		CLR(index.flags,ANSW_NO_CACHE|OBJ_MUST_REVALIDATE);
 		if (!TEST(index.flags,ANSW_LAST_MODIFIED|OBJ_HAS_ETAG)) {
 			index.last_modified = kgl_current_sec;
@@ -200,6 +227,7 @@ public:
 			SET(index.flags,ANSW_LAST_MODIFIED);
 		}
 		SET(index.flags,OBJ_IS_STATIC2);
+		return true;
 	}
 #endif
 	bool isNoBody(KHttpRequest *rq) {
@@ -219,26 +247,29 @@ public:
 		}
 		return false;
 	}
-	void unlinkDiskFile();
-	bool swapin(KHttpObjectBody *data);
-	bool swapinBody(KFile *fp,KHttpObjectBody *data);
+
 	void count_size(INT64 &mem_size,INT64 &disk_size)
 	{
 		if (TEST(index.flags,FLAG_IN_MEM)) {
 		
-				mem_size += index.have_length;
+				mem_size += index.content_length;
 		}
 		if (TEST(index.flags,FLAG_IN_DISK)) {
-			disk_size += index.have_length;
+			disk_size += index.content_length;
 		}
 	}
-	bool swapout();
 #ifdef ENABLE_DISK_CACHE
+	bool swapout(bool fast_model);
+	bool swapin(KHttpObjectBody *data);
+	bool swapinBody(KFile *fp, KHttpObjectBody *data);
+	void unlinkDiskFile();
 	char *getFileName(bool part=false);
+	void write_file_header(KHttpObjectFileHeader *fileHeader);
+	bool save_header(KBufferFile *fp,const char *url, int url_len);
+	char *build_aio_header(int &len);
+	int caculate_header_size(int url_len);
+	bool save_dci_header(KBufferFile *fp);
 #endif
-	int saveHead(KFile *fp);
-	int saveIndex(KFile *fp);
-
 	bool removeHttpHeader(const char *attr)
 	{
 		bool result = false;
@@ -293,11 +324,21 @@ public:
 	 LIST_IN_DISK
 	 */
 	unsigned char list_state;
-	unsigned char in_cache;
+	union {
+		struct {
+			unsigned char in_cache : 1;
+			unsigned char dc_index_update : 1;//文件index更新
+			unsigned char us_ok_dead : 1;
+			unsigned char us_err_dead : 1;
+			unsigned char need_gzip : 1;
+		};
+		unsigned char runtime_flags;
+	};
 	short h; /* hash value */
 	int refs;
 	KUrl *url;
 	KHttpObjectBody *data;
+	KHttpObjectKey dk;
 	HttpObjectIndex index;
 private:
 	~KHttpObject();

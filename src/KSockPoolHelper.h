@@ -81,8 +81,7 @@ public:
 		if (lifeTime != sh->lifeTime) {
 			return true;
 		}
-		if (upstream_sign != sh->upstream_sign 
-			|| (upstream_sign && strcmp(upstream_sign, sh->upstream_sign) != 0)) {
+		if (sign != sh->sign) {
 			return true;
 		}
 		return false;
@@ -106,15 +105,6 @@ public:
 		lock.Unlock();
 	}
 	void checkActive();
-	int get_upstream_sign(char *sign, int max_size)
-	{
-		if (this->upstream_sign == NULL) {
-			return 0;
-		}
-		int len = MIN(this->upstream_sign_len, max_size);
-		memcpy(sign, this->upstream_sign, len);
-		return len;
-	}
 	bool setHostPort(std::string host,int port,const char *ssl);
 	bool setHostPort(std::string host, const char *port);
 	void disable();
@@ -134,27 +124,13 @@ public:
 	{
 		return this->ip;
 	}
-	const char *get_upstream_sign() {
-		return this->upstream_sign;
-	}
-	void set_upstream_sign(const char *upstream_sign) {
-		if (this->upstream_sign != NULL) {
-			free(this->upstream_sign);
-			this->upstream_sign = NULL;
-		}
-		this->upstream_sign_len = strlen(upstream_sign);
-		if (this->upstream_sign_len <= 0) {
-			return;
-		}
-		this->upstream_sign = strdup(upstream_sign);		
-	}
 	uint64_t hit;
 	int weight;
 	std::string host;
 	int port;
 	bool monitor;
 	bool isUnix;
-	bool isIp;
+	bool sign;
 #ifdef ENABLE_UPSTREAM_SSL
 	
 	std::string ssl;
@@ -171,7 +147,7 @@ public:
 	 * 下次试连接时间，如果是0表示活跃的。
 	 */
 	time_t tryTime;
-	bool real_connect(KHttpRequest *rq,KUpstreamSelectable *socket);
+	bool real_connect(KHttpRequest *rq, KUpstreamSelectable *socket, bool name_resolve);
 	void buildXML(std::stringstream &s);
 	bool parse(std::map<std::string,std::string> &attr);
 	void monitorConnectStage(KHttpRequest *rq, KUpstreamSelectable *socket);
@@ -196,8 +172,6 @@ private:
 	{
 		monitor = false;
 	}
-	char *upstream_sign;
-	int upstream_sign_len;
 	char *ip;
 	KMutex lock;
 #ifdef ENABLE_UPSTREAM_SSL

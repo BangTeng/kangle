@@ -93,7 +93,7 @@ void insert_via(KHttpRequest *rq, KWStream &s,
 bool make_webdav_destination_env(KHttpRequest *rq,KRedirect *rd,KEnvInterface *env,bool chrooted);
 bool make_http_env(KHttpRequest *rq, KBaseRedirect *rd,time_t lastModified,KFileName *file,KEnvInterface *env, bool chrooted=false);
 KWStream *makeWriteStream(KHttpRequest *rq,KHttpObject *obj,KWStream *st,bool &autoDelete);
-bool stored_obj(KHttpObject *obj,KHttpObject *old_obj,int list_state);
+bool stored_obj(KHttpObject *obj,int list_state);
 bool stored_obj(KHttpRequest *rq, KHttpObject *obj,KHttpObject *old_obj);
 bool adjust_range(KHttpRequest *rq,INT64 &len);
 bool send_http(KHttpRequest *rq, KHttpObject *obj, int code, KReadWriteBuffer *body = NULL);
@@ -104,7 +104,7 @@ int checkResponse(KHttpRequest *rq,KHttpObject *obj);
 
 inline bool check_need_gzip(KHttpRequest *rq, KHttpObject *obj) {
         //如果obj标记为已经压缩过，或者标记了不用压缩，则不压缩数据
-		if (TEST(obj->index.flags,OBJ_GZIPED)) {
+		if (TEST(obj->url->encoding,KGL_ENCODING_YES)) {
 				return false;
 		}
         //obj有多个引用,不压缩
@@ -112,8 +112,9 @@ inline bool check_need_gzip(KHttpRequest *rq, KHttpObject *obj) {
                 return false;
         }
         //客户端不支持压缩格式，不压缩
-        if (!TEST(rq->flags,RQ_HAS_GZIP))
-                return false;
+		if (!TEST(rq->raw_url.encoding, KGL_ENCODING_GZIP)) {
+			return false;
+		}
         //status_code是206，表示是部分内容时也不压缩,或者是200回应，但用了url ranged技术
         //注：这种情况没有经过详细考证
         if (obj->data->status_code == STATUS_CONTENT_PARTIAL 
@@ -124,10 +125,7 @@ inline bool check_need_gzip(KHttpRequest *rq, KHttpObject *obj) {
                 return false;
         }
         //标记为需要压缩则返回要压缩
-        if (TEST(obj->index.flags,FLAG_NEED_GZIP)) {
-                return true;
-        }
-        return false;
+		return obj->need_gzip;
 }
 
 //在队列后，处理已经就绪的请求
@@ -261,17 +259,23 @@ inline bool async_send_valide_object(KHttpRequest *rq, KHttpObject *obj)
 			}
 		} else if (TEST(rq->flags,RQ_IF_RANGE_DATE)) {
 			CLR(rq->flags,RQ_HAVE_RANGE);
+			rq->range_from = 0;
+			rq->range_to = -1;
 		}
 	} else if (TEST(rq->flags,RQ_HAS_IF_NONE_MATCH)) {
-		KHttpHeader *if_none_match = rq->parser.findHttpHeader("If-None-Match",sizeof("If-None-Match")-1);
-		if (if_none_match && obj->matchEtag(if_none_match->val,if_none_match->val_len)) {
+		kgl_str_t *if_none_match = rq->ctx->if_none_match;
+		if (if_none_match && obj->matchEtag(if_none_match->data, if_none_match->len)) {
 			rq->status_code = STATUS_NOT_MODIFIED;
 		}
+		rq->ctx->clean_if_none_match();
 	} else if (TEST(rq->flags,RQ_IF_RANGE_ETAG)) {
-		KHttpHeader *if_none_match = rq->parser.findHttpHeader("If-Range",sizeof("If-Range")-1);
-		if (if_none_match==NULL || !obj->matchEtag(if_none_match->val,if_none_match->val_len)) {
-			CLR(rq->flags,RQ_HAVE_RANGE);
+		kgl_str_t *if_none_match = rq->ctx->if_none_match;
+		if (if_none_match==NULL || !obj->matchEtag(if_none_match->data, if_none_match->len)) {
+			CLR(rq->flags, RQ_HAVE_RANGE);
+			rq->range_from = 0;
+			rq->range_to = -1;
 		}
+		rq->ctx->clean_if_none_match();
 	}
 	bool result;
 	if (rq->status_code != STATUS_NOT_MODIFIED || rq->needFilter()) {

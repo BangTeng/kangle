@@ -52,7 +52,6 @@ KRedirect *KCdnContainer::refsRedirect(const char *ip, const char *host, int por
 	server->sockHelper->setHostPort(host,port,ssl);
 	server->sockHelper->setLifeTime(life_time);
 	server->sockHelper->setIp(ip);
-	server->sockHelper->isIp = isIp;
 	KRedirectNode *rn = new KRedirectNode;
 	rn->name = s.stealString();
 	rn->rd = server;

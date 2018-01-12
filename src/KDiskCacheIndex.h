@@ -9,10 +9,8 @@ enum ci_operator
 	ci_add,
 	ci_del,
 	ci_update,
-	ci_updateLast,
 	ci_close,
-	ci_begin,
-	ci_commit,
+	ci_flush,
 	ci_load
 };
 struct diskCacheOperatorParam
@@ -20,10 +18,10 @@ struct diskCacheOperatorParam
 	ci_operator op;
 	unsigned filename1;
 	unsigned filename2;	
-	HttpObjectIndex data;
+	KHttpObjectDbIndex data;
 	char *url;
 };
-typedef void (*loadDiskCacheIndexCallBack) (const char *url,const char *data,int dataLen);
+typedef void (*loadDiskCacheIndexCallBack) (unsigned filename1, unsigned filename2,const char *url,const char *data,int dataLen);
 class KDiskCacheIndex
 {
 public:
@@ -50,15 +48,14 @@ public:
 protected:	
 	virtual bool begin() = 0;
 	virtual bool commit() = 0;
-	virtual bool add(unsigned filename1,unsigned filename2,const char *url,time_t t,const char *data,int dataLen) = 0;
+	virtual bool add(unsigned filename1,unsigned filename2,const char *url,const char *data,int dataLen) = 0;
 	virtual bool del(unsigned filename1,unsigned filename2) = 0;
 	virtual bool update(unsigned filename1,unsigned filename2,const char *data,int dataLen) = 0;
-	virtual bool updateLast(unsigned filename1,unsigned filename2,time_t t) = 0;
 	virtual bool load(loadDiskCacheIndexCallBack callBack) = 0;
 private:
-	void insertTranscation();
 	KAsyncWorker *worker;
-	bool transaction;
+	int transaction_count;
+	bool shutdown_flag;
 };
 extern KDiskCacheIndex *dci;
 #endif

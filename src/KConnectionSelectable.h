@@ -28,7 +28,7 @@ public:
 	{
 		memset(static_cast<KSelectable *>(this), 0, sizeof(KSelectable));
 		this->socket = socket;
-		fd = socket;
+		bind_socket(socket);
 #ifdef ENABLE_HTTP2
 		http2 = NULL;
 #endif
@@ -38,6 +38,7 @@ public:
 #endif
 		pool = NULL;
 	}
+
 	kgl_pool_t *get_pool()
 	{
 		if (pool == NULL) {
@@ -49,6 +50,10 @@ public:
 	void resultSSLShutdown(int got);
 	query_vh_result useSniVirtualHost(KHttpRequest *rq);
 #endif
+	//是否有事件
+	bool is_event(KHttpRequest *rq, uint16_t flag);
+	//是否锁定，如果返回true，资源不可释放
+	bool is_locked(KHttpRequest *rq);
 	/* 同步读 */
 	int read(KHttpRequest *rq,char *buf,int len);
 	/* 同步写 */
@@ -64,9 +69,10 @@ public:
 	void write(KHttpRequest *rq,resultEvent result,bufferEvent buffer);
 	void read_hup(KHttpRequest *rq,resultEvent result);
 	void shutdown(KHttpRequest *rq);
+	void unlock_read_hup(KHttpRequest *rq, resultEvent result);
 	//void removeSocket();
 
-	void next(KHttpRequest *rq,resultEvent result);	
+	void next(resultEvent result,void *arg);
 	void removeRequest(KHttpRequest *rq,bool add_sync);
 	//return header len
 	int startResponse(KHttpRequest *rq,INT64 body_len);
@@ -105,5 +111,5 @@ protected:
 		}
 	}
 };
-
+void request_connection_broken(void *arg, int got);
 #endif

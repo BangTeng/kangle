@@ -26,6 +26,10 @@ public:
 			free((*it).first);
 		}
 	}
+	bool supportRuntime()
+	{
+		return true;
+	}
 	void requestClean(char *ip)
 	{
 		lock.Lock();
@@ -48,15 +52,17 @@ public:
 		lock.Lock();
 		std::map<char *,KSpeedLimit *,lessp>::iterator it;
 		it = ips.find(rq->client_ip);
+		KSpeedLimit *sl = NULL;
 		if (it==ips.end()) {
-			KSpeedLimit *sl = new KSpeedLimit;
+			sl = new KSpeedLimit;
 			sl->setSpeedLimit(speed_limit);
 			ips.insert(std::pair<char *,KSpeedLimit *>(strdup(rq->client_ip),sl));
-			rq->addSpeedLimit(sl);
 		} else {
-			rq->addSpeedLimit((*it).second);
+			sl = (*it).second;
 		}
+		sl->addRef();
 		lock.Unlock();
+		rq->pushSpeedLimit(sl);
 		KIpSpeedLimitContext *speed_limit_context = new KIpSpeedLimitContext();
 		speed_limit_context->ip = strdup(rq->client_ip);
 		speed_limit_context->mark = this;

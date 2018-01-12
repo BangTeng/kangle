@@ -29,15 +29,20 @@ public:
 	{
 		assert(obj==NULL && old_obj==NULL);
 		assert(st == NULL);
-		if (if_none_match!=NULL) {
+		assert(if_none_match == NULL);
+	}
+	void pushObj(KHttpObject *obj);
+	void popObj();
+	void clean_if_none_match()
+	{
+		if (if_none_match != NULL) {
 			if (if_none_match->data) {
 				free(if_none_match->data);
 			}
 			free(if_none_match);
+			if_none_match = NULL;
 		}
 	}
-	void pushObj(KHttpObject *obj);
-	void popObj();
 	void set_if_none_match(const char *etag,int len)
 	{
 		if (if_none_match) {
@@ -57,6 +62,8 @@ public:
 #ifdef ENABLE_REQUEST_QUEUE
 	bool queue_handled;
 #endif
+	bool cache_hit;
+	bool cache_hit_part;
 	bool haveStored;
 	bool new_object;
 	bool know_length;
@@ -64,10 +71,12 @@ public:
 	bool connection_upgrade;
 	bool connection_connect_proxy;
 	bool always_on_model;
-	bool stream_gziped;
 	bool upstream_chunked;
 	bool response_checked;
 	bool no_body;
+	bool upstream_sign;
+	bool parent_signed;
+	bool read_huped;
 #ifndef NDEBUG
 	bool upstream_expected_done;
 	//用于调试，跟踪上流socket
@@ -75,6 +84,7 @@ public:
 #endif
 	//lastModified类型
 	modified_type mt;
+	u_short us_code;
 	time_t lastModified;
 	kgl_str_t *if_none_match;
 	INT64 content_range_length;

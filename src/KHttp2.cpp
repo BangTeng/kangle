@@ -135,7 +135,8 @@ KHttp2::KHttp2()
 }
 KHttp2::~KHttp2()
 {
-	//printf("~KHttp2 called [%p]\n",this);
+	//printf("~KHttp2 called [%p %d]\n",this,client_model);
+	assert(write_processing == 0 && read_processing == 0 && processing == 0);
 	for (int i = 0; i < kgl_http_v2_index_size(); i++) {
 		KHttp2Node *node = streams_index[i];
 		assert(node == NULL);
@@ -214,10 +215,12 @@ void KHttp2::getReadBuffer(iovec *buf,int &bufCount)
 void KHttp2::getWriteBuffer(iovec *buf,int &bufCount)
 {
 	lock.Lock();
-	write_buffer.getReadBuffer(c->fd,buf,bufCount);
+	write_buffer.getReadBuffer(c->socket,buf,bufCount);
 	lock.Unlock();
 }
-
+/**
+关闭http2连接，read指明是关闭读或写
+*/
 u_char *KHttp2::close(bool read,int status)
 {
 	//printf("http2 [%p] close status=[%d]\n", this,status);
@@ -279,14 +282,14 @@ u_char *KHttp2::close(bool read,int status)
 			}			
 		}
 	}
-	if (can_destroy()) {
-		lock.Unlock();
+	bool destroy_flag = can_destroy();
+	lock.Unlock();
+	if (destroy_flag) {
+		//http2释放
 		destroy();
-	} else {
-		lock.Unlock();
 	}
 	if (buf) {
-		KHttp2WriteBuffer::remove_buff(buf);
+		KHttp2WriteBuffer::remove_buff(buf,this);
 	}
 	kgl_http2_event *next_event;
 	while (wait_event) {
@@ -667,8 +670,7 @@ void KHttp2::setDependency(KHttp2Node *node, uint32_t depend, bool exclusive)
 
 }
 void KHttp2::resultWrite(int got)
-{
-	//printf("http2 write got=[%d]\n", got);
+{	
 	if (got<=0) {
 		close(false,KGL_HTTP_V2_CONNECT_ERROR);
 		return;
@@ -678,31 +680,44 @@ void KHttp2::resultWrite(int got)
 		return;
 	}
 	lock.Lock();
-	http2_buff *remove_list = write_buffer.readSuccess(c->fd,got);
+	http2_buff *remove_list = write_buffer.readSuccess(c->socket,got);
 	lock.Unlock();
-	KHttp2WriteBuffer::remove_buff(remove_list);
+	KHttp2WriteBuffer::remove_buff(remove_list,this);
 	startWrite(false);
+	//printf("http2 write got=[%d]\n", got);
 }
 //相当于重写了KSelectable::eventRead，只不过带上了锁
 void KHttp2::startRead()
 {
-#ifndef _WIN32
-	lock.Lock();
-	if (write_processing==1) {
-		//printf("write_processing is set,disable read...\n");
+	lock.Lock();	
+	/*
+	if (processing == 0 && kgl_current_sec - last_stream_time > conf.keep_alive + 30) {
+		goaway = 1;
+		//TODO:send goaway
+		c->clear_flag(STF_ALWAYS_READ);
 		read_processing = 0;
 		lock.Unlock();
 		return;
 	}
-	lock.Unlock();
+	*/
+#ifndef _WIN32
+	if (write_processing==1) {
+		//printf("write_processing is set,disable read...\n");
+		lock.Unlock();
+		c->asyncWrite(c, resultHttp2Write, bufferHttp2Write);
+		return;
+	}
 #endif
+	lock.Unlock();
 	c->asyncRead(c, resultHttp2Read, bufferHttp2Read);
 }
 void KHttp2::destroy()
 {
 	if (state.stream) {
-		state.stream->out_closed = 1;		
-		destroy_node(state.stream->node);
+		state.stream->out_closed = 1;
+		if (state.stream->node) {
+			destroy_node(state.stream->node);
+		}
 		delete state.stream;
 		state.stream = NULL;
 		state.pool = NULL;
@@ -716,36 +731,46 @@ void KHttp2::destroy()
 void KHttp2::startWrite(bool check_write_processing)
 {
 	lock.Lock();
-	if (check_write_processing) {
+	if (check_write_processing) {		
 		if (write_processing == 1 || write_buffer.getBufferSize() == 0) {
 			lock.Unlock();
 			return;
 		}
 		write_processing = 1;
 	} else {
+		//resultHttp2Write调用,所以startWrite算做继续调用，不用检查write_processing
 		assert(write_processing == 1);
 		if (write_buffer.getBufferSize() == 0) {
+			if (goaway==1) {
+				lock.Unlock();
+				close(false, KGL_HTTP_V2_NO_ERROR);
+				return;
+			}
 			write_processing = 0;
-			
 #ifndef _WIN32
 			//printf("write end...read_processing=[%d]\n",read_processing);
 			assert(c->selector->isSameThread());
-			read_processing = 1;
+			assert(read_processing == 1);
 #endif
 			lock.Unlock();
 #ifndef _WIN32
-			if (!c->selector->read(c,resultHttp2Read,bufferHttp2Read,c)) {
-				resultHttp2Read(c,-1);
-			}
+			c->asyncRead(c, resultHttp2Read, bufferHttp2Read);			
 #endif
 			return;
 		}
 	}
 #ifndef _WIN32
-	if (!c->selector->write(c, resultHttp2Write, bufferHttp2Write, c)) {
-		c->selector->addTimer(NULL,http2_write_failed,c,0);
-	}
+	//此时startWrite调用有可能是不同线程调用，确保bufferHttp2Write为同线程调用回来
+	bool result = c->selector->write(c, resultHttp2Write, bufferHttp2Write, c);
 	lock.Unlock();
+	if (result) {
+		return;
+	}	
+	if (!c->selector->isSameThread()) {
+		c->selector->addTimer(NULL,http2_write_failed,c,0);
+	} else {
+		resultHttp2Write(c,-1);	
+	}
 #else
 	lock.Unlock();
 	c->asyncWrite(c, resultHttp2Write, bufferHttp2Write);
@@ -792,6 +817,7 @@ void KHttp2::release_stream(KHttp2Context *ctx)
 {
 	if (ctx->node) {
 		lock.Lock();
+		last_stream_time = kgl_current_sec;
 		if (ctx->read_wait) {
 			delete ctx->read_wait;
 			ctx->read_wait = NULL;
@@ -962,7 +988,15 @@ void KHttp2::remove_event(KHttp2Context *http2_ctx)
 void KHttp2::read_hup(KHttp2Context *http2_ctx, resultEvent result, void *arg)
 {
 	lock.Lock();
+	if (http2_ctx->read_wait) {
+		delete http2_ctx->read_wait;
+		http2_ctx->read_wait = NULL;
+	}
 	if (http2_ctx->out_closed) {
+		if (http2_ctx->write_wait) {
+			delete http2_ctx->write_wait;
+			http2_ctx->write_wait = NULL;
+		}
 		lock.Unlock();
 		result(arg, -1);
 		return;
@@ -974,15 +1008,23 @@ void KHttp2::read_hup(KHttp2Context *http2_ctx, resultEvent result, void *arg)
 	http2_ctx->write_wait->buffer = NULL;
 	http2_ctx->write_wait->result = result;
 	http2_ctx->write_wait->arg = arg;
+	http2_ctx->write_wait->len = -1;
 	lock.Unlock();
 }
 void KHttp2::read(KHttp2Context *http2_ctx,resultEvent result,bufferEvent buffer,void *arg)
 {
 	lock.Lock();
+	assert(http2_ctx);
+	if (http2_ctx->write_wait) {
+		delete http2_ctx->write_wait;
+		http2_ctx->write_wait = NULL;
+	}
+	if (http2_ctx->read_wait) {
+		delete http2_ctx->read_wait;
+		http2_ctx->read_wait = NULL;
+	}
 	
 	//printf("stream_recv_window=[%d],recv_window=[%d]\n", http2_ctx->recv_window, recv_window);
-	assert(http2_ctx);
-	assert(http2_ctx->read_wait==NULL);
 	bool recv_window_result = check_recv_window(http2_ctx);
 	if (http2_ctx->read_buffer && http2_ctx->read_buffer->getHeader()!=NULL) {
 		//buffer里面有数据
@@ -1020,17 +1062,21 @@ void KHttp2::write(KHttp2Context *http2_ctx,resultEvent result,bufferEvent buffe
 		return;
 	}	
 	lock.Lock();
+	if (http2_ctx->read_wait) {
+		delete http2_ctx->read_wait;
+		http2_ctx->read_wait = NULL;
+	}
 	if (http2_ctx->write_wait) {
 		delete http2_ctx->write_wait;
 		http2_ctx->write_wait = NULL;
 	}
-	assert(http2_ctx->write_wait == NULL);
 	//printf("stream_send_window=[%d] send_window=[%d]\n",http2_ctx->send_window,send_window);
 	if (http2_ctx->send_window <= 0 || send_window<=0) {
 		http2_ctx->write_wait =  new kgl_http2_event;
 		http2_ctx->write_wait->arg = arg;
 		http2_ctx->write_wait->result = result;
 		http2_ctx->write_wait->buffer = buffer;
+		http2_ctx->write_wait->len = -1;
 		lock.Unlock();
 		return;
 	}
@@ -1164,14 +1210,17 @@ bool KHttp2::add_header(KHttp2Context *ctx, const char *name, hlen_t name_len, c
 }
 void KHttp2::init(KConnectionSelectable *c)
 {
+	//printf("Http2 init [%p]\n", this);
 	this->c = c;
 	c->tmo = 5;
+	c->set_flag(STF_ALWAYS_READ);
 	read_processing = 1;
 	send_window = KGL_HTTP_V2_DEFAULT_WINDOW;
 	recv_window = KGL_HTTP_V2_CONNECTION_RECV_WINDOW;
 	init_window = KGL_HTTP_V2_DEFAULT_WINDOW;
 	frame_size = KGL_HTTP_V2_DEFAULT_FRAME_SIZE;
 	max_stream = KGL_HTTP_V2_DEFAULT_MAX_STREAM;	
+	last_stream_time = kgl_current_sec;
 }
 
 void KHttp2::server(KConnectionSelectable *c)
@@ -1395,11 +1444,13 @@ u_char *KHttp2::state_read_data(u_char *pos, u_char *end)
 			lock.Lock();
 			stream->in_closed = 1;
 			kgl_http2_event *wait = stream->read_wait;
-			stream->read_wait = NULL;
-			lock.Unlock();
+			stream->read_wait = NULL;			
 			if (wait) {
+				lock.Unlock();
 				wait->result(wait->arg, 0);
 				delete wait;
+			} else {
+				lock.Unlock();
 			}
 		}		
 		return state_skip_padded(pos, end);
@@ -1441,11 +1492,13 @@ u_char *KHttp2::state_read_data(u_char *pos, u_char *end)
 		lock.Lock();
 		stream->in_closed = 1;
 		kgl_http2_event *wait = stream->read_wait;
-		stream->read_wait = NULL;
-		lock.Unlock();
-		if (wait) {			
+		stream->read_wait = NULL;		
+		if (wait) {	
+			lock.Unlock();
 			wait->result(wait->arg, 0);
 			delete wait;
+		} else {
+			lock.Unlock();
 		}
 	}
 
@@ -1713,17 +1766,14 @@ void KHttp2::check_write_wait()
 			if (stream == NULL
 				|| stream->write_wait==NULL
 				|| stream->write_wait->buffer==NULL
-				|| stream->send_window <= 0) {
+				|| stream->send_window <= 0
+				|| stream->write_wait->len>=0) {
 				continue;
 			}
 			buffer_writed = true;
 			int len = MIN(frame_size, send_window);
 			len = MIN(len, stream->send_window);
-		
-			kgl_http2_event *e = stream->write_wait;
-			stream->write_wait = NULL;
-			http2_buff *buf = stream->build_write_buffer(e->result, e->buffer, e->arg, len);
-			delete e;
+			http2_buff *buf = stream->build_write_buffer(stream->write_wait, len);
 			send_window -= len;
 			stream->send_window -= len;
 			write_buffer.push(buf);
@@ -1903,7 +1953,7 @@ u_char *KHttp2::state_window_update(u_char *pos, u_char *end)
 		}
 		stream->send_window += window;
 		kgl_http2_event *e = NULL;
-		if (stream->write_wait && stream->write_wait->buffer) {
+		if (stream->write_wait && stream->write_wait->len<0 && stream->write_wait->buffer) {
 			e = stream->write_wait;
 			stream->write_wait = NULL;
 		}

@@ -41,7 +41,8 @@ public:
 	}
 	bool mark(KHttpRequest *rq, KHttpObject *obj, const int chainJumpType,
 			int &jumpType) {
-		rq->addSpeedLimit(gsl);
+		gsl->addRef();
+		rq->pushSpeedLimit(gsl);
 		return true;
 	}
 	std::string getDisplay() {

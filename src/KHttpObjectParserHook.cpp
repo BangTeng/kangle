@@ -195,7 +195,7 @@ int KHttpObjectParserHook::parseHeader(const char *attr, char *val,int &val_len,
 #ifdef ENABLE_FORCE_CACHE
 			if(field.is("static")){
 				//通过http header强制缓存
-				obj->forceCache();
+				obj->force_cache();
 			} else 
 #endif
 			if (field.is("public")) {
@@ -245,7 +245,7 @@ int KHttpObjectParserHook::parseHeader(const char *attr, char *val,int &val_len,
 			return PARSE_HEADER_NO_INSERT;
 		}
 		if (strcasecmp(attr,"X-Gzip")==0) {
-			SET(obj->index.flags,FLAG_NEED_GZIP);
+			obj->need_gzip = 1;
 			return PARSE_HEADER_NO_INSERT;
 		}
 	}
@@ -258,19 +258,22 @@ int KHttpObjectParserHook::parseHeader(const char *attr, char *val,int &val_len,
 		}
 	}
 	if (strcasecmp(attr, "Content-Encoding") == 0) {
-		
 		if (strcasecmp(val, "none") == 0) {
 			return PARSE_HEADER_NO_INSERT;
 		}
 		if (strcasecmp(val, "gzip") == 0) {
-			SET(obj->index.flags,OBJ_GZIPED);
-			return PARSE_HEADER_NO_INSERT;
+			obj->url->set_content_encoding(KGL_ENCODING_GZIP);
+		} else	if (strcasecmp(val,"deflate")==0) {
+			obj->url->set_content_encoding(KGL_ENCODING_DEFLATE);
+		} else if (strcasecmp(val, "compress") == 0) {
+			obj->url->set_content_encoding(KGL_ENCODING_COMPRESS);
+		} else if (strcasecmp(val, "br") == 0) {
+			obj->url->set_content_encoding(KGL_ENCODING_BR);
+		} else if (strcasecmp(val, "identity") == 0) {
+			obj->url->encoding = ~KGL_ENCODING_YES;
+		} else if (*val) {
+			obj->url->set_content_encoding(KGL_ENCODING_UNKNOW);
 		}
-		if (strcasecmp(val,"deflate")==0) {
-			SET(obj->index.flags,OBJ_DEFLATED);
-			return PARSE_HEADER_NO_INSERT;
-		}
-		//unknow content-encoding
 		return PARSE_HEADER_SUCCESS;
 	}
 	if (!TEST(obj->index.flags, ANSW_HAS_EXPIRES) &&

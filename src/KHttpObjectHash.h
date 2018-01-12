@@ -6,7 +6,7 @@
 #include "KHttpRequest.h"
 #include "KMutex.h"
 #include "rbtree.h"
-#define ENABLE_GZIP_NOGZIP_SAME_CACHE 1
+
 typedef void (*objHandler)(KHttpObject *obj,void *param);
 
 inline int cmpurl(KUrl *a,KUrl *b)
@@ -84,7 +84,7 @@ public:
 	/**
 	* 从缓存中查到指定url的物件，gzip,internal指示物件状态
 	*/
-	inline KHttpObject *get(KUrl *url, bool gzip,bool internal,bool no_disk_cache,time_t min_obj_verified) {
+	inline KHttpObject *get(KUrl *url,u_char accept_encoding, bool internal,bool no_disk_cache,time_t min_obj_verified) {
 		assert(url->host);
 		lock.Lock();
 		rb_node *node = find(url);
@@ -92,11 +92,8 @@ public:
 			lock.Unlock();
 			return NULL;
 		}
-		int test_obj_gzip_flag = (gzip?FLAG_RQ_GZIP:OBJ_GZIPED);
+		KHttpObject *hit_obj = NULL;
 		KHttpObject *obj = (KHttpObject *)node->data;
-#ifdef ENABLE_GZIP_NOGZIP_SAME_CACHE
-		KHttpObject *first_ignore_gziped_obj = NULL;
-#endif
 		while (obj) {
 			if (TEST(obj->index.flags,FLAG_DEAD)) {
 				obj = obj->next;
@@ -108,31 +105,22 @@ public:
 				obj = obj->next;
 				continue;
 			}
-
-			if ((internal == (TEST(obj->index.flags,FLAG_RQ_INTERNAL)>0)) &&
-				(!no_disk_cache || obj->data)) {
-#ifdef ENABLE_GZIP_NOGZIP_SAME_CACHE
-				first_ignore_gziped_obj = obj;
-#endif
-				if (gzip == (bool)(TEST(obj->index.flags,test_obj_gzip_flag)>0)) {					
-					break;
+			if ((internal == (TEST(obj->index.flags, FLAG_RQ_INTERNAL)>0)) &&
+				obj->url->match_accept_encoding(accept_encoding)) {
+				if (!no_disk_cache || obj->data != NULL && obj->data->type == MEMORY_OBJECT) {
+					//hit cache
+					if (hit_obj == NULL || obj->url->encoding > hit_obj->url->encoding) {
+						hit_obj = obj;
+					}
 				}
 			}
 			obj = obj->next;
 		}
-#ifdef ENABLE_GZIP_NOGZIP_SAME_CACHE
-		//*
-		if (obj==NULL) {
-			//printf("@@@退而求其次\n");
-			obj = first_ignore_gziped_obj;
-		}
-		//*/
-#endif
-		if (obj) {
-			obj->addRef();
+		if (hit_obj) {
+			hit_obj->addRef();
 		}
 		lock.Unlock();
-		return obj;
+		return hit_obj;
 	}
 	/**
 	* 增加内存大小
@@ -215,10 +203,10 @@ public:
 			if (TEST(obj->index.flags,FLAG_IN_MEM)) {
 				assert(obj->data);
 				
-					size -= obj->index.have_length;
+					size -= obj->index.content_length;
 			}
 			if (TEST(obj->index.flags,FLAG_IN_DISK)) {
-				disk_size -= obj->index.have_length;
+				disk_size -= obj->index.content_length;
 			}
 			size_lock.Unlock();
 		}
@@ -296,6 +284,7 @@ private:
 			}
 		}					
 		rb_node *node = new rb_node;
+		memset(node, 0, sizeof(rb_node));
 		node->data = obj;
 		obj->next = NULL;
 		rb_link_node(node, parent, n);

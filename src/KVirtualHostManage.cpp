@@ -230,7 +230,7 @@ void KVirtualHostManage::getMenuHtml(std::stringstream &s,KVirtualHost *v,std::s
 		url << "name=" << v->name << "&";
 	}
 	s << "<html><head>"
-			<< "<LINK href=/kangle.css type='text/css' rel=stylesheet></head>";
+			<< "<LINK href=/main.css type='text/css' rel=stylesheet></head>";
 	s << "<body><table border=0><tr><td>";
 	s << "[<a href='/vhlist'>" << klang["LANG_VHS"] << "</a>]";
 	if (t) {
@@ -644,7 +644,6 @@ bool KVirtualHostManage::vhAction(KVirtualHost *ov,KTempleteVirtualHost *tm,
 #ifdef ENABLE_BASED_PORT_VH
 	lf.init(attribute["bind"].c_str());
 	for (;;) {
-		bool addFlag = true;
 		char *line = lf.readLine();
 		if (line == NULL) {
 			break;
@@ -813,25 +812,31 @@ bool KVirtualHostManage::internalAddVirtualHost(KVirtualHost *vh,KVirtualHost *o
 	vh->addRef();
 	return true;
 }
-void KVirtualHostManage::bindVirtualHost(KServer *server)
+void KVirtualHostManage::remove_static(KServer *server)
+{
+	std::map<std::string, KVirtualHost *>::iterator it;
+	for (it = avh.begin(); it != avh.end(); it++) {
+		server->remove_static((*it).second);
+	}
+}
+void KVirtualHostManage::add_static(KServer *server)
 {
 	std::map<std::string, KVirtualHost *>::iterator it;
 	for(it=avh.begin();it!=avh.end();it++){
-		server->addVirtualHost((*it).second);
+		server->add_static((*it).second);
 	}
 }
 void KVirtualHostManage::addAllVirtualHost()
 {
 	lock.Lock();
+	dlisten.delayStart();
 	std::map<std::string, KVirtualHost *>::iterator it;
 	for(it=avh.begin();it!=avh.end();it++){
 		dlisten.addStaticVirtualHost((*it).second);
-	}
-	dlisten.delayStart();
+	}	
 	lock.Unlock();
 }
-bool KVirtualHostManage::internalRemoveVirtualHost(KVirtualHost *vh,
-		bool removeIndex) {
+bool KVirtualHostManage::internalRemoveVirtualHost(KVirtualHost *vh,bool removeIndex) {
 	if (removeIndex) {
 		std::map<std::string, KVirtualHost *>::iterator it;
 		it = avh.find(vh->name);
@@ -1511,29 +1516,23 @@ void KVirtualHostManage::getAllVhHtml(std::stringstream &s,int t) {
 	s << "</table>";
 	s << "[<a href='/vhlist?id=4&t=" << t << "'>" << (t?klang["new_tvh"]:klang["new_vh"])  << "</a>]";
 }
-void KVirtualHostManage::startStaticListen(std::vector<KListenHost *> &services,bool start)
+void KVirtualHostManage::flush_static_listens(std::vector<KListenHost *> &services)
 {
 	lock.Lock();
 	std::map<KListenKey,KServer *>::iterator it;
 	for (it=dlisten.listens.begin();it!=dlisten.listens.end();it++) {
-		(*it).second->static_flag = false;
+		(*it).second->remove_static_flag = true;
 	}
 	for (size_t i=0;i<services.size();i++) {
 		//防止加载时间太长，而安全进程误认为挂掉。
 		setActive();
-		dlisten.add_static(services[i],start);
+		dlisten.add_static(services[i]);
 	}
 	dlisten.flush();
 	lock.Unlock();
 	return;
 }
-bool KVirtualHostManage::startService(KListenHost *service, bool start)
-{
-	lock.Lock();
-	bool result = dlisten.add_static(service,start);
-	lock.Unlock();
-	return result;
-}
+
 void KVirtualHostManage::flushListen(KVirtualHost *vh)
 {
 #ifdef ENABLE_BASED_PORT_VH

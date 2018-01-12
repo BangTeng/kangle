@@ -4,6 +4,7 @@
 #include "KServer.h"
 #include "KSubVirtualHost.h"
 #include "KSelectorManager.h"
+
 struct kgl_delay_io
 {
 	KConnectionSelectable *c;
@@ -30,20 +31,49 @@ void resultSSLShutdown(void *arg,int got)
 	c->resultSSLShutdown(got);
 }
 #endif
+bool KConnectionSelectable::is_event(KHttpRequest *rq,uint16_t flag)
+{
+#ifdef ENABLE_HTTP2
+	if (rq->http2_ctx) {
+		if (TEST(flag, STF_REVENT) && rq->http2_ctx->read_wait != NULL) {
+			return true;
+		}
+		if (TEST(flag, STF_WEVENT) && rq->http2_ctx->write_wait != NULL) {
+			return true;
+		}
+		return false;
+	}
+#endif
+	flag = (flag&STF_EVENT);
+	return TEST(st_flags, flag) > 0;
+}
+bool KConnectionSelectable::is_locked(KHttpRequest *rq)
+{
+#ifdef ENABLE_HTTP2
+	if (rq->http2_ctx) {
+		return false;
+	}
+#endif
+	return TEST(st_flags, STF_LOCK) > 0;
+}
 KConnectionSelectable::~KConnectionSelectable()
 {
+	assert(TEST(st_flags, STF_LOCK)==0);
 	assert(queue.next == NULL);
 	assert(queue.prev == NULL);
 	if (socket) {
+#ifndef HAVE_ACCEPT4
 		if (selector) {
 			/**
 			* 这里为什么要调用一次removeSocket呢？
 			* 一般来讲，在linux下面,一个socket close了。epoll自动会删除。
-			* 但如果存在多进程的时候，此socket在一瞬间被其它进程共享，
+			* 但如果存在多进程的时候，此socket在一瞬间被其它子进程共享，在accept之后,设置close_on_exec之前创建了一个子进程。
 			* 则close此socket,epoll还是会返回相关事件。
+			* 但有accept4情况下除外,accept4会accept和close_on_exec是原子操作
 			*/
 			selector->removeSocket(this);
 		}
+#endif
 		delRequest(st_flags,socket);
 		socket->shutdown(SHUT_RDWR);
 		delete socket;
@@ -120,16 +150,16 @@ void KConnectionSelectable::write(KHttpRequest *rq,resultEvent result,bufferEven
 #endif
 	asyncWrite(rq,result,buffer);
 }
-void KConnectionSelectable::next(KHttpRequest *rq,resultEvent result)
+void KConnectionSelectable::next(resultEvent result,void *arg)
 {
 #ifdef ENABLE_HTTP2
 	if (http2) {
-		selector->addTimer(NULL, result, rq, 0);
+		selector->addTimer(NULL, result, arg, 0);
 		return;
 	}
 #endif
-	if (!selector->next(this,result,rq)) {
-		selector->addTimer(NULL, result, rq, 0);
+	if (!selector->next(this,result, arg)) {
+		selector->addTimer(NULL, result, arg, 0);
 	}
 }
 void KConnectionSelectable::read_hup(KHttpRequest *rq,resultEvent result)
@@ -156,6 +186,21 @@ void KConnectionSelectable::removeRequest(KHttpRequest *rq,bool add_sync)
 	}
 #endif
 	internalRemoveRequest(add_sync);
+}
+void KConnectionSelectable::unlock_read_hup(KHttpRequest *rq, resultEvent result)
+{
+#ifdef ENABLE_HTTP2
+	if (http2) {
+		assert(rq->http2_ctx->write_wait);
+		assert(rq->http2_ctx->write_wait->result == request_connection_broken);
+		http2->remove_event(rq->http2_ctx);
+		result(rq, 0);
+		return;
+	}
+#endif
+	assert(this->e[OP_WRITE].result == request_connection_broken);
+	this->e[OP_WRITE].result = result;
+	this->e[OP_WRITE].buffer = NULL;
 }
 void KConnectionSelectable::shutdown(KHttpRequest *rq)
 {
@@ -278,12 +323,10 @@ void KConnectionSelectable::real_destroy()
 		if (socket) {
 			selector->removeSocket(this);
 #ifdef KSOCKET_SSL
-#ifndef MALLOCDEBUG
 			if (isSSL()) {
 				resultSSLShutdown(0);
 				return;
 			}
-#endif
 #endif
 		}
 	}

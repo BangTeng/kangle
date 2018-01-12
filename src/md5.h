@@ -3,7 +3,7 @@
 typedef unsigned uint32;
 typedef struct {
         uint32 state[4];                            /* state (ABCD) */
-        uint32 count[2];                 
+        uint32 count[2];
         unsigned char buffer[64];       /* input buffer */
 } KMD5_CTX;
 typedef KMD5_CTX KMD5Context;

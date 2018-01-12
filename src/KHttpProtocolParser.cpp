@@ -21,6 +21,13 @@
 #include "http.h"
 #include <assert.h>
 #include <stdio.h>
+char *strlendup(const char *str, int len)
+{
+	char *buf = (char *)malloc(len + 1);
+	memcpy(buf, str, len);
+	buf[len] = '\0';
+	return buf;
+}
 KHttpProtocolParser::~KHttpProtocolParser() {
 	destroy();
 }
@@ -42,13 +49,16 @@ bool KHttpProtocolParser::insertHeader(KHttpHeader *new_t,bool tail)
 }
 bool KHttpProtocolParser::insertHeader(const char *attr,int attr_len,const char *val,int val_len,bool tail)
 {
+	if (attr_len > MAX_HEADER_ATTR_VAL_SIZE || val_len>MAX_HEADER_ATTR_VAL_SIZE) {
+		return false;
+	}
 	KHttpHeader *new_t = (struct KHttpHeader *) xmalloc(sizeof(KHttpHeader));
 	if (new_t == NULL) {
 		return false;
 	}
-	new_t->attr = xstrdup(attr);
+	new_t->attr = strlendup(attr,attr_len);
 	new_t->attr_len = attr_len;
-	new_t->val = xstrdup(val);
+	new_t->val = strlendup(val,val_len);
 	new_t->val_len = val_len;
 	new_t->next = NULL;
 	return insertHeader(new_t,tail);

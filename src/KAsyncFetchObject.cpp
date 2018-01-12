@@ -10,6 +10,7 @@
 #include "KSimulateRequest.h"
 #include "KHttpProxyFetchObject.h"
 #include "KHttp2.h"
+
 #ifdef ENABLE_UPSTREAM_SSL
 void resultSSLConnect(void *arg,int got)
 {
@@ -157,21 +158,25 @@ void resultUpstreamSendHead(void *arg,int got)
 	KAsyncFetchObject *fo = static_cast<KAsyncFetchObject *>(rq->fetchObj);
 	fo->handleSendHead(rq,got);
 }
-void resultConnectionBroken(void *arg,int got)
+void request_connection_broken(void *arg,int got)
 {
-	//my_msleep(500);
 	//printf("connection broken\n");
 	KHttpRequest *rq = (KHttpRequest *)arg;
+	rq->ctx->read_huped = true;
+	if (rq->fetchObj==NULL) {
+		
+		return;
+	}
 	KAsyncFetchObject *fo = static_cast<KAsyncFetchObject *>(rq->fetchObj);
-	rq->c->removeRequest(rq,true);
-	rq->c->shutdown(rq);
-	fo->client->upstream_shutdown();
+	if (fo->client) {
+		fo->client->upstream_shutdown();
+	}
 }
 void bufferUpstreamSendHead(void *arg,LPWSABUF buf,int &bufCount)
 {
 	KHttpRequest *rq = (KHttpRequest *)arg;
 	KAsyncFetchObject *fo = static_cast<KAsyncFetchObject *>(rq->fetchObj);
-	fo->buffer.getRBuffer(buf,bufCount);
+	fo->buffer->getRBuffer(buf,bufCount);
 }
 void resultUpstreamReadHead(void *arg,int got)
 {
@@ -203,6 +208,7 @@ void resultUpstreamHttp2ReadHeader(void *arg,int got)
 }
 void KAsyncFetchObject::handleConnectResult(KHttpRequest *rq,int got)
 {
+	//printf("upstream connect result=[%d]\n",got);
 	if (got==-1) {
 		handleUpstreamError(rq,STATUS_GATEWAY_TIMEOUT,"connect to remote host time out",got);
 		return;
@@ -229,12 +235,18 @@ void KAsyncFetchObject::retryOpen(KHttpRequest *rq)
 		client->gc(-1);
 		client = NULL;
 	}
-	buffer.destroy();
+	if (buffer) {
+		delete buffer;
+		buffer = NULL;
+	}
 	hot = header;
 	open(rq);
 }
 void KAsyncFetchObject::open(KHttpRequest *rq)
 {
+	lifeTime = -1;
+	//Ä¬ÈÏÉÏÁ÷Ö§³Ö³¤Á¬½Ó
+	rq->ctx->upstream_connection_keep_alive = true;
 	KFetchObject::open(rq);
 	if (brd==NULL) {
 		proxyConnect(rq);
@@ -249,11 +261,12 @@ void KAsyncFetchObject::open(KHttpRequest *rq)
 }
 void KAsyncFetchObject::read_hup(KHttpRequest *rq)
 {
-	if (TEST(rq->flags,RQ_NET_BIG_OBJECT)) {
+	//printf("read_hup\n");
+	if (!conf.read_hup) {
 		return;
 	}
-        
-	rq->c->read_hup(rq,resultConnectionBroken);
+     
+	rq->c->read_hup(rq, request_connection_broken);
 }
 void KAsyncFetchObject::connectCallBack(KHttpRequest *rq,KUpstreamSelectable *client,bool half_connection)
 {
@@ -278,12 +291,13 @@ void KAsyncFetchObject::sendHead(KHttpRequest *rq)
 {
 	
 	badStage = BadStage_TrySend;
-	if (buffer.getLen()==0) {
+	if (buffer==NULL) {
 		buildHead(rq);
+		assert(buffer);
 		
 	}
 	
-	unsigned len = buffer.startRead();
+	unsigned len = buffer->startRead();
 	if (len == 0) {
 		handleError(rq, STATUS_SERVER_ERROR, "cann't build head");
 		return;
@@ -294,14 +308,20 @@ void KAsyncFetchObject::sendHead(KHttpRequest *rq)
 void KAsyncFetchObject::continueReadBody(KHttpRequest *rq)
 {
 	if (rq->ctx->connection_upgrade) {
-		if(client->upstream_read(rq,resultUpStreamReadBodyResult,bufferUpStreamReadBodyResult)) {
+#ifndef _WIN32
+		if (rq->c->is_event(rq, STF_WEVENT)) {
+			//printf("client is write event\n");
 			return;
 		}
-#ifndef _WIN32
-		rq->c->read(rq,resultUpstreamReadPost,bufferUpstreamReadPost);
+		if (client->is_upstream_event(STF_WEVENT)) {
+			//printf("upstream is write event\n");
+			return;
+		}
+		rq->c->read(rq, resultUpstreamReadPost, bufferUpstreamReadPost);
 #endif
+		client->upstream_read(rq, resultUpStreamReadBodyResult, bufferUpStreamReadBodyResult);
 		return;
-	}	
+	}
 	if (!checkContinueReadBody(rq)) {
 		stage_rdata_end(rq,STREAM_WRITE_SUCCESS);
 		return;
@@ -309,26 +329,26 @@ void KAsyncFetchObject::continueReadBody(KHttpRequest *rq)
 	read_hup(rq);
 	client->upstream_read(rq,resultUpStreamReadBodyResult,bufferUpStreamReadBodyResult);
 }
-//è§£æå®Œbodyæ•°æ®ä¹‹åï¼Œä»ç¼“å†²åŒºè¯»bodyæ•°æ®å¹¶å¤„ç†
+//½âÎöÍêbodyÊı¾İÖ®ºó£¬´Ó»º³åÇø¶ÁbodyÊı¾İ²¢´¦Àí
 void KAsyncFetchObject::readBody(KHttpRequest *rq)
 {
 	int bodyLen;
 	for (;;) {
-		//å¯¹ç¼“å†²åŒºçš„bodyè§£æ
+		//¶Ô»º³åÇøµÄbody½âÎö
 		char *body = nextBody(rq,bodyLen);
 		if (body==NULL) {
-			//ç¼“å†²åŒºæ²¡æœ‰äº†
+			//»º³åÇøÃ»ÓĞÁË
 			break;
 		}
-		//å¤„ç†æ”¶åˆ°äº†çš„bodyæ•°æ®
+		//´¦ÀíÊÕµ½ÁËµÄbodyÊı¾İ
 		if (!pushHttpBody(rq,body,bodyLen)) {
 			return;
 		}
 	}
-	//ç»§ç»­è¯»body
+	//¼ÌĞø¶Ábody
 	continueReadBody(rq);
 }
-//å¤„ç†è¯»åˆ°bodyæ•°æ®
+//´¦Àí¶Áµ½bodyÊı¾İ
 void KAsyncFetchObject::handleReadBody(KHttpRequest *rq,int got)
 {
 	if (got<=0) {
@@ -337,20 +357,14 @@ void KAsyncFetchObject::handleReadBody(KHttpRequest *rq,int got)
 			return;
 		}
 		
-		//assert(rq->send_ctx.body==NULL);
-		/* è¯»bodyå¤±è´¥,å¯¹äºæœªçŸ¥é•¿åº¦ï¼Œå¦‚æœæ²¡æœ‰è®¾ç½®cache_no_length,åˆ™ä¸ç¼“å­˜ */
 		lifeTime = -1;
-		if (!TEST(rq->filter_flags,RF_CACHE_NO_LENGTH)
-			|| TEST(rq->ctx->obj->index.flags,(ANSW_CHUNKED|ANSW_HAS_CONTENT_LENGTH))) { 
-			SET(rq->ctx->obj->index.flags,FLAG_DEAD|OBJ_INDEX_UPDATE);
-		}
 		stage_rdata_end(rq,STREAM_WRITE_SUCCESS);
 		return;
 	}
 	assert(header);
-	//è§£æbody
+	//½âÎöbody
 	parseBody(rq,header,got);
-	//è§£æå®Œç»§ç»­å¤„ç†bodyæ•°æ®
+	//½âÎöÍê¼ÌĞø´¦ÀíbodyÊı¾İ
 	readBody(rq);
 }
 void KAsyncFetchObject::handleHttp2ReadHead(KHttpRequest *rq,int got)
@@ -361,7 +375,7 @@ void KAsyncFetchObject::handleHttp2ReadHead(KHttpRequest *rq,int got)
 	}
 	rq->ctx->obj->data->headers = client->parser->stealHeaders(rq->ctx->obj->data->headers);
 	assert(got==0);
-	//å‘é€æˆåŠŸï¼Œè¿›å…¥å‘é€æˆåŠŸé˜¶æ®µ,æ­¤é˜¶æ®µç¦æ­¢é‡è¯•
+	//·¢ËÍ³É¹¦£¬½øÈë·¢ËÍ³É¹¦½×¶Î,´Ë½×¶Î½ûÖ¹ÖØÊÔ
 	badStage = BadStage_SendSuccess;
 	readHeadSuccess(rq);
 }
@@ -382,7 +396,7 @@ bool KAsyncFetchObject::try_pre_load_body(KHttpRequest *rq)
 }
 void KAsyncFetchObject::sendHeadSuccess(KHttpRequest *rq)
 {
-	buffer.destroy();
+	buffer->destroy();
 	if (rq->left_read!=0) {
 		//handle post data
 		if (try_pre_load_body(rq)) {
@@ -392,7 +406,7 @@ void KAsyncFetchObject::sendHeadSuccess(KHttpRequest *rq)
 		readPost(rq);
 		return;
 	}
-	//å‘é€å¤´æˆåŠŸ,æ— postæ•°æ®å¤„ç†.
+	//·¢ËÍÍ·³É¹¦,ÎŞpostÊı¾İ´¦Àí.
 	startReadHead(rq);
 }
 void KAsyncFetchObject::startReadHead(KHttpRequest *rq)
@@ -403,13 +417,14 @@ void KAsyncFetchObject::startReadHead(KHttpRequest *rq)
 }
 void KAsyncFetchObject::handleSendHead(KHttpRequest *rq,int got)
 {
+	//printf("handleSendHead got=[%d]\n",got);
 	if (got<=0) {
 		handleUpstreamError(rq,STATUS_SERVER_ERROR,"Cann't Send head to remote server",got);
 		return;
 	}
-	//å‘é€æˆåŠŸï¼Œè¿›å…¥å‘é€æˆåŠŸé˜¶æ®µ,æ­¤é˜¶æ®µç¦æ­¢é‡è¯•
+	//·¢ËÍ³É¹¦£¬½øÈë·¢ËÍ³É¹¦½×¶Î,´Ë½×¶Î½ûÖ¹ÖØÊÔ
 	badStage = BadStage_SendSuccess;
-	if(buffer.readSuccess(got)){
+	if(buffer->readSuccess(got)){
 		//continue send head
 		client->upstream_write(rq,resultUpstreamSendHead,bufferUpstreamSendHead);
 		return;
@@ -422,11 +437,11 @@ void KAsyncFetchObject::handleSendPost(KHttpRequest *rq,int got)
 		handleUpstreamError(rq,STATUS_SERVER_ERROR,"cann't send post data to remote server",got);
 		return;
 	}
-	if (buffer.readSuccess(got)) {
+	if (buffer->readSuccess(got)) {
 		client->upstream_write(rq,resultUpstreamSendPost,bufferUpstreamSendPost);
 	} else {
-		//é‡ç½®buffer,å‡†å¤‡ä¸‹ä¸€æ¬¡post
-		buffer.destroy();
+		//ÖØÖÃbuffer,×¼±¸ÏÂÒ»´Îpost
+		buffer->destroy();
 		if (try_pre_load_body(rq)) {
 			return;
 		}
@@ -440,17 +455,12 @@ void KAsyncFetchObject::handleSendPost(KHttpRequest *rq,int got)
 }
 void KAsyncFetchObject::shutdown(KHttpRequest *rq)
 {
-#ifdef _WIN32
-	if (pipe_refs<=1) {
+	if (!rq->c->is_locked(rq) && !client->is_upstream_locked()) {
 		stageEndRequest(rq);
 		return;
 	}
 	client->upstream_shutdown();
 	rq->c->shutdown(rq);
-	pipe_refs--;
-#else
-	stageEndRequest(rq);
-#endif
 }
 void KAsyncFetchObject::handleReadPost(KHttpRequest *rq,int got)
 {
@@ -465,7 +475,7 @@ void KAsyncFetchObject::handleReadPost(KHttpRequest *rq,int got)
 	}
 	if (TEST(rq->flags,RQ_INPUT_CHUNKED)) {
 		int len;
-		char *buf = buffer.getWBuffer(len);
+		char *buf = buffer->getWBuffer(len);
 		bool chunk_is_end = false;
 		got = check_chunk_stream(rq,buf,got,chunk_is_end);
 		if (chunk_is_end) {
@@ -478,7 +488,7 @@ void KAsyncFetchObject::handleReadPost(KHttpRequest *rq,int got)
 	} else {
 		rq->left_read-=got;
 	}
-	buffer.writeSuccess(got);
+	buffer->writeSuccess(got);
 	sendPost(rq);
 }
 void KAsyncFetchObject::readPost(KHttpRequest *rq)
@@ -493,7 +503,7 @@ void KAsyncFetchObject::readPost(KHttpRequest *rq)
 			return;
 		}
 		rq->left_read-=got;
-		buffer.writeSuccess(got);
+		buffer->writeSuccess(got);
 		sendPost(rq);
 		return;
 	}
@@ -509,29 +519,29 @@ void KAsyncFetchObject::readPost(KHttpRequest *rq)
 			return;
 		}
 		rq->left_read-=got;
-		buffer.writeSuccess(got);
+		buffer->writeSuccess(got);
 		sendPost(rq);
 		return;
 	}
 #endif
-	//å¦‚æœæ²¡æœ‰ä¸´æ—¶æ–‡ä»¶äº¤æ¢ï¼Œå› ä¸ºå·²ç»è¯»äº†å®¢æˆ·çš„postæ•°æ®ï¼Œæ— æ³•é‡ç½®ï¼Œè¿™ç§æƒ…å†µå°±ç¦æ­¢å‡ºé”™é‡è¯•
 #ifndef _WIN32
-	if (!rq->ctx->connection_upgrade) {
-		client->upstream_remove();
-	} else {
-		if(client->upstream_read(rq,resultUpStreamReadBodyResult,bufferUpStreamReadBodyResult)) {
-                        return;
-                }
+	if (rq->ctx->connection_upgrade) {
+		if (rq->c->is_event(rq, STF_WEVENT) || client->is_upstream_event(STF_WEVENT)) {
+			return;
+		}
+		client->upstream_read(rq, resultUpStreamReadBodyResult, bufferUpStreamReadBodyResult);
 	}
 #endif
 	rq->c->read(rq,resultUpstreamReadPost,bufferUpstreamReadPost);
 }
 void KAsyncFetchObject::sendPost(KHttpRequest *rq)
 {
-	//åˆ›å»ºpost
+	//´´½¨post
 	buildPost(rq);
-	buffer.startRead();
-	read_hup(rq);
+	buffer->startRead();
+	if (!rq->ctx->connection_upgrade) {
+		read_hup(rq);
+	}
 	client->upstream_write(rq,resultUpstreamSendPost,bufferUpstreamSendPost);
 }
 void KAsyncFetchObject::readHeadSuccess(KHttpRequest *rq)
@@ -543,7 +553,7 @@ void KAsyncFetchObject::readHeadSuccess(KHttpRequest *rq)
 			rq->http2_ctx == NULL &&
 #endif
 			rq->c->tmo < 10) {
-			//è¶…æ—¶æ—¶é—´åŠ 5ä¸ªå‘¨æœŸ
+			//³¬Ê±Ê±¼ä¼Ó5¸öÖÜÆÚ
 			rq->c->tmo += 5;
 		}
 		if (
@@ -551,11 +561,7 @@ void KAsyncFetchObject::readHeadSuccess(KHttpRequest *rq)
 			client->tmo < 10) {
 			client->tmo += 5;
 		}
-#ifdef _WIN32
-		pipe_refs++;
-		assert(pipe_refs == 2);
 		rq->c->read(rq, resultUpstreamReadPost, bufferUpstreamReadPost);
-#endif
 	}
 	handleUpstreamRecvedHead(rq);
 }
@@ -573,13 +579,17 @@ void KAsyncFetchObject::handleReadHead(KHttpRequest *rq,int got)
 		case Parse_Success:
 			readHeadSuccess(rq);
 			break;
-		case Parse_Failed:
-			handleError(rq,STATUS_GATEWAY_TIMEOUT,"cann't parse upstream protocol");
-			break;
 		case Parse_Continue:
+			if (current_size > MAX_HTTP_HEAD_SIZE) {
+				handleUpstreamError(rq, STATUS_GATEWAY_TIMEOUT, "upstream protocol header size is too big",got);
+				break;
+			}
 			client->upstream_read(rq,resultUpstreamReadHead,bufferUpstreamReadHead);
 			break;
-	}	
+		default:
+			handleUpstreamError(rq, STATUS_GATEWAY_TIMEOUT, "cann't parse upstream protocol", got);
+			break;
+	}
 }
 void KAsyncFetchObject::handleUpstreamError(KHttpRequest *rq,int error,const char *msg,int last_got)
 {
@@ -595,8 +605,10 @@ void KAsyncFetchObject::handleUpstreamError(KHttpRequest *rq,int error,const cha
 	int err = errno;
 	char ips[MAXIPLEN];
 	client->socket->get_remote_ip(ips,sizeof(ips));
-	klog(KLOG_WARNING,"rq = %p connect to %s:%d error code=%d,msg=[%s] last errno=[%d %s],socket=%d(%s) last_got=%d (%d %d)\n",
+	char *url = rq->url->getUrl();
+	klog(KLOG_WARNING,"rq=[%p] url=[%s] upstream=[%s:%d] error code=[%d],msg=[%s] errno=[%d %s],socket=%d(%s)\n",
 		(KSelectable *)rq,
+		url,
 		ips,
 		client->socket->get_remote_port(),
 		error,
@@ -604,16 +616,9 @@ void KAsyncFetchObject::handleUpstreamError(KHttpRequest *rq,int error,const cha
 		err,
 		strerror(err),
 		client->socket->get_socket(),
-		(client->isNew()?"new":"pool"),
-		last_got,
-#ifndef NDEBUG
-		(rq->c->socket->shutdownFlag?1:0),
-		(client->socket->shutdownFlag?1:0)
-#else
-		2,2
-#endif
+		(client->isNew()?"new":"pool")
 		);
-
+	free(url);
 	if (badStage != BadStage_SendSuccess && !client->isNew()) {
 		//use pool connectioin will try again
 		retryOpen(rq);

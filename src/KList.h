@@ -18,7 +18,6 @@ struct kgl_list {
 } while (0)
 
 #define klist_append(list,  new_link) klist_insert(list,new_link)
-#define klist_insert_after(list, new_link) klist_insert((list)->next, new_link)
 #define klist_insert_tail klist_insert
 
 #define klist_remove(link) do {\

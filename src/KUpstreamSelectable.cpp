@@ -13,12 +13,26 @@
 #include "KHttpRequest.h"
 #include "KSelector.h"
 
+struct kgl_upstream_delay_io
+{
+	KUpstreamSelectable *us;
+	KHttpRequest *rq;
+	bufferEvent buffer;
+	resultEvent result;
+};
+void WINAPI upstream_delay_read(void *arg)
+{
+	kgl_upstream_delay_io *io = (kgl_upstream_delay_io *)arg;
+	io->us->upstream_read(io->rq, io->result, io->buffer);
+	delete io;
+}
 KUpstreamSelectable::KUpstreamSelectable(KClientSocket *sockfd) : KConnectionSelectable(sockfd)
 {
 	expireTime = 0;
 	container = NULL;
 	parser = NULL;
 	hook = NULL;
+	delay_read_msec = 0;
 	
 }
 void KUpstreamSelectable::prepare_parser(KHttpRequest *rq)
@@ -33,6 +47,7 @@ void KUpstreamSelectable::prepare_parser(KHttpRequest *rq)
 	hook->init(rq->ctx->obj, rq);
 }
 KUpstreamSelectable::~KUpstreamSelectable() {
+	assert(TEST(st_flags, STF_LOCK) == 0);
 	if (container) {
 		container->unbind(this);
 	}
@@ -116,6 +131,18 @@ void KUpstreamSelectable::upstream_remove()
 /* Òì²½¶Á */
 bool KUpstreamSelectable::upstream_read(KHttpRequest *rq,resultEvent result,bufferEvent buffer)
 {
+	int msec = this->delay_read_msec;
+	if (msec > 0) {
+		this->delay_read_msec = 0;
+		kgl_upstream_delay_io *io = new kgl_upstream_delay_io;
+		io->us = this;
+		io->rq = rq;
+		io->result = result;
+		io->buffer = buffer;
+		this->upstream_remove();
+		selector->addTimer(NULL, upstream_delay_read, io, msec);
+		return false;
+	}
 	
 	return asyncRead(rq,result,buffer);
 }
@@ -124,5 +151,30 @@ void KUpstreamSelectable::upstream_write(KHttpRequest *rq,resultEvent result,buf
 {
 	
 	asyncWrite(rq,result,buffer);
+}
+bool KUpstreamSelectable::is_upstream_event(uint16_t flag)
+{
+#ifdef ENABLE_UPSTREAM_HTTP2
+	if (http2_ctx) {
+		if (TEST(flag, STF_REVENT) && http2_ctx->read_wait != NULL) {
+			return true;
+		}
+		if (TEST(flag, STF_WEVENT) && http2_ctx->write_wait != NULL) {
+			return true;
+		}
+		return false;
+	}
+#endif
+	flag = (flag & STF_EVENT);
+	return TEST(st_flags, flag) > 0;
+}
+bool KUpstreamSelectable::is_upstream_locked()
+{
+#ifdef ENABLE_UPSTREAM_HTTP2
+	if (http2_ctx) {
+		return false;
+	}
+#endif
+	return TEST(st_flags, STF_LOCK) > 0;
 }
 

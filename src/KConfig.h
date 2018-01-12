@@ -107,7 +107,7 @@ class KConfigBase
 {
 public:
 	KConfigBase();
-	unsigned int worker;
+	//unsigned int worker;
 	unsigned int max; //最大线程
 	unsigned int max_per_ip; //每个IP最大连接数
 	unsigned int per_ip_deny;
@@ -117,6 +117,7 @@ public:
 	unsigned keep_alive;
 	unsigned keep_alive_count;
 	char hostname[32];
+	int log_event_id;
 	int log_level;
 	INT64 log_rotate_size;
 	INT64 error_rotate_size;
@@ -141,19 +142,13 @@ public:
 	unsigned min_gzip_length;
 	//压缩级别(1-9)
 	int gzip_level;
-	//bool x_forwarded_for;
-	//bool x_real_ip;
-	//bool insert_via;
-	//bool x_cache;
 	bool path_info;
-	//是否异步io
-	bool async_io;
 	int worker_io;
+	int io_timeout;
+	int max_io;
 	int worker_dns;
 	int auth_type;
 	int passwd_crypt;
-	//int configVersion;
-	//int anti_fatboy;
 	//白名单时间
 	int wl_time;
 #ifdef ENABLE_ADPP
@@ -172,14 +167,15 @@ public:
 #endif
 	int autoupdate;
 	int autoupdate_time;
-	//unsigned buffer;
+	unsigned io_buffer;
 #ifdef ENABLE_TF_EXCHANGE
 	INT64 max_post_size;
 #endif
+	bool read_hup;
+	bool mlock;
 #ifdef KSOCKET_UNIX	
 	bool unix_socket;
 #endif
-	bool removeAcceptEncoding;
 #ifdef ENABLE_VH_FLOW
 	//自动刷新流量时间(秒)
 	int flush_flow_time;
@@ -193,6 +189,8 @@ public:
 	char cookie_stick_name[16];
 	char server_software[32];
 	char disk_work_time[32];
+	char upstream_sign[32];
+	int upstream_sign_len;
 	
 };
 class KConfig : public KConfigBase

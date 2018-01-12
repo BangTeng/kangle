@@ -70,7 +70,7 @@ inline char *upstrdup(const char *val)
 	return buf;
 }
 enum StreamState {
-	STREAM_WRITE_FAILED, STREAM_WRITE_SUCCESS, STREAM_WRITE_END,STREAM_WRITE_HANDLED
+	STREAM_WRITE_FAILED, STREAM_WRITE_SUCCESS, STREAM_WRITE_END
 };
 class KRStream {
 public:

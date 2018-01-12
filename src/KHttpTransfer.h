@@ -29,6 +29,12 @@
 #include "KSendable.h"
 #include "KChunked.h"
 
+enum cache_model
+{
+	cache_none,
+	cache_memory,
+	//cache_disk
+};
 /*
  * This class use to transfer data to client
  * It support compress(use gzip) and chunk transfer encoding.
@@ -74,14 +80,13 @@ public:
 	KSubRequest *sr;
 private:
 	bool loadStream();
-	
-	bool gzip_layer;
-	bool cache_layer;
-	bool isHeadSend;
 	KWStream *wst;
+	bool gzip_layer;
 	bool wstDelete;
-	u_short workModel;
-	bool responseChecked;
+	bool isHeadSend;
+	bool responseChecked;	
+	cache_model cache_layer;
+	u_short workModel;	
 };
 
 #endif /* KHTTPTRANSFER_H_ */

@@ -28,6 +28,8 @@
 #include "KSocket.h"
 #include "KAsyncFetchObject.h"
 #include "KHttpObjectParserHook.h"
+#include "KHttpEnv.h"
+ 
 class KHttpProxyFetchObject: public KAsyncFetchObject {
 public:
 	KHttpProxyFetchObject()

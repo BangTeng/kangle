@@ -68,7 +68,7 @@ static BOOL WINAPI apiServerSupportFunction(HCONN hConn, DWORD dwHSERequest,
 	case KGL_REQ_CREATE_WORKER:
 		{
 			int *max_worker = (int *)lpvBuffer;
-			KAsyncWorker *worker = new KAsyncWorker(*max_worker);
+			KAsyncWorker *worker = new KAsyncWorker(*max_worker,0);
 			*ret = (void *)worker;
 			return TRUE;
 		}
@@ -122,7 +122,7 @@ static BOOL WINAPI apiServerSupportFunction(HCONN hConn, DWORD dwHSERequest,
 			kgl_thread *thread = (kgl_thread *)lpvBuffer;
 			if (thread->worker) {
 				KAsyncWorker *worker = (KAsyncWorker *)thread->worker;
-				worker->start(thread->param,thread->thread_function);
+				worker->tryStart(thread->param,thread->thread_function);
 				return TRUE;
 			}
 			if (thread_start_worker(thread->param,thread->thread_function)) {

@@ -95,7 +95,7 @@ bool KConfigParser::startElement(std::string &context, std::string &qName,
 		}
 		if (attribute["disk_work_time"].size()>0) {
 			SAFE_STRCPY(cconf->disk_work_time ,attribute["disk_work_time"].c_str());	
-		}	
+		}
 #endif
 		return true;
 	}
@@ -255,13 +255,6 @@ bool KConfigParser::startCharacter(std::string &context, std::string &qName,
 				cconf->path_info=false;
 			}
 		}
-		if (qName == "remove_accept_encoding") {
-			if (strcmp(character, "1") == 0 || strcmp(character, "on") == 0) {
-				cconf->removeAcceptEncoding = true;
-			} else {
-				cconf->removeAcceptEncoding = false;
-			}
-		}
 		if(qName == "min_free_thread"){
 			cconf->min_free_thread = atoi(character);
 		}
@@ -274,7 +267,13 @@ bool KConfigParser::startCharacter(std::string &context, std::string &qName,
 		}
 		if(qName == "log_handle_concurrent"){
 			cconf->maxLogHandle = atoi(character);
+			return true;
 		}
+		if (qName == "log_event_id") {
+			cconf->log_event_id = atoi(character);
+			return true;
+		}
+
 #ifdef ENABLE_LOG_DRILL
 		if (qName == "log_drill") {
 			cconf->log_drill = atoi(character);
@@ -297,25 +296,34 @@ bool KConfigParser::startCharacter(std::string &context, std::string &qName,
 			cconf->setHostname(character);
 		}
 #ifdef ENABLE_TF_EXCHANGE
-#if 0
-		if (qName == "tempfile") {
-			cconf->tmpfile = atoi(character);
-			if (cconf->tmpfile<0 || cconf->tmpfile>2) {
-				cconf->tmpfile = 1;
-			}
-		}
-#endif
 		if (qName == "max_post_size") {
 			cconf->max_post_size = get_size(character);
 		}
 #endif
 		
-		if (qName == "async_io") {
-			cconf->async_io = (atoi(character)==1);
+		if (qName == "read_hup") {
+			cconf->read_hup = (atoi(character) == 1);
+			return true;
+		}
+		if (qName == "mlock") {
+			cconf->mlock = (atoi(character) == 1);
+			return true;
+		}
+		if (qName == "io_buffer") {
+			cconf->io_buffer = (unsigned)get_size(character);
+			cconf->io_buffer = kgl_align(cconf->io_buffer, 1024);
 			return true;
 		}
 		if (qName == "worker_io") {
 			cconf->worker_io = atoi(character);
+			return true;
+		}
+		if (qName == "max_io") {
+			cconf->max_io = atoi(character);
+			return true;
+		}
+		if (qName == "io_timeout") {
+			cconf->io_timeout = atoi(character);
 			return true;
 		}
 		if (qName == "worker_dns") {

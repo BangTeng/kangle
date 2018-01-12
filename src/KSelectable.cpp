@@ -50,6 +50,7 @@ void KSelectable::sslWrite(void *arg, resultEvent result, bufferEvent buffer)
 		int bufferCount = MAXSENDBUF;
 		buffer(arg, recvBuf, bufferCount);
 		ssl_bio->got = ssl_socket->writev(recvBuf, bufferCount, true);
+		//printf("writev got=[%d]\n", ssl_bio->got);
 	}
 	if (BIO_pending(ssl_bio->bio) <= 0) {
 		result(arg, ssl_bio->got);

@@ -44,6 +44,9 @@
 #include <time.h>
 #include <string>
 #include <stdio.h>
+#ifdef ENABLE_JEMALLOC
+#include <jemalloc/jemalloc.h>
+#endif
 #include "utils.h" 
 #include "do_config.h"
 #include "log.h"
@@ -164,13 +167,15 @@ void checkMemoryLeak()
 		fprintf(stderr,"mallocdebug is not active\n");
 		return;
 	}
+	my_msleep(1000);
+	printf("free all know memory\n");
+	selectorManager.close();
 #ifndef HTTP_PROXY
 	conf.gam->killAllProcess();
 #endif
 #ifdef ENABLE_VH_FLOW
 	conf.gvm->dumpFlow();
 #endif
-	printf("free all know memory\n");
 	int i;
 	for (i = 0; i < 2; i++) {
 		kaccess[i].destroy();
@@ -213,7 +218,7 @@ void checkMemoryLeak()
 	}
 	selectorManager.destroy();
 	m_thread.closeAllFreeThread();
-	sleep(3);
+	my_msleep(1500);
 	dump_memory(0, -1);	
 #ifndef _WIN32
 	__libc_freeres();
@@ -225,13 +230,15 @@ void shutdown() {
 	if (quit_program_flag != PROGRAM_QUIT_IMMEDIATE) {
 		return;
 	}
+	cache.shutdown_disk(true);
 	dlisten.close();
 #ifdef MALLOCDEBUG
 	dlisten.clear();
 #endif
+	conf.default_cache = 0;
 #ifdef ENABLE_DISK_CACHE
 	if (conf.disk_cache > 0) {
-		saveCacheIndex(false);
+		saveCacheIndex();
 	}
 #endif	
 #ifdef ENABLE_VH_RUN_AS
@@ -502,6 +509,7 @@ void clean_process(int pid)
 {
 	list_dir(conf.tmppath.c_str(),clean_process_handle,(void *)&pid);
 }
+
 static int Usage(bool only_version = false) {
 	printf(PROGRAM_NAME "/" VERSION "(%s) build with support:"
 #ifdef KSOCKET_IPV6
@@ -583,6 +591,12 @@ static int Usage(bool only_version = false) {
 		"Report bugs to <keengo99@gmail.com>.\n"
 		"");
 	}
+#ifdef ENABLE_JEMALLOC
+	const char *j;
+        size_t s = sizeof(j);
+	mallctl("version", &j,  &s, NULL, 0);
+	printf("jemalloc version: [%s]\n",j);
+#endif
 	//checkMemoryLeak();
 	my_exit(0);
 	return 0;
@@ -634,8 +648,9 @@ int parse_args(int argc, char ** argv) {
 		}
 	}
 	*/
-	if (argc > 1)
+	if (argc > 1) {
 		ret = 1;
+	}
 #ifndef _WIN32
 	int c;
 	struct option long_options[] = { { "log-drill", 0, 0, 'l' },
@@ -667,10 +682,10 @@ int parse_args(int argc, char ** argv) {
 					my_msleep(200);
 				}
 				printf("shutdown success.\n");
-			} else {
-				printf("shutdown error.\n");
+				my_exit(0);
 			}
-			my_exit(0);
+			printf("shutdown error.\n");
+			my_exit(1);
 			break;
 #ifdef ENABLE_VH_FLOW
 			case 'f':
@@ -777,14 +792,6 @@ void init_safe_process()
 #endif
 	configFile += CONFIG_FILE;
 	listenConfigParser.parse(configFile.c_str());
-	if(conf.worker>1){
-		for (size_t i = 0; i < conf.service.size(); i++) {
-#ifndef _WIN32
-			if (!TEST(conf.service[i]->model,WORK_MODEL_MANAGE))
-#endif
-				startService(conf.service[i]);
-		}
-	}
 }
 void init_stderr()
 {
@@ -799,12 +806,13 @@ void init_stderr()
 	}
 #endif
 }
-void init_resource_limit()
+bool init_resource_limit(int numcpu)
 {
+	bool result = true;
 #ifndef _WIN32
 	//adjust max open file
 	struct rlimit rlim;
-	unsigned open_file_limited = 65536 * numberCpu;
+	unsigned open_file_limited = 65536 * numcpu;
 	if (open_file_limited < 65536) {
 		open_file_limited = 65536;
 	}
@@ -815,6 +823,7 @@ void init_resource_limit()
 			int ret = setrlimit(RLIMIT_NOFILE,&rlim);
 			if (ret!=0) {
 				klog(KLOG_ERR,"set open file limit error [%d]\n",errno);
+				result = false;
 			}
 		}
 	}
@@ -824,6 +833,7 @@ void init_resource_limit()
 		klog(KLOG_ERR,"get max open file limit error [%d]\n",errno);
 	}
 #endif
+	return result;
 }
 #ifdef _WIN32
 unsigned getpagesize() {
@@ -834,6 +844,7 @@ unsigned getpagesize() {
 #endif
 void init_program() {
 	//printf("sizeof (rq) = %d\n",sizeof(KHttpRequest));
+	init_aio_align_size();
 	spProcessManage.setName("api:sp");
 	initFastcgiData();
 	kgl_pagesize = getpagesize();
@@ -853,9 +864,7 @@ void init_program() {
 	init_log_drill();
 #endif
 }
-bool startService(KListenHost *service, bool start) {
-	return conf.gvm->startService(service,start);
-}
+
 #ifndef _WIN32
 int create_worker_process(int index)
 {
@@ -890,7 +899,7 @@ void my_fork() {
 				break;
 		
 			}
-			for (size_t i=0;i<conf.worker;i++) {
+			for (size_t i=0;i<1;i++) {
 				int pid = create_worker_process(i);
 				if (pid==0) {
 					return;
@@ -969,19 +978,26 @@ void StartAll() {
 	do_config(true);
 	klog_start();
 	m_pid = getpid();
+	parse_config(true);
+	init_program();
+	selectorManager.start();
 	if (cmd_extend) {
 		//forcmdextend();
 		fprintf(stderr,"don't support cmd extend model\n");
 	} else {
-		if (worker_index==0) {
-			conf.gvm->startStaticListen(conf.service,false);
-		}		
+		if (worker_index == 0) {
+			conf.gvm->flush_static_listens(conf.service);
+		}
 	}
-	if (dlisten.listens.size() == 0) {
+	if (dlisten.listens.empty()) {
 		klog(KLOG_ERR, "No any listen , program start failed\n");
 		my_exit(100);
 	}
-	init_resource_limit();
+	for (int i = numberCpu; i > 0; i--) {
+		if (init_resource_limit(i)) {
+			break;
+		}
+	}
 	set_user();
 #ifndef _WIN32
 	my_uid = getuid();
@@ -990,13 +1006,10 @@ void StartAll() {
 	program_start_time = time(NULL);
 	klog(KLOG_NOTICE, "Start success [pid=%d].\n",m_pid);
 
-	parse_config(true);
-	init_program();
 	conf.gvm->addAllVirtualHost();
 #ifdef ENABLE_VH_RUN_AS	
 	conf.gam->loadAllApi();
 #endif
-	selectorManager.start();
 #ifdef ENABLE_TF_EXCHANGE
 	if (worker_index==0) {
 		m_thread.start(NULL,clean_tempfile_thread);

@@ -63,12 +63,7 @@ bool KListenConfigParser::startElement(std::string &context, std::string &qName,
 bool KListenConfigParser::startCharacter(std::string &context, std::string &qName,
 		char *character, int len) {
 	if (context == "config") {
-		if(qName=="worker_process"){
-			conf.worker = atoi(character);
-			if(conf.worker<=0){
-				conf.worker = 1;
-			}
-		}
+		
 	}
 	return true;
 }

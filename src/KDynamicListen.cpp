@@ -29,7 +29,6 @@ void KDynamicListen::add_dynamic(const char *listen,KVirtualHost *vh)
 				server->certificate_key = vh->getKeyfile();
 				server->cipher = (vh->cipher?vh->cipher:"");
 				server->protocols = (vh->protocols ? vh->protocols : "");
-				server->sslParsed = true;
 				server->sni = true;
 #ifdef ENABLE_HTTP2
 				server->http2 = vh->http2;
@@ -47,15 +46,13 @@ void KDynamicListen::add_dynamic(const char *listen,KVirtualHost *vh)
 			server->http2 = vh->http2;
 #endif
 #ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
-			if (!server->isOpened() && (*it2).ssl && server->dynamic) {
+			if (!server->is_opened() && (*it2).ssl && server->dynamic) {
 				//update ssl certificate and try it again.
 				server->certificate = vh->getCertfile();
 				server->certificate_key = vh->getKeyfile();
 				server->cipher = (vh->cipher?vh->cipher:"");
 				server->protocols = (vh->protocols ? vh->protocols : "");
-				server->sslParsed = true;
 				server->sni = true;
-
 				SET(server->model,WORK_MODEL_SSL);
 				initListen((*it2),server);
 			}
@@ -89,16 +86,15 @@ void KDynamicListen::flush()
 		KServer *server = (*it).second;
 		it_next = it;
 		it_next++;
-		if (server->server == NULL) {
-			continue;
+		if (server->remove_static_flag) {
+			server->remove_static_flag = false;
+			if (server->static_flag) {
+				server->static_flag = false;
+				conf.gvm->remove_static(server);
+			}
 		}
 		if ((server->dynamic && server->isEmpty()) || (!server->dynamic && !server->static_flag)) {
-#ifdef _WIN32
 			server->close();
-#else
-			server->setClosed();
-			server->server->shutdown(SHUT_RDWR);
-#endif
 			listens.erase(it);
 			server->release();
 		}
@@ -118,13 +114,8 @@ void KDynamicListen::flush(const char *listen)
 		std::map<KListenKey,KServer *>::iterator it = listens.find((*it2));
 		if (it!=listens.end()) {
 			KServer *server = (*it).second;
-			if (server->dynamic && !server->static_flag && server->isEmpty() && server->server!=NULL) {
-#ifdef _WIN32
+			if (server->dynamic && !server->static_flag && server->isEmpty()) {
 				server->close();
-#else
-				server->setClosed();
-				server->server->shutdown(SHUT_RDWR);
-#endif
 				listens.erase(it);
 				server->release();
 			}
@@ -132,7 +123,7 @@ void KDynamicListen::flush(const char *listen)
 	}
 }
 
-bool KDynamicListen::add_static(KListenHost *listen,bool start)
+bool KDynamicListen::add_static(KListenHost *listen)
 {
 	std::list<KListenKey> lk;
 	parseListen(listen,lk);
@@ -148,15 +139,13 @@ bool KDynamicListen::add_static(KListenHost *listen,bool start)
 			server = new KServer;
 			server->model = listen->model;
 			server->static_flag = true;
-			//server->name = listen->name;
-			//server->event_driven = listen->event_driven;
+			server->remove_static_flag = false;
 #ifdef KSOCKET_SSL
 			if ((*it2).ssl) {
 				server->certificate = listen->certificate;
 				server->certificate_key = listen->certificate_key;
 				server->cipher = listen->cipher;
 				server->protocols = listen->protocols;
-				server->sslParsed = true;
 				server->sni = listen->sni;
 #ifdef ENABLE_HTTP2
 				server->http2 = listen->http2;
@@ -164,34 +153,33 @@ bool KDynamicListen::add_static(KListenHost *listen,bool start)
 			}
 #endif
 			listens.insert(std::pair<KListenKey, KServer *>((*it2), server));
-			if (initListen((*it2), server)) {
-				if (start) {
-					conf.gvm->bindVirtualHost(server);
-				}
+			initListen((*it2), server);
+			if (server->started) {
+				conf.gvm->add_static(server);
 			}
 		} else {
 			server = (*it).second;
+			if (!server->static_flag && server->started) {
+				conf.gvm->add_static(server);
+			}
 			server->static_flag = true;
+			server->remove_static_flag = false;
 #ifdef ENABLE_HTTP2
 			server->http2 = listen->http2;
 #endif
 #ifdef KSOCKET_SSL
 			server->sni = listen->sni;
-			if (!server->isOpened() && (*it2).ssl) {
+			if (!server->is_opened() && (*it2).ssl) {
 				//update ssl certificate and try it again.
 				server->certificate = listen->certificate;
 				server->certificate_key = listen->certificate_key;
 				server->cipher = listen->cipher;
 				server->protocols = listen->protocols;
-				server->sslParsed = true;
 				server->sni = listen->sni;
-
 				SET(server->model, WORK_MODEL_SSL);
 				initListen((*it2), server);
 			}
 #endif
-
-
 		}
 	}
 	return true;
@@ -277,44 +265,13 @@ void KDynamicListen::parseListen(const char *listen,std::list<KListenKey> &lks)
 }
 bool KDynamicListen::initListen(const KListenKey &lk,KServer *server)
 {
-	int flag = (lk.ipv4?KSOCKET_ONLY_IPV4:KSOCKET_ONLY_IPV6);
-#ifdef ENABLE_TPROXY
-	if (TEST(server->model,WORK_MODEL_TPROXY)) {
-		flag |= KSOCKET_TPROXY;
-	}
-#endif
 	SAFE_STRCPY(server->ip,lk.ip.c_str());
 	server->port = lk.port;
-	bool result = false;
-	for (;;) {
-		result = server->open((lk.ip.size()>0?lk.ip.c_str():NULL),lk.port,flag);
-		if (result) {
-			break;
-		}
-		server->close();
-		if (failedTries>10) {
-			break;
-		}
-		failedTries++;
-		my_msleep(500);
-	}
-	if (!result) {
-		klog(KLOG_ERR, "Cann't listen %s:%d,errno=%d\n",lk.ip.c_str(), lk.port,errno);
-		return false;
-	}
-#ifdef KSOCKET_SSL
-	if (TEST(server->model,WORK_MODEL_SSL)) {
-		if (!server->load_ssl()) {
-			server->close();
-			return false;
-		}
-	}
-#endif
-	klog(KLOG_NOTICE, "listen %s:%d success\n",	lk.ip.c_str(), lk.port);
+	server->ipv4 = lk.ipv4;
 	if (selectorManager.isInit()) {
-		KServerListen::start(server);
+		return server->start();
 	}
-	return result;
+	return true;
 }
 void KDynamicListen::getListenKey(KListenHost *lh,bool ipv4,std::list<KListenKey> &lk)
 {
@@ -359,8 +316,8 @@ void KDynamicListen::delayStart()
 	std::map<KListenKey,KServer *>::iterator it;
 	for (it=listens.begin();it!=listens.end();it++) {
 		KServer *server = (*it).second;
-		if (server->isOpened() && !server->started) {
-			KServerListen::start(server);
+		if (!server->started) {
+			server->start();
 		}
 	}
 }
@@ -369,8 +326,8 @@ void KDynamicListen::addStaticVirtualHost(KVirtualHost *vh)
 	std::map<KListenKey,KServer *>::iterator it;
 	for (it=listens.begin();it!=listens.end();it++) {
 		KServer *server = (*it).second;
-		if (server->isOpened() && server->static_flag) {
-			server->addVirtualHost(vh);
+		if (server->is_opened() && server->static_flag) {
+			server->add_static(vh);
 		}
 	}
 }
@@ -379,7 +336,7 @@ void KDynamicListen::removeStaticVirtualHost(KVirtualHost *vh)
 	std::map<KListenKey,KServer *>::iterator it;
 	for (it=listens.begin();it!=listens.end();it++) {
 		KServer *server = (*it).second;
-		if (server->isOpened() && server->static_flag) {
+		if (server->is_opened() && server->static_flag) {
 			server->removeVirtualHost(vh);
 		}
 	}
@@ -399,7 +356,7 @@ void KDynamicListen::close()
 	std::map<KListenKey,KServer *>::iterator it;
 	for (it=listens.begin();it!=listens.end();it++) {
 		KServer *server = (*it).second;
-		if (server->isOpened()) {
+		if (server->is_opened()) {
 			server->close();
 		}
 	}
@@ -409,27 +366,33 @@ void KDynamicListen::getListenHtml(std::stringstream &s)
 	std::map<KListenKey,KServer *>::iterator it;
 	for (it=listens.begin();it!=listens.end();it++) {
 		KServer *server = (*it).second;
-		if (server->started && server->server!=NULL){
+		if (server->started){
 			bool unix_socket = (*server->ip=='/');
 			s << "<tr>";			
 			s << "<td>" << server->ip << "</td>";
-			s << "<td>" << (unix_socket?0:server->server->get_self_port()) << "</td>";
+			s << "<td>" << (unix_socket?0:server->port) << "</td>";
 			s << "<td>" << getWorkModelName(server->model) << "</td>";
 			s << "<td>" ;
 			if (unix_socket) {
 				s << "unix";
-			} else {
-				s << "tcp/ipv" << server->server->getIpVer();
+			} else if (server->server_selectable) {
+				s << "tcp/ipv" << server->server_selectable->server_socket->getIpVer();
 			}
 			s << "</td>";
-			s << "<td>" << (server->dynamic?"yes":"&nbsp;");
-			if (server->isEmpty()) {
-				s << " EMP";
+			s << "<td>";
+			if (server->static_flag) {
+				s << "S";
 			}
-			//if (server->event_driven) {
-			//	s << " EV";
-			//}
-			s << " " << server->getRef();
+			if (server->dynamic) {
+				s << "D";
+			}
+			if (server->isEmpty()) {
+				s << "E";
+			}
+			if (server->is_multi_selectale()) {
+				s << "M";
+			}
+			s << "</td><td>" << server->getRef();
 			s << "</td>";
 			s << "</tr>";
 		}

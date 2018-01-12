@@ -35,36 +35,115 @@
 #include "malloc_debug.h"
 
 //#define ENABLE_SSL_CNAME_BINDING 1
-KServer::KServer() {
+int KServer::failedTries = 0;
+void handle_server_listen(void *arg, int got)
+{
+	KServerSelectable *ss = (KServerSelectable *)arg;
+#ifdef _WIN32
+	ss->handleAcceptEx(got);
+	return;
+#endif
+	if (ss->server->isClosed()) {
+		ss->remove_socket_event();
+		ss->server->started = false;
+		ss->server->release();
+		return;
+	}
+	ss->listen_event();
+#ifdef SOLARIS
+	//solaris port need every time call addSocket
+	ss->selector->listen(ss, handleServerListen);
+#endif
+}
+
+KServerSelectable::~KServerSelectable()
+{
+	
+	if (server_socket) {
+		delete server_socket;
+	}
+}
+KServerSelectable::KServerSelectable(KServer *server, KServerSocket *server_socket)
+{
 	memset(static_cast<KSelectable *>(this), 0, sizeof(KSelectable));
+	this->server = server;
+	this->server_socket = server_socket;
+	this->sock = server_socket;
+	next = NULL;
+	
+}
+KServer::KServer() {
+	server_selectable = NULL;
 #ifdef KSOCKET_SSL
 	ssl_ctx = NULL;
-	sslParsed = false;
 #endif
 	closed = false;
 	started = false;
-
 	vhc = NULL;
 #ifdef ENABLE_CNAME_BIND
 	cname_vhc = NULL;
 #endif
 	dynamic = false;
 	static_flag = false;
-	server = NULL;	
 }
-
+void KServerSelectable::remove_socket_event()
+{
+	selector->removeSocket(this);
+}
+void KServerSelectable::listen_event()
+{
+#ifdef _WIN32
+	bool noblocking = false;
+#else
+	bool noblocking = true;
+#endif
+	bool ssl_model = false;
+	KClientSocket *socket;
+#ifdef KSOCKET_SSL
+	if (TEST(server->model, WORK_MODEL_SSL)) {
+		socket = new KSSLSocket(server->ssl_ctx);
+		ssl_model = true;
+#ifdef _WIN32
+		//windows ssl 要工作在非阻塞模式
+		noblocking = true;
+#endif
+	} else {
+#endif
+		socket = new KClientSocket;
+#ifdef KSOCKET_SSL
+	}
+#endif
+	if (!server_socket->accept(socket, noblocking)) {
+		klog(KLOG_ERR, "cann't accept connect,errno=%s\n", strerror(errno));
+		delete socket;
+		return;
+	}
+#ifndef NDEBUG
+	//klog(KLOG_DEBUG,"new client %s:%d connect to %s:%d sockfd=%d\n", socket->get_remote_ip().c_str(), socket->get_remote_port(),socket->get_self_ip().c_str(),socket->get_self_port(),socket->get_socket());
+#endif
+	KConnectionSelectable *c = new KConnectionSelectable(socket);
+	c->ls = server;
+	server->addRef();
+	if (ssl_model) {
+		c->set_flag(STF_SSL);
+	}
+	if (server->is_multi_selectale()) {
+		selector->bindSelectable(c);
+	}
+	selectorManager.startRequest(c);
+}
 KServer::~KServer() {
 	this->close();
-	if (server) {
-		delete server;
-		server = NULL;
+	while (server_selectable) {
+		KServerSelectable *next = server_selectable->next;
+		delete server_selectable;
+		server_selectable = next;
 	}
 #ifdef KSOCKET_SSL
 	if (ssl_ctx) {
 		KSSLSocket::clean_ctx(ssl_ctx);
 	}
 #endif
-
 	if (vhc) {
 		delete vhc;
 	}
@@ -74,40 +153,25 @@ KServer::~KServer() {
 	}
 #endif
 }
-void KServer::removeSocket()
-{
-	selector->removeSocket(this);
-}
 void KServer::close() {
 	closed = true;
-	if (server) {
-		server->shutdown(SHUT_RDWR);
-		server->close();
-#ifdef KSOCKET_UNIX
-		if (*ip=='/') {
-			unlink(ip);
+	KServerSelectable *s = server_selectable;
+	while (s) {
+		if (s->server_socket) {
+			s->server_socket->shutdown(SHUT_RDWR);
+			s->server_socket->close();
 		}
-#endif
+		s = s->next;
 	}
+#ifdef KSOCKET_UNIX
+	if (server_selectable && *ip == '/') {
+		unlink(ip);
+	}
+#endif
 }
 #ifdef KSOCKET_SSL
 bool KServer::load_ssl()
 {
-	if (!sslParsed) {
-		//多进程模型ssl证书查找
-		std::vector<KListenHost *>::iterator it;
-		int port = server->get_self_port();
-		for (it=conf.service.begin();it!=conf.service.end();it++) {
-			if( model==(*it)->model	&& port==atoi((*it)->port.c_str())) {
-				certificate = (*it)->certificate;
-				certificate_key = (*it)->certificate_key;
-				cipher = (*it)->cipher;
-				protocols = (*it)->protocols;
-				break;
-			}
-		
-		}
-	}
 	std::string certFile = certificate;
 	if(!certFile.empty() && !isAbsolutePath(certFile.c_str())){
 		certFile = conf.path + certificate;
@@ -154,7 +218,7 @@ bool KServer::load_ssl()
 			klog(KLOG_WARNING, "cipher [%s] is not support\n", cipher.c_str());
 		}
 	}
-	if (protocols.size() > 0) {
+	if (!protocols.empty()) {
 		KSSLSocket::set_ssl_protocols(ssl_ctx, protocols.c_str());
 	}
 	return true;
@@ -178,12 +242,19 @@ void KServer::bindVirtualHost(KVirtualHost *vh,bool high)
 		(*vhc)->bindVirtualHost((*it2),high?kgl_bind_high:kgl_bind_low);
 	}
 }
-void KServer::addVirtualHost(KVirtualHost *vh)
+void KServer::remove_static(KVirtualHost *vh)
 {
 #ifndef HTTP_PROXY
-	if (server==NULL) {
+	if (vh->binds.empty()) {
+		//优先级低绑定
+		removeVirtualHost(vh);
 		return;
 	}
+#endif
+}
+void KServer::add_static(KVirtualHost *vh)
+{
+#ifndef HTTP_PROXY
 	if (vh->binds.empty()) {
 		//优先级低绑定
 		bindVirtualHost(vh,false);
@@ -287,25 +358,113 @@ void KServer::removeDefaultVirtualHost(KVirtualHost *vh)
 #endif
 }
 #endif
-bool KServer::open(const char *ip,int port,int flag)
+bool KServer::internal_open(int flag)
 {
-	if (server) {
-		delete server;
-		server = NULL;
-		fd = NULL;
-	}
-	closed = false;
 #ifdef KSOCKET_UNIX
-	if (ip && *ip=='/') {
+	if (ip && *ip == '/') {
 		KUnixServerSocket *unix_server = new KUnixServerSocket;
-		server = unix_server;
-		SET(model,WORK_MODEL_UNIX_SOCKET);
-		return unix_server->open(ip);
+		SET(model, WORK_MODEL_UNIX_SOCKET);
+		if (unix_server->open(ip)) {
+			add_server_socket(unix_server);
+			return true;
+		}
+		delete unix_server;
+		return false;
 	}
 #endif
-	CLR(model,WORK_MODEL_UNIX_SOCKET);
-	server = new KServerSocket;
-	fd = server;
-	return server->open(port,ip,flag);
+
+	CLR(model, WORK_MODEL_UNIX_SOCKET);
+	SET(flag, KSOCKET_REUSEPORT);
+	bool all_result = true;
+	for (int i = 0; i < selectorManager.getSelectorCount(); i++) {
+		KServerSocket *server = new KServerSocket;
+		if (server->open(port, ip, flag)) {
+			add_server_socket(server);
+#ifdef _WIN32
+			break;
+#endif
+			continue;
+		}
+		all_result = false;
+		delete server;
+		break;
+	}
+	if (!all_result) {
+		//确保一个
+		while (server_selectable && server_selectable->next) {
+			KServerSelectable *next = server_selectable;
+			delete server_selectable;
+			server_selectable = next;
+		}
+	}
+	return server_selectable != NULL;
+}
+bool KServer::start()
+{
+	if (!open()) {
+		while (server_selectable) {
+			KServerSelectable *next = server_selectable->next;
+			delete server_selectable;
+			server_selectable = next;
+		}
+#ifdef KSOCKET_SSL
+		if (ssl_ctx) {
+			KSSLSocket::clean_ctx(ssl_ctx);
+			ssl_ctx = NULL;
+		}
+#endif
+		return false;
+	}
+	started = selectorManager.listen(this, handle_server_listen);
+	return started;
+}
+bool KServer::open()
+{
+	while (server_selectable) {
+		KServerSelectable *next = server_selectable->next;
+		delete server_selectable;
+		server_selectable = next;
+	}
+	closed = false;
+	bool result = false;
+	int flag = (ipv4 ? KSOCKET_ONLY_IPV4 : KSOCKET_ONLY_IPV6);
+#ifdef ENABLE_TPROXY
+	if (TEST(model, WORK_MODEL_TPROXY)) {
+		flag |= KSOCKET_TPROXY;
+	}
+#endif
+#ifdef KSOCKET_SSL
+	if (TEST(model, WORK_MODEL_SSL)) {
+		if (!load_ssl()) {
+			return false;
+		}
+	}
+#endif
+	for (;;) {
+		result = internal_open(flag);
+		if (result) {
+			break;
+		}
+		close();
+		if (failedTries>10) {
+			break;
+		}
+		failedTries++;
+		my_msleep(500);
+	}
+	if (!result) {
+		int err = errno;
+		klog(KLOG_ERR, "cann't listen [%s:%d],error=[%d %s]\n", ip, port, err,strerror(err));
+		return false;
+	}
+	klog(KLOG_NOTICE, "listen [%s:%d] success\n", ip, port);
+	return true;
+}
+void KServer::add_server_socket(KServerSocket *socket)
+{
+	KServerSelectable *ss = new KServerSelectable(this, socket);
+	ss->bind_socket(socket);
+	ss->next = server_selectable;
+	server_selectable = ss;
 }
 
