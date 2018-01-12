@@ -20,6 +20,8 @@ addons:
       - openssl
       - zlib1g-dev
       - libperl-dev
+      - libaio1
+      - libaio-dev
 
 # TODO: fix tests so they don't depend on /usr/local/nginx/logs/
 #       so we can run `make`, `make test`, `make install`.
