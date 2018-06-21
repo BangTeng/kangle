@@ -104,7 +104,7 @@ public:
 	int count;
 	//msec
 	int timeout[KGL_LIST_BLOCK];
-	void add_timer(resultEvent func, void *arg, int msec);
+	void add_timer(resultEvent func, void *arg, int msec, KSelectable *st);
 	virtual bool next(resultEvent result,void *arg,int got) = 0;
 	bool next(resultEvent result, void *arg)
 	{

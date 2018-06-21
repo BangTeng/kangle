@@ -252,7 +252,7 @@ void KSelectorManager::dump_all_connection()
 		char ip[MAXIPLEN];
 		KConnectionSelectable *c = static_cast<KConnectionSelectable *>(st);
 		c->socket->get_remote_ip(ip, MAXIPLEN);
-		klog(KLOG_ERR,"%s\tc=[%p]\tqueue=[%p]\tst_flags=[%d]\ttime=[%d]\n", ip, c, c->queue.next,c->st_flags, (int)(kgl_current_msec - c->active_msec));
+		klog(KLOG_ERR,"%s:%d\tc=[%p]\tqueue=[%p]\tst_flags=[%d]\ttime=[%d]\n", ip,c->socket->get_remote_port(), c, c->queue.next,c->st_flags, (int)(kgl_current_msec - c->active_msec));
 	}
 	klog(KLOG_ERR, "dump_count=[%d],total_connect=[%d]\n", connection_count, total_connect);
 	ipLock.Unlock();

@@ -62,7 +62,7 @@ inline rb_node *rbInsertRequest(rb_root *root,KBlockRequest *brq,bool &isfirst)
 		} else {
 			isfirst = false;
 			brq->next = tmp;
-			brq->prev = tmp->prev;
+			//brq->prev = tmp->prev;
 			(*n)->data = brq;
 		    return *n;
 		}
@@ -70,7 +70,7 @@ inline rb_node *rbInsertRequest(rb_root *root,KBlockRequest *brq,bool &isfirst)
 	rb_node *node = new rb_node;
 	node->data = brq;
 	brq->next = NULL;
-	brq->prev = brq;
+	//brq->prev = brq;
 	rb_link_node(node, parent, n);
 	rb_insert_color(node, root);
 	return node;
@@ -132,18 +132,20 @@ void KSelector::adjustTime(INT64 t)
 		node = rb_next(node);
 	}
 }
-void KSelector::add_timer(resultEvent func,void *arg,int msec)
+void KSelector::add_timer(resultEvent func,void *arg,int msec, KSelectable *st)
 {
 	KBlockRequest *brq = new KBlockRequest;
 	brq->active_msec = kgl_current_msec + msec;
 	brq->func = func;
 	brq->arg = arg;
+	brq->st = st;
 	assert(is_same_thread());
 	bool is_first = true;
 	rb_node *node = rbInsertRequest(&blockList, brq, is_first);
 	if (is_first) {
 		blockBeginNode = node;
 	}
+	assert(blockBeginNode==rb_first(&blockList));
 }
 void KSelector::add_list(KSelectable *rq, int list)
 {
@@ -215,10 +217,15 @@ void KSelector::checkTimeOut() {
 		}
 		rb_node *next = rb_next(blockBeginNode);
 		rb_erase(blockBeginNode,&blockList);
+		while (rq) {
+			KBlockRequest *rq_next = rq->next;
+			rq->func(rq->arg, 0);
+			delete rq;
+			rq = rq_next;
+		}
 		delete blockBeginNode;
 		blockBeginNode = next;
-		rq->func(rq->arg, 0);
-	}	
+	}
 }
 void KSelector::bindSelectable(KSelectable *st)
 {
@@ -229,6 +236,7 @@ unsigned KSelector::getConnection(std::stringstream &s,const char *vh_name,bool 
 {
 	time_t now_time = kgl_current_sec;
 	unsigned totalCount = 0;
+	rb_node *node;
 	assert(is_same_thread());
 	s << "\n//selector index=" << this->sid << ",count=" << this->count << "\n";
 	for(int i = 0;i<KGL_LIST_BLOCK;i++){
@@ -279,8 +287,33 @@ unsigned KSelector::getConnection(std::stringstream &s,const char *vh_name,bool 
 					goto done;
 				}
 			}
-		}		
+		}
 	}
+	node = blockBeginNode;
+	while (node) {
+		s << "\n//list=block\n";
+		KBlockRequest *brq = (KBlockRequest *)node->data;
+		while (brq) {
+			KHttpRequest *rq = NULL;
+			if (brq->st && !TEST(brq->st->st_flags, STF_APP_HTTP2)) {
+				rq = brq->st->app_data.rq;
+			}
+			if (rq) {
+				if (vh_name == NULL || (rq->svh && strcmp(rq->svh->vh->name.c_str(), vh_name) == 0)) {
+					s << "rqs.push(new Array(";
+					getConnectionTr(rq, s, now_time, translate);
+					s << "));\n";
+					totalCount++;
+					if (conf.max_connect_info>0 && katom_inc((void *)total_count)>conf.max_connect_info) {
+						goto done;
+					}
+				}
+			}
+			brq = brq->next;
+		}
+		node = rb_next(node);
+	}
+
 done:
 	return totalCount;
 }

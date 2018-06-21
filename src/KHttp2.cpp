@@ -171,11 +171,14 @@ KHttp2::~KHttp2()
 		}
 	}
 	if (state.stream) {
-		if(state.stream->request
+		if(!state.stream->parsed_header
 			
 		){
 			//incomplete stream
-			delete state.stream->request;
+			assert(state.stream->request);
+			if (state.stream->request) {
+				delete state.stream->request;
+			}
 			delete state.stream;
 		} else if (state.stream->destroy_by_http2) {
 			//must destroy by http2
@@ -611,8 +614,7 @@ u_char *KHttp2::state_header_complete(u_char *pos,u_char *end)
 				return this->close(true, KGL_HTTP_V2_INTERNAL_ERROR);
 			}
 			KHttpRequest *rq = stream->request;
-			stream->parsed_header = 1;		
-			stream->request = NULL;
+			stream->parsed_header = 1;
 			assert(processing >= 0);
 			processing++;
 			state.stream = NULL;

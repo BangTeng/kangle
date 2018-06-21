@@ -30,14 +30,14 @@ public:
 			current_send_time = kgl_current_msec;
 		}
 		current_send_time += sleep_time;
+		if (current_send_time > kgl_current_msec + 20000) {
+			current_send_time = kgl_current_msec + 20000;
+		}
 		//printf("len=[%d],sleep_time=[%lld],adjust_sleep_time=[%lld]\n", len, sleep_time, (current_send_time - kgl_current_msec));
 		sleep_time = current_send_time - kgl_current_msec;
 		refsLock.Unlock();
 		if (sleep_time <= 0) {
 			return 0;
-		}
-		if (sleep_time > 600000) {
-			return 600000;
 		}
 		return (int)sleep_time;
 	}

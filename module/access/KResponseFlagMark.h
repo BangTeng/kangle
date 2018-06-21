@@ -46,7 +46,7 @@ public:
 			result = true;
 		}
 		if (identity_encoding && !TEST(obj->url->encoding, KGL_ENCODING_YES)) {
-			obj->url->encoding = ~KGL_ENCODING_YES;
+			obj->url->encoding = (uint8_t)(~KGL_ENCODING_YES);
 			result = true;
 		}
 		return result;

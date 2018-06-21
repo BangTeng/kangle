@@ -177,7 +177,7 @@ struct KBlockRequest
 	void *arg;
 	resultEvent func;
 	INT64 active_msec;
+	KHttpRequest *rq;
 	KBlockRequest *next;
-	KBlockRequest *prev;
 };
 #endif /* KSELECTABLE_H_ */

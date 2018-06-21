@@ -133,7 +133,7 @@ void KUpstreamSelectable::upstream_read(KHttpRequest *rq,resultEvent result,buff
 		io->rq = rq;
 		io->result = result;
 		io->buffer = buffer;
-		selector->add_timer(upstream_delay_read, io, msec);
+		selector->add_timer(upstream_delay_read, io, msec,NULL);
 		return;
 	}
 	

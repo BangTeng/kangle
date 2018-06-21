@@ -69,7 +69,7 @@ static void start_monitor_call_back(void *arg,int got)
 void next_monitor_call_back(void *arg, int got)
 {
 	KSockPoolHelper *sph = (KSockPoolHelper *)arg;
-	sph->selector->add_timer(::start_monitor_call_back, arg, got);
+	sph->selector->add_timer(::start_monitor_call_back, arg, got,NULL);
 }
 static void WINAPI first_start_monitor_call_back(void *arg)
 {
@@ -225,7 +225,7 @@ KSockPoolHelper::~KSockPoolHelper() {
 }
 void KSockPoolHelper::monitorNextTick()
 {
-	selector->add_timer(::start_monitor_call_back,this,error_try_time*1000);
+	selector->add_timer(::start_monitor_call_back,this,error_try_time*1000,NULL);
 }
 void KSockPoolHelper::startMonitor()
 {

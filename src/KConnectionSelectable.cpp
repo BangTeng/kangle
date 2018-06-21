@@ -231,7 +231,7 @@ void KConnectionSelectable::delayRead(KHttpRequest *rq,resultEvent result,buffer
 	io->rq = rq;
 	io->result = result;
 	io->buffer = buffer;
-	selector->add_timer(delay_read,io,msec);
+	selector->add_timer(delay_read,io,msec, rq->c);
 }
 void KConnectionSelectable::delayWrite(KHttpRequest *rq,resultEvent result,bufferEvent buffer,int msec)
 {
@@ -241,7 +241,7 @@ void KConnectionSelectable::delayWrite(KHttpRequest *rq,resultEvent result,buffe
 	io->rq = rq;
 	io->result = result;
 	io->buffer = buffer;
-	selector->add_timer(delay_write,io,msec);
+	selector->add_timer(delay_write,io,msec,rq->c);
 }
 int KConnectionSelectable::start_response(KHttpRequest *rq,INT64 body_len)
 {

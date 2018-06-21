@@ -254,8 +254,9 @@ public:
 			c->app_data.rq = rq;
 			rq->workModel = c->ls->model;
 			rq->filter_flags = 0;
+			rq->begin_time_msec = kgl_current_msec;
 			SSL_set_ex_data(socket->getSSL(), kangle_ssl_conntion_index, c);
-			//ssl accept				
+			//ssl accept
 			c->read(rq, resultSSLAccept, NULL);
 			return true;
 		}

@@ -15,7 +15,7 @@ void result_timer_call_back(void *arg, int got)
 void next_timer_call_back(void *arg, int got)
 {
 	timer_run_param *param = (timer_run_param *)arg;
-	param->selector->add_timer(result_timer_call_back, param,got);
+	param->selector->add_timer(result_timer_call_back, param,got,NULL);
 }
 void timer_run(timer_func func,void *arg,int msec,unsigned short selector)
 {

@@ -175,7 +175,6 @@ void request_connection_broken(void *arg,int got)
 	KHttpRequest *rq = (KHttpRequest *)arg;
 	rq->ctx->read_huped = true;
 	if (rq->fetchObj==NULL) {
-		
 		return;
 	}
 	KAsyncFetchObject *fo = static_cast<KAsyncFetchObject *>(rq->fetchObj);
