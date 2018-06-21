@@ -75,7 +75,7 @@ public:
 	};
 	int getSize()
 	{
-		return hot-buf;
+		return (int)(hot-buf);
 	}
 	StreamState write_all(const char *str,int len)
 	{

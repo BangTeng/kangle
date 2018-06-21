@@ -33,14 +33,14 @@ public:
 	unsigned getQueueSize()
 	{
 		refsLock.Lock();
-		unsigned queueSize = queue.size();
+		unsigned queueSize = (unsigned)queue.size();
 		refsLock.Unlock();
 		return queueSize;
 	}
 	unsigned getBusyCount()
 	{
 		refsLock.Lock();
-		unsigned count = cur_worker + queue.size();
+		unsigned count = cur_worker + (unsigned)queue.size();
 		refsLock.Unlock();
 		return count;
 	}

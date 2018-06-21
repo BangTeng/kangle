@@ -753,9 +753,6 @@ void KVirtualHost::buildXML(std::stringstream &s) {
 			s << "'";
 		}
 		s << ">" ;
-		if ((*it)->cname) {
-			s << "$";
-		}
 		if ((*it)->wide) {
 			s << "*";
 		}

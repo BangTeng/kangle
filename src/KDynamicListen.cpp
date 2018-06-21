@@ -29,11 +29,11 @@ void KDynamicListen::add_dynamic(const char *listen,KVirtualHost *vh)
 				server->certificate_key = vh->getKeyfile();
 				server->cipher = (vh->cipher?vh->cipher:"");
 				server->protocols = (vh->protocols ? vh->protocols : "");
-				server->sni = true;
 #ifdef ENABLE_HTTP2
 				server->http2 = vh->http2;
 #endif			
 				SET(server->model,WORK_MODEL_SSL);
+				server->load_ssl();
 			}
 #endif
 			
@@ -46,14 +46,14 @@ void KDynamicListen::add_dynamic(const char *listen,KVirtualHost *vh)
 			server->http2 = vh->http2;
 #endif
 #ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
-			if (!server->is_opened() && (*it2).ssl && server->dynamic) {
+			if (!server->is_opened() && !server->is_ssl_loaded() && (*it2).ssl && server->dynamic) {
 				//update ssl certificate and try it again.
 				server->certificate = vh->getCertfile();
 				server->certificate_key = vh->getKeyfile();
 				server->cipher = (vh->cipher?vh->cipher:"");
 				server->protocols = (vh->protocols ? vh->protocols : "");
-				server->sni = true;
 				SET(server->model,WORK_MODEL_SSL);
+				server->load_ssl();
 				initListen((*it2),server);
 			}
 #endif
@@ -146,10 +146,10 @@ bool KDynamicListen::add_static(KListenHost *listen)
 				server->certificate_key = listen->certificate_key;
 				server->cipher = listen->cipher;
 				server->protocols = listen->protocols;
-				server->sni = listen->sni;
 #ifdef ENABLE_HTTP2
 				server->http2 = listen->http2;
 #endif
+				server->load_ssl();
 			}
 #endif
 			listens.insert(std::pair<KListenKey, KServer *>((*it2), server));
@@ -168,15 +168,14 @@ bool KDynamicListen::add_static(KListenHost *listen)
 			server->http2 = listen->http2;
 #endif
 #ifdef KSOCKET_SSL
-			server->sni = listen->sni;
-			if (!server->is_opened() && (*it2).ssl) {
+			if (!server->is_opened() && !server->is_ssl_loaded() && (*it2).ssl) {
 				//update ssl certificate and try it again.
 				server->certificate = listen->certificate;
 				server->certificate_key = listen->certificate_key;
 				server->cipher = listen->cipher;
 				server->protocols = listen->protocols;
-				server->sni = listen->sni;
 				SET(server->model, WORK_MODEL_SSL);
+				server->load_ssl();
 				initListen((*it2), server);
 			}
 #endif

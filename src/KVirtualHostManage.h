@@ -56,7 +56,7 @@ public:
 	 */
 	void add_static(KServer *server);
 	void remove_static(KServer *server);
-	query_vh_result queryVirtualHost(KServer *ls,KSubVirtualHost **rq_svh,const char *site,int site_len,bool cname);
+	query_vh_result queryVirtualHost(KServer *ls,KSubVirtualHost **rq_svh,const char *site,int site_len);
 	int find_domain(const char *domain, WhmContext *ctx);
 	void getAllVh(std::list<std::string> &vhs,bool status,bool onlydb);
 	bool getAllTempleteVh(const char *templeteGroup,std::list<std::string> &vhs);

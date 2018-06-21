@@ -56,7 +56,7 @@ public:
 		logSize += fp.write(str, len);
 	}
 	inline void write(const char *str) {
-		write(str,strlen(str));
+		write(str,(int)strlen(str));
 	}
 
 	inline void write(int value) {

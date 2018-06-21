@@ -78,12 +78,6 @@ bool KSubVirtualHost::setHost(const char *host)
 		xfree(bind_host);
 		bind_host = NULL;
 	}
-	if (*host=='$') {
-		host++;
-		cname = true;
-	} else {
-		cname = false;
-	}
 	if (*host=='*') {
 		host ++;
 		wide = true;

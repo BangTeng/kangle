@@ -23,6 +23,7 @@
 #define ENABLE_ONESHOT_MODEL   1
 #include "KSelector.h"
 #include "KAioSelectable.h"
+#include "KEpollNoticeSelectable.h"
 #include "malloc_debug.h"
 
 class KEpollSelector : public KSelector
@@ -38,8 +39,9 @@ public:
 	bool listen(KServerSelectable *st,resultEvent result);
 	bool read(KSelectable *st,resultEvent result,bufferEvent buffer,void *arg);
 	bool read_hup(KSelectable *st,resultEvent result,bufferEvent buffer,void *arg);
+	void remove_read_hup(KSelectable *st);
 	bool write(KSelectable *st,resultEvent result,bufferEvent buffer,void *arg);
-	bool next(KSelectable *st,resultEvent result,void *arg);
+	bool next(resultEvent result,void *arg,int got);
 	bool connect(KSelectable *st,resultEvent result,void *arg);
 	bool aio_read(KAsyncFile *file,char *buf,INT64 offset,int length,aio_callback cb,void *arg)
 	{
@@ -53,12 +55,20 @@ public:
 	{
 			return aio_st->open(fp);
 	}
+	int get_epoll_fd()
+	{
+		return kdpfd;
+	}
 protected:
 	bool addSocket(KSelectable *rq,int op);
 	void removeSocket(KSelectable *rq);
 private:
+	bool add_event(KSelectable *st,uint16_t ev);
+	void handle_read_event(KSelectable *st);
+	void handle_write_event(KSelectable *st);
 	int kdpfd;
 	KAioSelectable *aio_st;
+	KEpollNoticeSelectable *notice_st;
 };
 #endif
 #endif /*KEPOLLSELECTOR_H_*/

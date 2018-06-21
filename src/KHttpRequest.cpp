@@ -134,7 +134,7 @@ void resultRequestWrite(void *arg,int got)
 		case WRITE_SUCCESS:
 			rq->buffer.clean();
 			if (rq->fetchObj && !rq->fetchObj->isClosed()) {
-				//读数据
+				//
 				
 				rq->fetchObj->readBody(rq);
 			} else {
@@ -175,7 +175,7 @@ void stageWriteRequest(KHttpRequest *rq,buff *buf,int start,int len)
 #ifdef ENABLE_HTTP2
 		if (rq->http2_ctx) {
 			if (rq->fetchObj && !rq->fetchObj->isClosed()) {
-				//读数据
+				//
 				rq->fetchObj->readBody(rq);
 				return;
 			}
@@ -190,14 +190,12 @@ void stageWriteRequest(KHttpRequest *rq,buff *buf,int start,int len)
 void stageWriteRequest(KHttpRequest *rq)
 {
 	if (TEST(rq->flags,RQ_SYNC)) {
-		//同步模式发送header
 		if (rq->send_ctx.getBufferSize()>0) {
 			if (!rq->sync_send_header()) {
 				return;
 			}
 			rq->send_ctx.clean();
 		}
-		//同步模式发送buffer
 		if (rq->buffer.getLen()>0) {
 			rq->sync_send_buffer();
 		}
@@ -246,7 +244,6 @@ void KHttpRequest::resetFetchObject()
 }
 void KHttpRequest::closeFetchObject(bool destroy)
 {
-
 	//printf("~KHttpRequest closeFetchObject [%p]\n", this);
 	if (fetchObj) {
 		fetchObj->close(this);
@@ -278,7 +275,6 @@ StreamState KHttpRequest::write_all(const char *buf, int len) {
 	}
 #endif
 	if(TEST(flags,RQ_SYNC)){
-		//同步发送
 		int sleepTime = getSleepTime(len);
 		if (sleepTime>0) {
 			my_msleep(sleepTime);
@@ -290,7 +286,6 @@ StreamState KHttpRequest::write_all(const char *buf, int len) {
 		}
 		return STREAM_WRITE_FAILED;
 	} else {
-		//异步发送
 		buffer.write_all(buf,len);
 		return STREAM_WRITE_SUCCESS;
 	}
@@ -313,10 +308,8 @@ char *KHttpRequest::get_write_buf(int &size)
 }
 char *KHttpRequest::get_read_buf(int &size)
 {
-	int used = hot - readBuf;
+	int used = (int)(hot - readBuf);
 	if ((unsigned) used >= (current_size-1)) {
-		//readBuf不够读
-		//要重新分配大一点的
 		current_size += current_size;
 		char *nb = (char *) xmalloc(current_size);
 		/* resize buf */
@@ -329,7 +322,7 @@ char *KHttpRequest::get_read_buf(int &size)
 		readBuf = nb;
 		hot = readBuf + used;		
 	}
-	size = current_size - used - 1;
+	size = (int)current_size - used - 1;
 	return hot;
 }
 WriteState KHttpRequest::canWrite(int got)
@@ -349,7 +342,7 @@ ReadState KHttpRequest::canRead(int got) {
 		return READ_FAILED;
 	}
 	hot += got;
-	int status = parser.parse(readBuf, hot - readBuf, this);
+	int status = parser.parse(readBuf, (int)(hot - readBuf), this);
 	if (status == HTTP_PARSE_CONTINUE && current_size >= MAX_HTTP_HEAD_SIZE) {
 		//head is too large
 		SET(raw_url.flags,KGL_URL_BAD);
@@ -363,7 +356,7 @@ ReadState KHttpRequest::canRead(int got) {
 	if (status != HTTP_PARSE_CONTINUE) {
 		return READ_SUCCESS;
 	}
-	if (kgl_current_msec - this->request_msec > conf.time_out * 1000) {
+	if (kgl_current_msec - this->begin_time_msec > conf.time_out * 2000) {
 		SET(raw_url.flags, KGL_URL_BAD);
 		return READ_FAILED;
 	}
@@ -401,9 +394,6 @@ void KHttpRequest::beginRequest() {
 			auth = NULL;
 		}
 	}
-	/*
-	 计算还有多少post数据
-	 */
 	if (TEST(flags,RQ_INPUT_CHUNKED)) {
 		left_read = -1;
 		pre_post_length = parser.bodyLen; 
@@ -411,18 +401,10 @@ void KHttpRequest::beginRequest() {
 		left_read = content_length;
 		pre_post_length = (int)(MIN(left_read,(INT64)parser.bodyLen));
 	}	
-	request_msec = kgl_current_msec;
+	begin_time_msec = kgl_current_msec;
 #ifdef MALLOCDEBUG
 	if (quit_program_flag!=PROGRAM_NO_QUIT) {
 		SET(flags,RQ_CONNECTION_CLOSE);
-	}
-#endif
-#ifdef ENABLE_HTTP2
-	if (http2_ctx) {
-		//对于spdy,我们假定客户端一定支持gzip
-		//有些浏览器(firefox)不会发送accept-encoding头过来
-		//SET(flags, RQ_HAS_GZIP);
-		//SET(raw_url.encoding, KGL_ENCODING_GZIP);
 	}
 #endif
 }
@@ -431,7 +413,6 @@ const char *KHttpRequest::getMethod() {
 }
 bool KHttpRequest::isBad() {
 	if (url==NULL || url->host == NULL || url->path == NULL || meth == METH_UNSET) {
-		//host或者path是空,请求错误	
 		return true;
 	}
 	return false;
@@ -453,7 +434,7 @@ bool KHttpRequest::rewriteUrl(const char *newUrl, int errorCode, const char *pre
 				nu << "/";
 			}
 			nu << prefix;
-			int len = strlen(prefix);
+			int len = (int)strlen(prefix);
 			if (len>0 && prefix[len-1]!='/') {
 				nu << "/";
 			}
@@ -496,7 +477,6 @@ bool KHttpRequest::rewriteUrl(const char *newUrl, int errorCode, const char *pre
 	}
 	url_decode(url2.path, 0, &url2);
 	if (ctx->obj && ctx->obj->url==url && !TEST(ctx->obj->index.flags,FLAG_URL_FREE)) {
-		//写时拷贝
 		SET(ctx->obj->index.flags,FLAG_URL_FREE);
 		ctx->obj->url = url->clone();
 	}
@@ -534,20 +514,24 @@ std::string KHttpRequest::getInfo() {
 
 	return s.getString();
 }
-void KHttpRequest::init() {
+void KHttpRequest::init(kgl_pool_t *pool) {
 	KHttpRequestData *data = static_cast<KHttpRequestData *>(this);
 	memset(data,0,sizeof(KHttpRequestData));
-	assert(pool == NULL);
-	pool = kgl_create_pool(KGL_REQUEST_POOL_SIZE);
+	assert(this->pool == NULL);
+	this->pool = pool;
+	if (this->pool == NULL) {
+		this->pool = kgl_create_pool(KGL_REQUEST_POOL_SIZE);
+	}
 	http_major = 1;
 	http_minor = 1;
 	setState(STATE_IDLE);
 	hot = readBuf;
+	begin_time_msec = kgl_current_msec;
 	parser.start();
 }
 void KHttpRequest::clean(bool keep_alive) {
 	if (c) {
-		c->endResponse(this,keep_alive);
+		c->end_response(this,keep_alive);
 	}
 	closeFetchObject();
 	while (sr) {
@@ -634,7 +618,7 @@ void KHttpRequest::close()
 		http2_ctx == NULL && 
 #endif
 		c) {
-		c->selector->removeList(c);
+		assert(c->queue.next==NULL);
 		c->app_data.rq = NULL;
 	}
 	ctx->clean_obj(this);
@@ -701,7 +685,6 @@ void KHttpRequest::endSubRequest()
 void KHttpRequest::beginSubRequest(KUrl *url,sub_request_call_back callBack,void *data)
 {
 	if (stackSize>32) {
-		//调用层数太多了
 		url->destroy();
 		delete url;
 		callBack(this,data,sub_request_free);
@@ -719,7 +702,6 @@ void KHttpRequest::beginSubRequest(KUrl *url,sub_request_call_back callBack,void
 	nsr->url = this->url;
 	nsr->ctx = ctx;
 	assert(ctx);
-	//阻止write_end
 	ctx->st->preventWriteEnd = true;
 	nsr->callBack = callBack;
 	nsr->data = data;
@@ -731,10 +713,7 @@ void KHttpRequest::beginSubRequest(KUrl *url,sub_request_call_back callBack,void
 	SET(workModel,WORK_MODEL_INTERNAL);
 	this->url = url;
 	sr = nsr;
-	//在调用子请求太多时，要切断堆栈调用,否则会堆栈溢出
-	c->next(resultNextSubRequest, this);
-	//c->handler = handleNextSubRequest;
-	//c->selector->addRequest(this,KGL_LIST_RW,STAGE_OP_NEXT);
+	c->selector->next(resultNextSubRequest, this);
 }
 bool KHttpRequest::parseMeth(const char *src) {
 	meth = KHttpKeyValue::getMethod(src);
@@ -870,7 +849,7 @@ int KHttpRequest::parseHeader(const char *attr, char *val,int &val_len, bool isF
 		KHttpFieldValue field(val);
 		do {
 			if (field.is("keep-alive")) {
-				if (conf.keep_alive>0) {
+				if (conf.keep_alive_count>=0) {
 					flags |= RQ_HAS_KEEP_CONNECTION;
 				}
 			} else if (field.is("upgrade")) {
@@ -1121,7 +1100,6 @@ bool KHttpRequest::responseHeader(const char *name,hlen_t name_len,const char *v
 	send_ctx.head_append(buf,len);
 	return true;
 }
-//发送完header开始发送body时调用
 void KHttpRequest::startResponseBody(INT64 body_len)
 {
 	assert(!TEST(flags,RQ_HAS_SEND_HEADER));
@@ -1131,7 +1109,7 @@ void KHttpRequest::startResponseBody(INT64 body_len)
 	SET(flags,RQ_HAS_SEND_HEADER);
 #ifdef ENABLE_HTTP2
 	if (http2_ctx) {
-		int got = c->startResponse(this,body_len);
+		int got = c->start_response(this,body_len);
 		addFlow(got, ctx->cache_hit);
 		send_size += got;
 		return;
@@ -1141,7 +1119,7 @@ void KHttpRequest::startResponseBody(INT64 body_len)
 	getRequestLine(status_code,&request_line);
 	send_ctx.head_insert_const(request_line.data,(uint16_t)request_line.len);
 	send_ctx.head_append_const("\r\n",2);
-	c->startResponse(this, body_len);
+	c->start_response(this, body_len);
 	return;
 }
 bool KHttpRequest::sync_send_buffer()
@@ -1164,7 +1142,6 @@ bool KHttpRequest::sync_send_buffer()
 }
 bool KHttpRequest::sync_send_header()
 {
-	//同步模式发送header
 	for (;;) {
 		iovec iov[16];
 		int bufCount = 16;

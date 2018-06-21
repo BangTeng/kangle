@@ -2,10 +2,11 @@
 #define KAIO_SELECTABLE_H 1
 #include "KSelectable.h"
 #include <libaio.h>
+class KEpollSelector;
 class KAioSelectable : public KSelectable
 {
 public:
-	KAioSelectable(int epfd);
+	KAioSelectable(KEpollSelector *selector);
 	~KAioSelectable();
 	void event();
 	KAsyncFile *open(KFile *fp);

@@ -32,7 +32,7 @@ public:
 		int count = 0;
 		lock.Lock();
 		if (wide) {	
-			int path_len = strlen(url->path);
+			int path_len = (int)strlen(url->path);
 			rb_node *node = findn(url,path_len);
 			while (node) {
 				count += purgeObject((KHttpObject *)node->data,handle,param);
@@ -107,7 +107,7 @@ public:
 			}
 			if ((internal == (TEST(obj->index.flags, FLAG_RQ_INTERNAL)>0)) &&
 				obj->url->match_accept_encoding(accept_encoding)) {
-				if (!no_disk_cache || obj->data != NULL && obj->data->type == MEMORY_OBJECT) {
+				if (!no_disk_cache || (obj->data != NULL && obj->data->type == MEMORY_OBJECT)) {
 					//hit cache
 					if (hit_obj == NULL || obj->url->encoding > hit_obj->url->encoding) {
 						hit_obj = obj;

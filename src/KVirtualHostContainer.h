@@ -37,7 +37,7 @@ inline bool revert_hostname(const char *src,int len,domain_t dst,int dst_len)
 		const char *p = (const char *)memchr(src,'.',len);
 		if (p) {
 			hot->len = p - src;
-			len -= (hot->len + 1);
+			len -= (int)(hot->len + 1);
 			src = (p+1);
 		} else {
 			hot->len = len;
@@ -55,7 +55,7 @@ inline bool revert_hostname(const char *src,int len,domain_t dst,int dst_len)
 	}
 	while (stack_size-->0) {
 		hot--;
-		dst_len -= (hot->len + 1);
+		dst_len -= (int)(hot->len + 1);
 		if (dst_len<=0) {
 			*dst = '\0';
 			return false;

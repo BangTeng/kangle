@@ -90,7 +90,7 @@ public:
 					memcpy(*prevData + filterPrevDataLen, buf, len);
 				}
 				buf = *prevData;
-				len += filterPrevDataLen;
+				len += (int)filterPrevDataLen;
 			}
 			KFilterKey *keys = NULL;
 			match = tmp->check(buf, len, charset, &keys);
@@ -137,7 +137,7 @@ public:
 				//no memory to alloc.
 				return JUMP_DENY;
 			}
-			int start = len - filterPrevDataLen;
+			int start = len - (int)filterPrevDataLen;
 			memcpy(filterPrevData, buf + start, filterPrevDataLen);
 		}
 		return action;

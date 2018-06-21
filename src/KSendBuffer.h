@@ -33,7 +33,7 @@ public:
 		assert(header);
 		buff *tmp = header;
 		buffer[0].iov_base = hot;
-		buffer[0].iov_len = header->used - (hot - header->data);
+		buffer[0].iov_len = header->used - (int)(hot - header->data);
 		int i;
 		for (i=1;i<bufferCount;i++) {
 			tmp = tmp->next;
@@ -57,7 +57,7 @@ public:
 	{
 		total_len -= got;
 		while (got>0) {
-			int hot_left = header->used - (hot - header->data);
+			int hot_left = header->used - (int)(hot - header->data);
 			int this_len = MIN(got,hot_left);
 			hot += this_len;
 			got -= this_len;

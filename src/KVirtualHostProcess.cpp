@@ -110,7 +110,7 @@ void KVirtualHostProcess::handleRequest(KHttpRequest *rq,KExtendProgram *rd)
 	case VProcess_Poweroff:
 	case VProcess_Close:
 		{
-			rq->c->removeRequest(rq,true);
+			//rq->c->removeRequest(rq,true);
 			//gc->queue.push_back(rq);
 			VProcessPowerParam *param = new VProcessPowerParam;
 			addRef();
@@ -132,7 +132,7 @@ void KVirtualHostProcess::handleRequest(KHttpRequest *rq,KExtendProgram *rd)
 		}
 	case VProcess_Inprogress:
 		{
-			rq->c->removeRequest(rq,true);
+			//rq->c->removeRequest(rq,true);
 			queue.push_back(rq);
 			break;
 		}

@@ -41,4 +41,5 @@ u_short string_hash(const char *str, u_short res = 1);
  */
 extern time_t program_start_time;
 extern int program_rand_value;
+extern int open_file_limit;
 #endif	/* !_LIB_H_INCLUDED_ */

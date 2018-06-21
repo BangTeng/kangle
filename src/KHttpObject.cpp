@@ -385,7 +385,8 @@ bool KHttpObject::swapout(bool fast_model)
 		filename);
 
 	if (!file.open(filename,fileModify, KFILE_DSYNC)) {
-		klog(KLOG_WARNING,"cann't open file [%s] to write.\n",filename);
+		int err = errno;
+		klog(KLOG_WARNING,"cann't open file [%s] to write. errno=[%d %s]\n",filename,err,strerror(err));
 		goto swap_out_failed;
 	}
 	if (!save_header(&file, url, url_len)) {

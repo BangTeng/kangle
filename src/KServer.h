@@ -69,7 +69,6 @@ public:
 	//是否已经开始
 	bool started;
 #ifdef KSOCKET_SSL
-	bool sni;
 	bool http2;
 	std::string certificate;
 	std::string certificate_key;
@@ -77,6 +76,10 @@ public:
 	std::string protocols;
 	SSL_CTX *ssl_ctx;
 	bool load_ssl();
+	bool is_ssl_loaded()
+	{
+		return ssl_ctx != NULL;
+	}
 #endif
 
 public:
@@ -91,9 +94,6 @@ public:
 	}
 	bool isEmpty();
 	KVirtualHostContainer *vhc;
-#ifdef ENABLE_CNAME_BIND
-	KVirtualHostContainer *cname_vhc;
-#endif
 	void add_static(KVirtualHost *vh);
 	void remove_static(KVirtualHost *vh);
 	void removeVirtualHost(KVirtualHost *vh);

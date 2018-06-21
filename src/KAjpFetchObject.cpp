@@ -11,7 +11,7 @@
 #include "malloc_debug.h"
 #define MAX_AJP_RESPONSE_HEADERS 0xc
 #define MAX_AJP_REQUEST_HEADERS  0xf
-#if 1
+#if 0 
 static const char *ajp_request_headers[MAX_AJP_REQUEST_HEADERS] = {
 	"",
 	"accept",
@@ -189,13 +189,13 @@ Parse_Result KAjpFetchObject::parseHead(KHttpRequest *rq,char *data,int len)
 	//因为有可能一个header里面包含多条ajpmessage，要保留解析位置，下次接着从上次位置解析。
 	for (;;) {
 		char *str = header + parsed_len;
-		len = hot - header - parsed_len;
+		len = (int)(hot - header) - parsed_len;
 		if (len<=0) {
 			return Parse_Continue;
 		}
 		char *save_data = str;
 		KAjpMessage *msg = parse(&str,len);
-		int this_parsed_len = str - save_data;
+		int this_parsed_len = (int)(str - save_data);
 		//printf("this_parsed_len=%d\n",this_parsed_len);
 		parsed_len += this_parsed_len;
 		if (msg == NULL) {

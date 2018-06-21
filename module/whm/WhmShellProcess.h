@@ -19,7 +19,7 @@ public:
 	}
 	char **makeArgs(WhmShellContext *sc)
 	{
-		int args_count = args.size() + 1;
+		int args_count = (int)args.size() + 1;
 		char **arg = new char *[args_count];
 		int i=0;
 		for (unsigned j=0; j < args.size(); j++) {

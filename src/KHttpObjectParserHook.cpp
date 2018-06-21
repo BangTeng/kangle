@@ -55,7 +55,7 @@ void KHttpObjectParserHook::endParse() {
 			apparent_age = (unsigned) (responseTime - serverDate);
 		}
 		unsigned corrected_received_age = MAX(apparent_age, age);
-		unsigned response_delay = (unsigned) (responseTime - rq->request_msec/1000);
+		unsigned response_delay = (unsigned) (responseTime - rq->begin_time_msec/1000);
 		unsigned corrected_initial_age = corrected_received_age
 				+ response_delay;
 		unsigned resident_time = (unsigned) (kgl_current_sec - responseTime);
@@ -115,8 +115,7 @@ int KHttpObjectParserHook::parseHeader(const char *attr, char *val,int &val_len,
 		char *data = strstr(val, "timeout=");
 		if (data) {
 			//确保有效，减掉2秒生存时间
-			keep_alive_time_out = atoi(data + 8) - 2 - (int) (responseTime
-					- rq->request_msec/1000);
+			keep_alive_time_out = atoi(data + 8) - 2 - (int) (responseTime	- rq->begin_time_msec /1000);
 		}
 		return PARSE_HEADER_NO_INSERT;
 	}
@@ -270,7 +269,7 @@ int KHttpObjectParserHook::parseHeader(const char *attr, char *val,int &val_len,
 		} else if (strcasecmp(val, "br") == 0) {
 			obj->url->set_content_encoding(KGL_ENCODING_BR);
 		} else if (strcasecmp(val, "identity") == 0) {
-			obj->url->encoding = ~KGL_ENCODING_YES;
+			obj->url->encoding = (u_char)~KGL_ENCODING_YES;
 		} else if (*val) {
 			obj->url->set_content_encoding(KGL_ENCODING_UNKNOW);
 		}

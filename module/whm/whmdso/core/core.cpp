@@ -42,6 +42,7 @@
 #include "KSelectorManager.h"
 #include "KCdnContainer.h"
 #include "ssl_utils.h"
+#include "KAddr.h"
 #include "KLogDrill.h"
 enum{
 	CALL_UNKNOW,
@@ -477,6 +478,8 @@ int WINAPI WhmCoreCall(const char *callName, const char *event, WHM_CONTEXT *con
 #ifdef UPDATE_CODE
 			ctx->add("update_code", UPDATE_CODE);
 #endif
+			ctx->add("open_file_limit", open_file_limit);
+			ctx->add("addr_cache", get_addr_cache_count());
 			ctx->add("disk_cache_shutdown", (int)cache.is_disk_shutdown());
 			return WHM_OK;
 		}

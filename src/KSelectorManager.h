@@ -30,6 +30,7 @@
 #include "KIpAclBase.h"
 #include "katom.h"
 #include "KCondWait.h"
+#include "KList.h"
 #define MAX_SELECTORS	2
 #define ADD_REQUEST_SUCCESS                                     0
 #define ADD_REQUEST_TOO_MANY_CONNECTION 	1
@@ -54,9 +55,8 @@ struct KConnectionInfo {
 	KCondWait wait;
 	KSelector *selector;
 };
-//#define RQ_LEAK_DEBUG               1
 #ifdef RQ_LEAK_DEBUG
-extern std::map<KHttpRequest *,bool> all_request;
+extern kgl_list all_connection;
 #endif
 extern intmap m_ip;
 extern KMutex ipLock;
@@ -88,7 +88,6 @@ inline int addRequest(KConnectionSelectable *c) {
 		unsigned max_per_ip = conf.max_per_ip;
 		assert(c->ls);
 		if (TEST(c->ls->model,WORK_MODEL_MANAGE)) {
-			//确保manage优先
 			if (max>0) {
 				max+=100;
 			}
@@ -125,6 +124,9 @@ inline int addRequest(KConnectionSelectable *c) {
 		}
         if (max_per_ip==0) {
 				total_connect++;
+#ifdef RQ_LEAK_DEBUG
+				klist_append(&all_connection, &c->queue_edge);
+#endif
                 ipLock.Unlock();
                 SET(c->st_flags,STF_RQ_OK);
                 return ADD_REQUEST_SUCCESS;
@@ -140,6 +142,9 @@ inline int addRequest(KConnectionSelectable *c) {
                 (*it2).second++;
         }
 		total_connect++;
+#ifdef RQ_LEAK_DEBUG
+		klist_append(&all_connection, &c->queue_edge);
+#endif
         ipLock.Unlock();
         SET(c->st_flags,STF_RQ_OK|STF_RQ_PER_IP);
         return ADD_REQUEST_SUCCESS;
@@ -147,20 +152,27 @@ inline int addRequest(KConnectionSelectable *c) {
 		
         return ADD_REQUEST_PER_IP_LIMIT;
 }
-inline void delRequest(u_short workModel,KClientSocket *socket) {
-	if(!TEST(workModel,STF_RQ_PER_IP)){
-			if(TEST(workModel,STF_RQ_OK)){
-					ipLock.Lock();
-					total_connect--;
-					ipLock.Unlock();
-			}
-			return ;
+inline void delRequest(KConnectionSelectable *c) {
+	if(!TEST(c->st_flags,STF_RQ_PER_IP)){
+		if (!TEST(c->st_flags, STF_RQ_OK)) {
+			return;
+		}
+		ipLock.Lock();
+		total_connect--;
+#ifdef RQ_LEAK_DEBUG
+		klist_remove(&c->queue_edge);
+#endif
+		ipLock.Unlock();
+		return ;
 	}
 	ip_addr ip;
-	socket->get_remote_addr(&ip);
+	c->socket->get_remote_addr(&ip);
 	intmap::iterator it2;
 	ipLock.Lock();
 	total_connect--;
+#ifdef RQ_LEAK_DEBUG
+	klist_remove(&c->queue_edge);
+#endif
 	it2 = m_ip.find(ip);
 	assert(it2!=m_ip.end());
 	(*it2).second--;
@@ -209,55 +221,13 @@ public:
 #ifdef ENABLE_STAT_STUB
 		katom_inc64((void *)&kgl_total_servers);
 #endif
-		if (c->selector == NULL){
-			getSelector()->bindSelectable(c);
-		}
+		assert(c->selector->is_same_thread());
 		int ret = addRequest(c);
-		if (ret == ADD_REQUEST_SUCCESS) {
-#ifdef ENABLE_STAT_STUB
-			katom_inc64((void *)&kgl_total_accepts);
-#endif
-#ifdef KSOCKET_SSL
-			if (c->isSSL()) {
-				KSSLSocket *socket = static_cast<KSSLSocket *>(c->socket);
-				if (!socket->bind_fd()) {
-					c->real_destroy();
-					return false;
-				}
-				KHttpRequest *rq = new KHttpRequest(c);
-				c->app_data.rq = rq;
-				rq->workModel = c->ls->model;
-				rq->filter_flags = 0;
-				//绑定rq到ssl上，SNI要用到，从SSL得到rq
-				SSL_set_ex_data(socket->getSSL(), kangle_ssl_conntion_index, c);
-				//ssl accept				
-				c->read(rq, resultSSLAccept, NULL, (conf.keep_alive > 0 ? KGL_LIST_KA : KGL_LIST_RW));
-				//resultSSLAccept(rq,0);
-			} else {
-#endif
-				KHttpRequest *rq = new KHttpRequest(c);
-				c->app_data.rq = rq;
-				rq->workModel = c->ls->model;
-				rq->init();
-#ifdef WORK_MODEL_TCP
-				if (TEST(rq->workModel,WORK_MODEL_TCP)) {
-					rq->meth = METH_CONNECT;
-					handleStartRequest(rq,0);
-					return true;
-				}
-#endif
-				c->read(rq, resultRequestRead, bufferRequestRead, (conf.keep_alive>0 ? KGL_LIST_KA : KGL_LIST_RW));
-#ifdef KSOCKET_SSL
-			}
-#endif
-			return true;
-		}
-		else {
+		if (unlikely(ret != ADD_REQUEST_SUCCESS)) {
 #ifndef _WIN32
 #ifdef KSOCKET_SSL
 			if (!c->isSSL()) {
 #endif
-				//为什么windows不能发送呢？因为windows的socket是阻塞的。这里不能卡到。
 				c->socket->write_all("HTTP/1.0 503 Service Unavailable\r\n\r\nServer is busy,try it again");
 #ifdef KSOCKET_SSL
 			}
@@ -265,13 +235,44 @@ public:
 #endif
 			char ips[MAXIPLEN];
 			c->socket->get_remote_ip(ips, sizeof(ips));
-			klog(KLOG_ERR, "cann't addRequest to thread %s:%d %s\n",
-				ips, c->socket->get_remote_port(),
+			klog(KLOG_ERR, "cann't addRequest to thread %s:%d %s\n", ips, c->socket->get_remote_port(),
 				getErrorMsg(ret));
 			c->real_destroy();
 			return false;
 		}
-
+#ifdef ENABLE_STAT_STUB
+		katom_inc64((void *)&kgl_total_accepts);
+#endif
+#ifdef KSOCKET_SSL
+		if (c->isSSL()) {
+			KSSLSocket *socket = static_cast<KSSLSocket *>(c->socket);
+			if (!socket->bind_fd()) {
+				c->real_destroy();
+				return false;
+			}
+			KHttpRequest *rq = new KHttpRequest(c);
+			c->app_data.rq = rq;
+			rq->workModel = c->ls->model;
+			rq->filter_flags = 0;
+			SSL_set_ex_data(socket->getSSL(), kangle_ssl_conntion_index, c);
+			//ssl accept				
+			c->read(rq, resultSSLAccept, NULL);
+			return true;
+		}
+#endif
+		KHttpRequest *rq = new KHttpRequest(c);
+		c->app_data.rq = rq;
+		rq->workModel = c->ls->model;
+		rq->init(NULL);
+#ifdef WORK_MODEL_TCP
+		if (TEST(rq->workModel,WORK_MODEL_TCP)) {
+			rq->meth = METH_CONNECT;
+			handleStartRequest(rq,0);
+			return true;
+		}
+#endif
+		c->read(rq, resultRequestRead, bufferRequestRead);
+		return true;
 	}
 	void setTimeOut();
 	int getSelectorCount()
@@ -291,8 +292,20 @@ public:
 	}
 	void onReady(void (WINAPI *call_back)(void *arg),void *arg);
 public:
+#ifdef RQ_LEAK_DEBUG
+	void dump_all_connection();
+#endif
 	std::string getConnectionInfo(int &totalCount,int debug,const char *vh_name,bool translate=true);
 private:
+	void set_time_out(int time_out_index, int value)
+	{
+		if (value <= 0) {
+			value = 60000;
+		}
+		for (int i = 0; i<count; i++) {
+			selectors[i]->timeout[time_out_index] = value;
+		}
+	}
 	KSelector **selectors;
 	int count;
 	unsigned sizeHash;

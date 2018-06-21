@@ -61,7 +61,7 @@
 
 #include "KHttpFilterManage.h"
 #include "ksapi.h"
-#include "KCname.h"
+#include "KAddr.h"
 #include "KLogDrill.h"
 using namespace std;
 
@@ -82,7 +82,6 @@ inline bool in_stop_cache(KHttpRequest *rq) {
  */
 inline int checkHaveNextRequest(KHttpRequest *rq) {
 	if (rq->pre_post_length>0) {
-		//如果还有pre_post数据没处理，跳过忽略
 		rq->parser.bodyLen -= rq->pre_post_length;
 		rq->parser.body += rq->pre_post_length;
 		rq->pre_post_length = 0;
@@ -91,7 +90,7 @@ inline int checkHaveNextRequest(KHttpRequest *rq) {
 	if (bodyLen > 0) {
 		memcpy(rq->readBuf, rq->parser.body , bodyLen);
 		rq->clean();
-		rq->init();
+		rq->init(NULL);
 		rq->hot = rq->readBuf + bodyLen;
 		return rq->parser.parse(rq->readBuf, bodyLen, rq);
 	}
@@ -129,31 +128,22 @@ void stageUnlockedEndRequest(void *arg,int got)
 	}
 #endif
 	if (!TEST(rq->flags, RQ_CONNECTION_CLOSE) && TEST(rq->flags, RQ_HAS_KEEP_CONNECTION)) {
-		//检测http pipe line，查看是否还有请求要处理
 		status = checkHaveNextRequest(rq);
 		if (status == HTTP_PARSE_SUCCESS) {
-			rq->c->next(nextRequest, rq);
+			rq->c->selector->next(nextRequest, rq);
 			return;
 		}
 	}
-	/*
-	对下一次状态不同做出不同的处理
-	*/
-	if (status == HTTP_PARSE_FAILED || rq->c->queue.next == NULL) {
+	if (status == HTTP_PARSE_FAILED) {
 		delete rq;
 		return;
 	}
 	if (status != HTTP_PARSE_CONTINUE) {
 		rq->clean();
-		rq->init();
+		rq->init(NULL);
 	}
-	rq->c->read(rq, resultRequestRead, bufferRequestRead, KGL_LIST_KA);
+	rq->c->read(rq, resultRequestRead, bufferRequestRead);
 }
-/*
-结束请求
-调用这个函数有两个入口点，一个是主线程，还有一个是stage2返回stage1时调用的
-所以这里是有可能有多个线程同时调用的。
-*/
 void stageEndRequest(KHttpRequest *rq)
 {
 #ifndef _WIN32	
@@ -161,7 +151,11 @@ void stageEndRequest(KHttpRequest *rq)
 	assert(!rq->c->socket->isBlock());
 #endif
 #endif
-	if (rq->fetchObj) {
+	if (rq->fetchObj && rq->ctx->connection_upgrade) {
+		if (rq->c->is_locked(rq)) {
+			static_cast<KAsyncFetchObject *>(rq->fetchObj)->shutdown(rq);
+			return;
+		}
 		KUpstreamSelectable *st = rq->fetchObj->getSelectable();
 		if (st && st->is_upstream_locked()) {
 			static_cast<KAsyncFetchObject *>(rq->fetchObj)->shutdown(rq);
@@ -170,13 +164,12 @@ void stageEndRequest(KHttpRequest *rq)
 	}
 
 	if (!TEST(rq->flags,RQ_CONNECTION_CLOSE) && rq->sr) {
-		//子请求结束
-		rq->c->next(resultEndSubRequest,rq);
+		//
+		rq->c->selector->next(resultEndSubRequest,rq);
 		return;
 	}
 #ifdef ENABLE_TF_EXCHANGE
 	if (rq->tf && rq->tf->switchRead()) {
-		//有临时文件，此时发送临时文件
 #ifndef NDEBUG
 		int len = 0;
 		char *buf = rq->tf->readBuffer(len);
@@ -187,13 +180,8 @@ void stageEndRequest(KHttpRequest *rq)
 		return;
 	}
 #endif
-	if (rq->c->is_locked(rq)) {
-		rq->c->unlock_read_hup(rq, stageUnlockedEndRequest);
-		return;
-	} else if (rq->c->is_event(rq,STF_EVENT)) {
-		rq->c->removeRequest(rq, false);
-	}
-
+	rq->c->remove_read_hup(rq);
+	assert(!rq->c->is_event(rq, STF_EVENT));
 	stageUnlockedEndRequest(rq, 0);
 }
 
@@ -347,8 +335,13 @@ void log_access(KHttpRequest *rq) {
 	}
 	
 	l.WSTR("t");
-	INT64 t = kgl_current_msec - rq->request_msec;
+	INT64 t = kgl_current_msec - rq->begin_time_msec;
 	l << t;
+	if (rq->first_response_time_msec > 0) {
+		l.WSTR("T");
+		t = rq->first_response_time_msec - rq->begin_time_msec ;
+		l << t;
+	}
 	if (rq->mark!=0) {
 		l.WSTR("m");
 		l << (int)rq->mark;
@@ -358,7 +351,7 @@ void log_access(KHttpRequest *rq) {
 	l.WSTR("]");
 	if (conf.log_event_id) {
 		l.WSTR(" ");
-		l.add(rq->request_msec, INT64_FORMAT_HEX);
+		l.add(rq->begin_time_msec, INT64_FORMAT_HEX);
 		l.WSTR("-");
 		l.add((INT64)rq, INT64_FORMAT_HEX);
 	}
@@ -398,7 +391,7 @@ inline int checkRequest(KHttpRequest *rq)
 #endif
 	return kaccess[REQUEST].check(rq, NULL);
 }
-void handleConnectMethod(KHttpRequest *rq)//https代理
+void handleConnectMethod(KHttpRequest *rq)
 {
 
 	send_error(rq,NULL,STATUS_METH_NOT_ALLOWED,"The requested method CONNECT is not allowed");
@@ -460,7 +453,6 @@ void stageHttpManage(KHttpRequest *rq)
 	if(strstr(rq->url->path,".whm") 
 		|| strcmp(rq->url->path,"/logo.gif")==0
 		|| strcmp(rq->url->path,"/main.css")==0){
-		//如果有whm的，直接走whm,跳过post数据处理
 		CLR(rq->flags,RQ_HAS_AUTHORIZATION);
 		assert(rq->fetchObj==NULL && rq->svh==NULL);
 		rq->svh = conf.sysHost->getFirstSubVirtualHost();
@@ -476,7 +468,7 @@ void stageHttpManage(KHttpRequest *rq)
 }
 void stageDeniedRequest(KHttpRequest *rq) {
 	if (rq->send_ctx.getBufferSize() > 0 || rq->buffer.getLen() > 0
-		|| rq->status_code>0 //启用http2中调用了send_redirect之后，buffer是空的,所以加上status_code判断
+		|| rq->status_code>0
 		) {
 #ifdef ENABLE_TF_EXCHANGE
 		if (rq->tf) {
@@ -502,15 +494,17 @@ bool check_virtual_host_request(KHttpRequest *rq) {
 	if (rq->svh==NULL) {
 		return true;
 	}
+	if (rq->svh->vh->status != 0) {
+		handleError(rq, STATUS_SERVICE_UNAVAILABLE, "virtual host is closed");
+		return false;
+	}
 #ifdef ENABLE_VH_RS_LIMIT
-	/* 带宽限制 */
 	KSpeedLimit *sl= rq->svh->vh->refsSpeedLimit();
 	if (sl) {
 		rq->pushSpeedLimit(sl);
 	}
 #endif
 #ifdef ENABLE_VH_FLOW
-	/* 流量统计 */
 	KFlowInfo *flow = rq->svh->vh->refsFlowInfo();
 	if (flow) {
 		rq->pushFlowInfo(flow);
@@ -533,28 +527,24 @@ bool check_virtual_host_request(KHttpRequest *rq) {
 #endif
 	return true;
 }
-bool bind_virtual_host(KHttpRequest *rq,const char *hostname,int len,bool cname) {
+bool bind_virtual_host(KHttpRequest *rq,const char *hostname,int len) {
 	query_vh_result vh_result;
 #ifdef KSOCKET_SSL
 	if (rq->c->sni) {
 		vh_result = rq->c->useSniVirtualHost(rq);
 	} else
 #endif
-		vh_result = conf.gvm->queryVirtualHost(rq->c->ls,&rq->svh,hostname,len,cname);
+		vh_result = conf.gvm->queryVirtualHost(rq->c->ls,&rq->svh,hostname,len);
 	switch (vh_result) {
 	case query_vh_connect_limit:
 		send_error(rq, NULL, STATUS_SERVER_ERROR, "max connect limit.");
 		return false;
 	case query_vh_host_not_found:
-		if (cname) {
-			return bind_virtual_host(rq,rq->url->host,0,false);
-		}
 		send_error(rq,NULL,STATUS_BAD_REQUEST,"host not found.");
 		return false;
 	default:
 		break;
 	}
-	//保存raw_url的flags
 	u_short flags = rq->raw_url.flags;
 	rq->raw_url.flags = 0;
 	if (!check_virtual_host_request(rq)) {
@@ -564,7 +554,7 @@ bool bind_virtual_host(KHttpRequest *rq,const char *hostname,int len,bool cname)
 	if (TEST(rq->raw_url.flags,KGL_URL_REWRITED)) {
 		//rewrite host
 		KSubVirtualHost *new_svh = NULL;
-		conf.gvm->queryVirtualHost(rq->c->ls, &new_svh, rq->url->host, 0, false);
+		conf.gvm->queryVirtualHost(rq->c->ls, &new_svh, rq->url->host, 0);
 		if (new_svh) {
 			if (new_svh->vh == rq->svh->vh) {
 				rq->svh->release();
@@ -577,29 +567,10 @@ bool bind_virtual_host(KHttpRequest *rq,const char *hostname,int len,bool cname)
 	SET(rq->raw_url.flags, flags);
 	return true;
 }
-void bind_cname_call_back(KHttpRequest *rq,const char *cname,int len) {
-	if (cname==NULL) {
-		if (bind_virtual_host(rq,rq->url->host,0,false)) {
-			async_http_start(rq);
-		}
-		return;
-	}
-	if (bind_virtual_host(rq,cname,len,true)) {
-		async_http_start(rq);
-	}
-}
 bool bind_virtual_host(KHttpRequest *rq)
 {
-#ifdef ENABLE_CNAME_BIND
-	assert(rq->c->ls);
-	if (rq->c->ls->cname_vhc) {
-		kgl_find_cname(rq->url->host,bind_cname_call_back,rq);
-		return false;
-	}
-#endif
-	return bind_virtual_host(rq,rq->url->host,0,false);
+	return bind_virtual_host(rq,rq->url->host,0);
 }
-//开始一个http请求
 void handleStartRequest(KHttpRequest *rq,int got)
 {
 	
@@ -631,7 +602,6 @@ void handleStartRequest(KHttpRequest *rq,int got)
 		return;
 	}
 #ifdef ENABLE_STAT_STUB
-	//内置用于监控状态
 	if (strcmp(rq->url->path, "/kangle.status") == 0) {
 		if (rq->meth!=METH_HEAD) {
 			rq->buffer << "OK\n";
@@ -663,12 +633,6 @@ void handleStartRequest(KHttpRequest *rq,int got)
 	}
 	async_http_start(rq);
 }
-/*
-处理一个http请求,async开头的函数返回值是一样的意思。
-返回值
-false,异步处理,此时context由另外的线程接管。
-true,同步处理,context没有由其它线程接管
-*/
 void async_http_start(KHttpRequest *rq)
 {
 	KContext *context = rq->ctx;
@@ -722,10 +686,6 @@ void async_http_start(KHttpRequest *rq)
 	return;
 }
 
-/*
-内部处理一个http请求，一个是SSI调用，一个是api的execUrl调用。
-同步方式。
-*/
 void processHttpRequest(KHttpRequest *rq) {
 	//KContext context;
 	//memset(&context,0,sizeof(KContext));

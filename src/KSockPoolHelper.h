@@ -147,7 +147,8 @@ public:
 	 * 下次试连接时间，如果是0表示活跃的。
 	 */
 	time_t tryTime;
-	bool real_connect(KHttpRequest *rq, KUpstreamSelectable *socket, bool name_resolve);
+	bool try_numerichost_connect(KHttpRequest *rq, KUpstreamSelectable *socket,bool &need_name_resolved);
+	bool connect_addr(KHttpRequest *rq, KUpstreamSelectable *socket,sockaddr_i &addr);
 	void buildXML(std::stringstream &s);
 	bool parse(std::map<std::string,std::string> &attr);
 	void monitorConnectStage(KHttpRequest *rq, KUpstreamSelectable *socket);
@@ -162,6 +163,7 @@ public:
 	volatile uint64_t total_connect;
 	INT64 monitor_start_time;
 	int avg_monitor_tick;
+	KSelector *selector;
 	KSockPoolHelper *next;
 	KSockPoolHelper *prev;
 private:

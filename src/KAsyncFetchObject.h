@@ -121,7 +121,7 @@ public:
 			return hot;
 		}
 		assert(hot);
-		unsigned used = hot - header;
+		unsigned used = (unsigned)(hot - header);
 		assert(used<=current_size);
 		if (used>=current_size) {
 			int new_size = current_size * 2;
@@ -157,6 +157,7 @@ public:
 		return client->socket;
 	}
 	bool try_pre_load_body(KHttpRequest *rq);
+	void connect_result(KHttpRequest *rq, bool half_connection);
 	void connectCallBack(KHttpRequest *rq,KUpstreamSelectable *client,bool half_connection = true);
 	void handleUpstreamError(KHttpRequest *rq,int error,const char *msg,int last_got);
 	void handleConnectResult(KHttpRequest *rq,int got);

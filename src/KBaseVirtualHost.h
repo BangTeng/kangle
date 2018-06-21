@@ -119,13 +119,13 @@ private:
 		orig_path = path;
 		orig_to = to;
 		this->path = KFileName::tripDir2(path, '/');
-		path_len = strlen(this->path);
+		path_len = (int)strlen(this->path);
 		if (!isAbsolutePath(to)) {
 			this->to = KFileName::concatDir(doc_root,to);
 		} else {
 			this->to = KFileName::tripDir2(to, PATH_SPLIT_CHAR);
 		}
-		to_len = strlen(this->to);
+		to_len = (int)strlen(this->to);
 	}
 	std::string orig_to;
 	std::string orig_path;

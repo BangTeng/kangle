@@ -219,10 +219,6 @@ bool KConfigParser::startCharacter(std::string &context, std::string &qName,
 			cconf->select_count = atoi(character);
 			return true;
 		}
-		if (qName == "keep_alive") {
-			cconf->keep_alive = atoi(character);
-			return true;
-		}
 		if (qName == "max_connect_info") {
 			cconf->max_connect_info = atoi(character);
 			return true;

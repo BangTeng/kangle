@@ -10,6 +10,7 @@
 #include "forwin32.h"
 #include "KMutex.h"
 #include "KSelector.h"
+#define ENABLE_HTTP2_TCP_CORK 1
 class KHttp2Context;
 class KHttp2;
 class http2_buff;
@@ -23,7 +24,6 @@ public:
 	~kgl_http2_event();
 	kgl_http2_event *next;
 	void *arg;
-	http2_buff *refs_buff;
 	bufferEvent buffer;	
 	resultEvent result;	
 	int len;	
@@ -36,7 +36,7 @@ public:
 		memset(this,0,sizeof(*this));
 	}
 	~http2_buff();
-	void clean(KHttp2 *http2);
+	void clean();
 	char *data;
 	int used;
 	int skip_data_free:1;
@@ -94,9 +94,9 @@ public:
 			*pos++ = value % 128 + 128;
 			value /= 128;
 		}
-
 		*pos++ = (u_char)value;
-		write(buf, pos - (u_char *)buf);
+		assert(pos - (u_char *)buf <= (int)sizeof(buf));
+		write(buf, (int)(pos - (u_char *)buf));
 		return;
 	}
 	void write(const u_char data)
@@ -128,6 +128,7 @@ private:
 			}
 			last = buf;
 		}
+		assert(last->used < KGL_HEADER_FRAME_CHUNK_SIZE);
 		int left = KGL_HEADER_FRAME_CHUNK_SIZE - last->used;
 		len = MIN(len, left);
 		last->used += len;
@@ -148,14 +149,16 @@ public:
 	}
 	~KHttp2WriteBuffer()
 	{
-		KHttp2WriteBuffer::remove_buff(clean(),NULL);
+		KHttp2WriteBuffer::remove_buff(clean());
 	}
 	void getReadBuffer(KSocket *fd,LPWSABUF buffer,int &bufferCount)
 	{
+#ifdef ENABLE_HTTP2_TCP_CORK
 		if (!tcp_cork) {
 			tcp_cork = 1;
-			fd->setdelay();
+			fd->set_delay();
 		}
+#endif
 #ifndef NDEBUG
 		if (hot == NULL) {
 			printf("bug\n");
@@ -166,7 +169,7 @@ public:
 		assert(header);
 		http2_buff *tmp = header;
 		buffer[0].iov_base = hot;
-		int hot_left = header->used - (hot - header->data);
+		int hot_left = header->used - (int)(hot - header->data);
 		hot_left = MIN(hot_left,got);
 		buffer[0].iov_len = hot_left;
 		got -= hot_left;
@@ -187,21 +190,25 @@ public:
 		http2_buff *remove_list = NULL;
 		left -= got;
 		while (got>0) {
-			int hot_left = header->used - (hot - header->data);
+			int hot_left = header->used - (int)(hot - header->data);
 			int this_len = MIN(got,hot_left);
 			hot += this_len;
 			got -= this_len;
 			if (header->used == hot - header->data) {
+#ifdef ENABLE_HTTP2_TCP_CORK
 				if (header->tcp_nodelay) {
 					tcp_no_cork_at_empty = 1;
 				}
+#endif
 				http2_buff *next = header->next;
 				header->next = remove_list;
 				remove_list = header;
 				header = next;
 				if (header==NULL) {
 					reset();
-					check_tcp_cork(fd);										
+#ifdef ENABLE_HTTP2_TCP_CORK
+					check_tcp_cork(fd);
+#endif
 					return remove_list;
 				}
 				hot = header->data;
@@ -209,7 +216,9 @@ public:
 		}
 		if (left==0) {
 			reset();
-			check_tcp_cork(fd);						
+#ifdef ENABLE_HTTP2_TCP_CORK
+			check_tcp_cork(fd);	
+#endif
 		}
 		return remove_list;
 	}
@@ -226,11 +235,11 @@ public:
 	}
 	http2_buff *clean();
 	/* return fin */
-	static void remove_buff(http2_buff *remove_list,KHttp2 *http2)
+	static void remove_buff(http2_buff *remove_list)
 	{
 		 while (remove_list) {
 			http2_buff *next = remove_list->next;
-			remove_list->clean(http2);
+			remove_list->clean();
 			delete remove_list;
 			remove_list = next;
 		}
@@ -249,6 +258,7 @@ private:
 		last = NULL;
 		hot = NULL;
 	}
+#ifdef ENABLE_HTTP2_TCP_CORK
 	void check_tcp_cork(KSocket *fd)
 	{
 		if (tcp_no_cork_at_empty) {
@@ -257,9 +267,10 @@ private:
 				return;
 			}
 			tcp_cork = 0;
-			fd->setnodelay();
+			fd->set_nodelay();
 		}
 	}
+#endif
 	void add(http2_buff *buf)
 	{
 		left += buf->used;
@@ -276,7 +287,9 @@ private:
 	http2_buff *header;
 	char *hot;
 	int left;
+#ifdef ENABLE_HTTP2_TCP_CORK
 	uint16_t tcp_cork : 1;
 	uint16_t tcp_no_cork_at_empty : 1;
+#endif
 };
 #endif

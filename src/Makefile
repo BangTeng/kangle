@@ -160,12 +160,13 @@ am_kangle_OBJECTS = cache.$(OBJEXT) KConfig.$(OBJEXT) \
 	KConnectionSelectable.$(OBJEXT) KReadWriteBuffer.$(OBJEXT) \
 	KResponseContext.$(OBJEXT) KUpstreamSelectable.$(OBJEXT) \
 	KSimulateRequest.$(OBJEXT) KCloudIpAcl.$(OBJEXT) \
-	KCname.$(OBJEXT) KHuffDecode.$(OBJEXT) KMemPool.$(OBJEXT) \
+	KAddr.$(OBJEXT) KHuffDecode.$(OBJEXT) KMemPool.$(OBJEXT) \
 	KHttp2.$(OBJEXT) KHttp2Table.$(OBJEXT) \
 	KHttp2WriteBuffer.$(OBJEXT) KIpMap.$(OBJEXT) \
 	KGeoMark.$(OBJEXT) KLogDrill.$(OBJEXT) KQueueMark.$(OBJEXT) \
 	KAsyncFile.$(OBJEXT) KAioSelectable.$(OBJEXT) \
-	KHttpObjectSwaping.$(OBJEXT)
+	KHttpObjectSwaping.$(OBJEXT) KMapRedirectMark.$(OBJEXT) \
+	KEpollNoticeSelectable.$(OBJEXT)
 kangle_OBJECTS = $(am_kangle_OBJECTS)
 kangle_LDADD = $(LDADD)
 kangle_DEPENDENCIES =
@@ -187,11 +188,11 @@ DIST_SOURCES = $(kangle_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
-ACLOCAL = ${SHELL} /home/keengo/kangle/missing --run aclocal-1.11
-AMTAR = ${SHELL} /home/keengo/kangle/missing --run tar
-AUTOCONF = ${SHELL} /home/keengo/kangle/missing --run autoconf
-AUTOHEADER = ${SHELL} /home/keengo/kangle/missing --run autoheader
-AUTOMAKE = ${SHELL} /home/keengo/kangle/missing --run automake-1.11
+ACLOCAL = ${SHELL} /home/keengo/kangle-et/missing --run aclocal-1.11
+AMTAR = ${SHELL} /home/keengo/kangle-et/missing --run tar
+AUTOCONF = ${SHELL} /home/keengo/kangle-et/missing --run autoconf
+AUTOHEADER = ${SHELL} /home/keengo/kangle-et/missing --run autoheader
+AUTOMAKE = ${SHELL} /home/keengo/kangle-et/missing --run automake-1.11
 AWK = gawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
@@ -200,12 +201,12 @@ CPPFLAGS =
 CXX = g++
 CXXCPP = g++ -E
 CXXDEPMODE = depmode=gcc3
-CXXFLAGS = -O2 -g -DNDEBUG  -D_REENTRANT -DLINUX -D_LARGE_FILE -D_FILE_OFFSET_BITS=64 -D__USE_FILE_OFFSET64
+CXXFLAGS = -O0 -g -Wall  -D_REENTRANT -DLINUX -D_LARGE_FILE -D_FILE_OFFSET_BITS=64 -D__USE_FILE_OFFSET64
 CYGPATH_W = echo
-DEFAULT_EXT_DIR = /vhs/build/kangle/ext
-DEFAULT_TMP_DIR = /vhs/build/kangle/tmp
-DEFAULT_VAR_DIR = /vhs/build/kangle/var
-DEFAULT_WEBADMIN_DIR = /vhs/build/kangle/webadmin
+DEFAULT_EXT_DIR = /home/keengo/kangle-et/output/kangle/ext
+DEFAULT_TMP_DIR = /home/keengo/kangle-et/output/kangle/tmp
+DEFAULT_VAR_DIR = /home/keengo/kangle-et/output/kangle/var
+DEFAULT_WEBADMIN_DIR = /home/keengo/kangle-et/output/kangle/webadmin
 DEFS = -DHAVE_CONFIG_H
 DEPDIR = .deps
 ECHO_C = 
@@ -221,26 +222,26 @@ INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
 LDFLAGS = 
 LIBOBJS =  ${LIBOBJDIR}mktime$U.o
-LIBS =   -lsqlite3 -lssl -lcrypto $(EXTLIBS) -lpthread -lpcre -lz -ldl
+LIBS =   -lsqlite3 -lssl -lcrypto $(EXTLIBS) -lpthread -lpcre -lz -ldl -laio
 LTLIBOBJS =  ${LIBOBJDIR}mktime$U.lo
-MAKEINFO = ${SHELL} /home/keengo/kangle/missing --run makeinfo
+MAKEINFO = ${SHELL} /home/keengo/kangle-et/missing --run makeinfo
 MKDIR_P = /bin/mkdir -p
 OBJEXT = o
 PACKAGE = kangle
 PACKAGE_BUGREPORT = 
 PACKAGE_NAME = kangle
-PACKAGE_STRING = kangle 3.5.12.11
+PACKAGE_STRING = kangle 3.5.13
 PACKAGE_TARNAME = kangle
-PACKAGE_VERSION = 3.5.12.11
+PACKAGE_VERSION = 3.5.13
 PATH_SEPARATOR = :
 SET_MAKE = 
 SHELL = /bin/sh
 STRIP = 
-VERSION = 3.5.12.11
-abs_builddir = /home/keengo/kangle/src
-abs_srcdir = /home/keengo/kangle/src
-abs_top_builddir = /home/keengo/kangle
-abs_top_srcdir = /home/keengo/kangle
+VERSION = 3.5.13
+abs_builddir = /home/keengo/kangle-et/src
+abs_srcdir = /home/keengo/kangle-et/src
+abs_top_builddir = /home/keengo/kangle-et
+abs_top_srcdir = /home/keengo/kangle-et
 ac_ct_CC = gcc
 ac_ct_CXX = g++
 am__include = include
@@ -268,7 +269,7 @@ host_vendor = unknown
 htmldir = ${docdir}
 includedir = ${prefix}/include
 infodir = ${datarootdir}/info
-install_sh = ${SHELL} /home/keengo/kangle/install-sh
+install_sh = ${SHELL} /home/keengo/kangle-et/install-sh
 libdir = ${exec_prefix}/lib
 libexecdir = ${exec_prefix}/libexec
 localedir = ${datarootdir}/locale
@@ -277,7 +278,7 @@ mandir = ${datarootdir}/man
 mkdir_p = /bin/mkdir -p
 oldincludedir = /usr/include
 pdfdir = ${docdir}
-prefix = /vhs/build/kangle
+prefix = /home/keengo/kangle-et/output/kangle
 program_transform_name = s,x,x,
 psdir = ${docdir}
 sbindir = ${exec_prefix}/sbin
@@ -297,7 +298,7 @@ top_srcdir = ..
 #AM_LDFLAGS=-rdynamic -lssl -lcrypto
 AM_CXXFLAGS = -I../module/access -I../module/whm
 AM_LDFLAGS = -L../lib
-LDADD = -laio
+LDADD = 
 AUTOMAKE_OPTIONS = subdir-objects
 kangle_SOURCES = \
 global.h\
@@ -535,8 +536,9 @@ KTempFileStream.cpp KHttpFilterStream.cpp KHttpFilterHookCollectResponse.cpp\
 KAccessDso.h KAccessDso.cpp KHttpStream.h KHttpFilterHookCollectResponse.h KHttpFilterStream.h KTempFileStream.h\
 KRandAcl.h KConnectionSelectable.cpp KConnectionSelectable.h KReadWriteBuffer.cpp KReadWriteBuffer.h KResponseContext.h KResponseContext.cpp\
 KUpstreamSelectable.h KUpstreamSelectable.cpp KRequestList.h KSimulateRequest.cpp  KSimulateRequest.h KMinObjVerifiedMark.h KCloudIpAcl.cpp katom.h KCondWait.h\
-KCname.h KCname.cpp KDechunkEngine.h KHttpEnv.h KHuffDecode.cpp KMemPool.cpp KMemPool.h KHttp2.h KHttp2.cpp KHttp2Table.cpp KHttp2WriteBuffer.h KHttp2WriteBuffer.cpp KSendBuffer.h KIpMap.cpp KIpMap.h\
-KGeoMark.cpp KLogDrill.cpp KGeoMark.h KLogDrill.h KQueueMark.h KQueueMark.cpp KAsyncFile.cpp KAsyncFile.h KAioSelectable.cpp KAioSelectable.h KHttpObjectSwaping.cpp KHttpObjectSwaping.h
+KAddr.h KAddr.cpp KDechunkEngine.h KHttpEnv.h KHuffDecode.cpp KMemPool.cpp KMemPool.h KHttp2.h KHttp2.cpp KHttp2Table.cpp KHttp2WriteBuffer.h KHttp2WriteBuffer.cpp KSendBuffer.h KIpMap.cpp KIpMap.h\
+KGeoMark.cpp KLogDrill.cpp KGeoMark.h KLogDrill.h KQueueMark.h KQueueMark.cpp KAsyncFile.cpp KAsyncFile.h KAioSelectable.cpp KAioSelectable.h KHttpObjectSwaping.cpp KHttpObjectSwaping.h\
+KMapRedirectMark.cpp KMapRedirectMark.h KEpollNoticeSelectable.h KEpollNoticeSelectable.cpp
 
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
@@ -729,6 +731,7 @@ include ./$(DEPDIR)/KAccessDso.Po
 include ./$(DEPDIR)/KAccessParser.Po
 include ./$(DEPDIR)/KAcserver.Po
 include ./$(DEPDIR)/KAcserverManager.Po
+include ./$(DEPDIR)/KAddr.Po
 include ./$(DEPDIR)/KAioSelectable.Po
 include ./$(DEPDIR)/KAjpFetchObject.Po
 include ./$(DEPDIR)/KAjpMessage.Po
@@ -761,7 +764,6 @@ include ./$(DEPDIR)/KChunked.Po
 include ./$(DEPDIR)/KCloudIpAcl.Po
 include ./$(DEPDIR)/KCmdPoolableRedirect.Po
 include ./$(DEPDIR)/KCmdProcess.Po
-include ./$(DEPDIR)/KCname.Po
 include ./$(DEPDIR)/KConcatFetchObject.Po
 include ./$(DEPDIR)/KConfig.Po
 include ./$(DEPDIR)/KConfigBuilder.Po
@@ -779,6 +781,7 @@ include ./$(DEPDIR)/KDsoModule.Po
 include ./$(DEPDIR)/KDynamicListen.Po
 include ./$(DEPDIR)/KDynamicString.Po
 include ./$(DEPDIR)/KEnvInterface.Po
+include ./$(DEPDIR)/KEpollNoticeSelectable.Po
 include ./$(DEPDIR)/KEpollSelector.Po
 include ./$(DEPDIR)/KExpressionParseTree.Po
 include ./$(DEPDIR)/KExtendProgram.Po
@@ -842,6 +845,7 @@ include ./$(DEPDIR)/KLogDrill.Po
 include ./$(DEPDIR)/KLogElement.Po
 include ./$(DEPDIR)/KLogHandle.Po
 include ./$(DEPDIR)/KLogManage.Po
+include ./$(DEPDIR)/KMapRedirectMark.Po
 include ./$(DEPDIR)/KMemPool.Po
 include ./$(DEPDIR)/KMultiAcserver.Po
 include ./$(DEPDIR)/KMultiHostAcl.Po

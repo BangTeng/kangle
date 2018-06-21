@@ -50,33 +50,30 @@ public:
 	void resultSSLShutdown(int got);
 	query_vh_result useSniVirtualHost(KHttpRequest *rq);
 #endif
-	//是否有事件
 	bool is_event(KHttpRequest *rq, uint16_t flag);
-	//是否锁定，如果返回true，资源不可释放
+
 	bool is_locked(KHttpRequest *rq);
-	/* 同步读 */
+
 	int read(KHttpRequest *rq,char *buf,int len);
-	/* 同步写 */
+
 	int write(KHttpRequest *rq,LPWSABUF buf,int bufCount);
 	bool write_all(KHttpRequest *rq, const char *buf, int len);
-	/* 延时异步读 */
+
 	void delayRead(KHttpRequest *rq,resultEvent result,bufferEvent buffer,int msec);
-	/* 延时异步写 */
+
 	void delayWrite(KHttpRequest *rq,resultEvent result,bufferEvent buffer,int msec);
-	/* 异步读 */
-	bool read(KHttpRequest *rq,resultEvent result,bufferEvent buffer,int list=KGL_LIST_RW);
-	/* 异步写 */
+
+	void read(KHttpRequest *rq,resultEvent result,bufferEvent buffer);
+
 	void write(KHttpRequest *rq,resultEvent result,bufferEvent buffer);
 	void read_hup(KHttpRequest *rq,resultEvent result);
 	void shutdown(KHttpRequest *rq);
-	void unlock_read_hup(KHttpRequest *rq, resultEvent result);
-	//void removeSocket();
-
-	void next(resultEvent result,void *arg);
-	void removeRequest(KHttpRequest *rq,bool add_sync);
+	void remove_read_hup(KHttpRequest *rq);
+	void add_sync(KHttpRequest *rq);
+	void remove_sync(KHttpRequest *rq);
 	//return header len
-	int startResponse(KHttpRequest *rq,INT64 body_len);
-	void endResponse(KHttpRequest *rq,bool keep_alive);
+	int start_response(KHttpRequest *rq, INT64 body_len);
+	void end_response(KHttpRequest *rq,bool keep_alive);
 	
 
 	KSocket *getSocket()
@@ -85,16 +82,12 @@ public:
 	}
 	void real_destroy();
 	void release(KHttpRequest *rq);
-	/*
-	 * server是原始socket,
-	 * 一般情况是一样的，如果在ssi里面内部调用时就不一样了。
-	 */
+
 	KClientSocket *socket;
 #ifdef ENABLE_HTTP2
 	KHttp2 *http2;
 	friend class KHttp2;
 #endif
-	//请求所在侦听
 	KServer *ls;
 #ifdef KSOCKET_SSL
 	KSSLSniContext *sni;
@@ -102,14 +95,6 @@ public:
 	kgl_pool_t *pool;
 protected:
 	virtual ~KConnectionSelectable();
-	void internalRemoveRequest(bool add_sync) {
-		selector->removeSocket(this);
-		if (add_sync) {
-			selector->addList(this, KGL_LIST_SYNC);
-		} else {
-			selector->removeList(this);
-		}
-	}
 };
 void request_connection_broken(void *arg, int got);
 #endif

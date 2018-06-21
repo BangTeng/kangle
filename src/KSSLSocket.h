@@ -30,6 +30,7 @@ public:
 	bool bind_fd();
 	//异步accept,返回-1，错误，0=成功，1=want read,2=want write
 	ssl_status handshake();
+	ssl_status ssl_shutdown();
 	int read(char *buf,int len);
 	int write(const char *buf,int len);
 	int get_ssl_error(int re);

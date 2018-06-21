@@ -20,7 +20,7 @@ struct kgl_upstream_delay_io
 	bufferEvent buffer;
 	resultEvent result;
 };
-void WINAPI upstream_delay_read(void *arg)
+void upstream_delay_read(void *arg,int got)
 {
 	kgl_upstream_delay_io *io = (kgl_upstream_delay_io *)arg;
 	io->us->upstream_read(io->rq, io->result, io->buffer);
@@ -73,21 +73,20 @@ void KUpstreamSelectable::gc(int lifeTime) {
 		delete hook;
 		hook = NULL;
 	}
-	if (selector) {
-		selector->removeList(this);
-	}
 	if (container == NULL) {
 		destroy();
 		return;
 	}
 	
+	if (selector) {
+		assert(queue.next == NULL);
+	}
 #ifndef _WIN32
 	if (selector) {
 		selector->removeSocket(this);
 		this->selector = NULL;
 	}
-	/* linux下确保 upstream在主线程上 */
-	assert(TEST(st_flags,STF_READ|STF_WRITE|STF_EV)==0);
+	assert(TEST(st_flags,STF_READ|STF_WRITE|STF_REV|STF_WEV)==0);
 #endif
 	container->gcSocket(this,lifeTime);
 }
@@ -118,18 +117,13 @@ int KUpstreamSelectable::getLifeTime()
 void KUpstreamSelectable::connect(KHttpRequest *rq,resultEvent result)
 {
 	
-	selector->addList(this, KGL_LIST_CONNECT);
+	//selector->addList(this, KGL_LIST_CONNECT);
 	if (!this->selector->connect(this,result,rq)) {
 		result(rq,-1);
 	}
 }
-void KUpstreamSelectable::upstream_remove()
-{
-	
-	internalRemoveRequest(false);
-}
-/* 异步读 */
-bool KUpstreamSelectable::upstream_read(KHttpRequest *rq,resultEvent result,bufferEvent buffer)
+
+void KUpstreamSelectable::upstream_read(KHttpRequest *rq,resultEvent result,bufferEvent buffer)
 {
 	int msec = this->delay_read_msec;
 	if (msec > 0) {
@@ -139,18 +133,16 @@ bool KUpstreamSelectable::upstream_read(KHttpRequest *rq,resultEvent result,buff
 		io->rq = rq;
 		io->result = result;
 		io->buffer = buffer;
-		this->upstream_remove();
-		selector->addTimer(NULL, upstream_delay_read, io, msec);
-		return false;
+		selector->add_timer(upstream_delay_read, io, msec);
+		return;
 	}
 	
-	return asyncRead(rq,result,buffer);
+	async_read(rq,result,buffer);
 }
-/* 异步写 */
 void KUpstreamSelectable::upstream_write(KHttpRequest *rq,resultEvent result,bufferEvent buffer)
 {
 	
-	asyncWrite(rq,result,buffer);
+	async_write(rq,result,buffer);
 }
 bool KUpstreamSelectable::is_upstream_event(uint16_t flag)
 {
@@ -172,6 +164,12 @@ bool KUpstreamSelectable::is_upstream_locked()
 {
 #ifdef ENABLE_UPSTREAM_HTTP2
 	if (http2_ctx) {
+		if (http2_ctx->read_wait != NULL) {
+			return true;
+}
+		if (http2_ctx->write_wait != NULL && http2_ctx->write_wait->buffer != NULL) {
+			return true;
+		}
 		return false;
 	}
 #endif

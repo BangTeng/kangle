@@ -1,5 +1,6 @@
 #ifndef KLISsadfasdf1112T_H
 #define KLISsadfasdf1112T_H
+#include <stddef.h>
 struct kgl_list {
 	kgl_list  *prev;
 	kgl_list  *next;
@@ -13,7 +14,7 @@ struct kgl_list {
 #define klist_insert(list,  x)   do {\
     (x)->prev = (list)->prev;\
     (x)->prev->next = x; \
-    (x)->next = list; \
+    (x)->next = (list); \
     (list)->prev = x;\
 } while (0)
 
@@ -28,11 +29,11 @@ struct kgl_list {
 #define klist_end(list)  (list)->prev;
 #define klist_foreach(pos, list)                  \
         for (pos = (list)->next;                  \
-		pos != list;                      \
+		pos != (list);                      \
 		pos = pos->next)
 #define klist_rforeach(pos, list)                 \
         for (pos = (list)->prev;                  \
-		pos != list;                      \
+		pos != (list);                      \
 		pos = pos->prev)
 #include "KListNode.h"
 #define kgl_list_data(q, type, link) (type *) ((u_char *) q - offsetof(type, link))

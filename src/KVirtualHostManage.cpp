@@ -900,9 +900,6 @@ int KVirtualHostManage::find_domain(const char *site, WhmContext *ctx)
 				s << "s";
 			}
 			s << "\t";
-			if (svh->cname) {
-				s << "$";
-			}
 			if (svh->wide) {
 				s << "*";
 			}
@@ -918,7 +915,7 @@ int KVirtualHostManage::find_domain(const char *site, WhmContext *ctx)
 /*
  * 查找虚拟主机并绑定在rq上。
  */
-query_vh_result KVirtualHostManage::queryVirtualHost(KServer *ls,KSubVirtualHost **rq_svh,const char *site,int site_len,bool cname) {
+query_vh_result KVirtualHostManage::queryVirtualHost(KServer *ls,KSubVirtualHost **rq_svh,const char *site,int site_len) {
 	assert(ls);
 	query_vh_result result = query_vh_host_not_found;
 	if (site_len==0) {
@@ -929,14 +926,9 @@ query_vh_result KVirtualHostManage::queryVirtualHost(KServer *ls,KSubVirtualHost
 		return result;
 	}
 	lock.Lock();
-#ifdef ENABLE_CNAME_BIND
-	if (cname) {
-		if (ls->cname_vhc) {
-			result = ls->cname_vhc->findVirtualHost(rq_svh,bind_site);
-		}
-	} else if (ls->vhc) 
-#endif
+	if (ls->vhc) {
 		result = ls->vhc->findVirtualHost(rq_svh,bind_site);
+	}
 	lock.Unlock();
 	return result;
 }
@@ -1003,9 +995,6 @@ void KVirtualHostManage::getVhDetail(std::stringstream &s, KVirtualHost *vh,bool
 		for (it = vh->hosts.begin(); it != vh->hosts.end(); it++) {
 			if ((*it)->fromTemplete) {
 				continue;
-			}
-			if ((*it)->cname) {
-				s << "$";
 			}
 			if ((*it)->wide) {
 				s << "*";
@@ -1273,9 +1262,6 @@ void KVirtualHostManage::getVhIndex(std::stringstream &s,KVirtualHost *vh,int id
 					s << ":" << bind_port;
 				}
 				s << "/' target=_blank>";
-			}
-			if ((*it2)->cname) {
-				s << "$";
 			}
 			if ((*it2)->wide) {
 				s << "*";

@@ -282,7 +282,7 @@ bool KIpMap::add_range_addr(struct dns_range_addr *range_addr,void *bind_data)
 			//重新调整之前的range ip
 			memcpy(&pre_addr->max_addr,&range_addr->min_addr,sizeof(ip_addr));
 			addr_sub(&pre_addr->max_addr,1);
-			int ret = add_range_addr(&new_addr,pre_addr->bind_data);
+			add_range_addr(&new_addr,pre_addr->bind_data);
 			//printf("ret=%d\n",ret);
 		} else if (ip_addr_cmp(&pre_addr->max_addr,&range_addr->min_addr)>=0) {
 			make_local_ip(&range_addr->min_addr, ips, MAXIPLEN);
@@ -306,7 +306,7 @@ bool KIpMap::add_range_addr(struct dns_range_addr *range_addr,void *bind_data)
 			addr_add(&new_addr.min_addr,1);
 			memcpy(&range_addr->max_addr,&next_addr->min_addr,sizeof(ip_addr));
 			addr_sub(&range_addr->max_addr,1);
-			int ret = add_range_addr(&new_addr,bind_data);
+			add_range_addr(&new_addr,bind_data);
 		} else if (ip_addr_cmp(&range_addr->max_addr,&next_addr->min_addr)>=0) {
 			make_local_ip(&range_addr->min_addr, ips, MAXIPLEN);
 			//klog(KLOG_WARNING,"IP [%s] is next-covered min,view = [%d]\n",ips,view->id);

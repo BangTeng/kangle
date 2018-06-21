@@ -67,14 +67,14 @@ public:
 	}
 	std::string getDisplay() {
 		std::stringstream s;
-		int len = content.size();
+		int len = (int)content.size();
 		char *buf = KXml::htmlEncode(content.c_str(),len,NULL);
 		if (buf) {
 			s << buf;
 			free(buf);
 		}
 		s << "==>";
-		len = replace.size();
+		len = (int)replace.size();
 		buf = KXml::htmlEncode(replace.c_str(),len,NULL);
 		if (buf) {
 			s << buf;

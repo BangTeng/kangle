@@ -54,7 +54,7 @@ public:
 		if (*lastSubString) {
 			delete *lastSubString;
 		}
-		*lastSubString = reg.matchSubString(str, strlen(str), 0);
+		*lastSubString = reg.matchSubString(str, (int)strlen(str), 0);
 		return *lastSubString != NULL;
 	}
 private:

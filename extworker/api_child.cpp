@@ -153,7 +153,7 @@ static bool api_child_shutdown(KStream *st) {
 bool api_child_begin_request(KClientSocket *st, char *msg,
 		u_short content_len) {
 	debug("begin_request\n");
-	st->setdelay();
+	st->set_delay();
 	FCGI_BeginRequestBody *body = (FCGI_BeginRequestBody *) msg;
 	if (content_len != sizeof(FCGI_BeginRequestBody)) {
 		debug("recv wrong data\n");
@@ -185,7 +185,7 @@ bool api_child_begin_request(KClientSocket *st, char *msg,
 		delete fo;
 		return false;
 	}
-	st->setnodelay();
+	st->set_nodelay();
 	delete fo;
 	return true;
 }

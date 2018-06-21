@@ -28,17 +28,6 @@
 #include "KList.h"
 #include "katom.h"
 #include "extern.h"
-#define STAGE_OP_TIMER             0
-#define STAGE_OP_PM_UREAD          12
-#define STAGE_OP_PM_UWRITE         13
-#define STAGE_OP_PM_READ           14
-#define STAGE_OP_PM_WRITE          15
-#define STAGE_OP_LISTEN            16
-#define STAGE_OP_ASYNC_READ        17
-#define STAGE_OP_TRANSMIT          17
-#define STAGE_OP_NEW_READ          23
-#define STAGE_OP_NEW_WRITE         24
-#define IS_SECOND_OPERATOR(op)     (op==18)
 
 #ifdef _WIN32
 #define ASSERT_SOCKFD(a)        assert(a>=0)
@@ -103,7 +92,7 @@ public:
 	virtual void bindSelectable(KSelectable *st);
 	bool startSelect();
 	void selectThread();
-	bool isSameThread()
+	bool is_same_thread()
 	{
 		return pthread_self()==thread_id;
 	}
@@ -115,10 +104,12 @@ public:
 	int count;
 	//msec
 	int timeout[KGL_LIST_BLOCK];
-	void callback(KSelectable *st, resultEvent func, void *arg);
-	void addTimer(KSelectable *rq, timer_func func, void *arg, int msec);
-	void addTimer(KSelectable *rq, resultEvent func, void *arg, int msec);
-	virtual bool next(KSelectable *st,resultEvent result,void *arg) = 0;
+	void add_timer(resultEvent func, void *arg, int msec);
+	virtual bool next(resultEvent result,void *arg,int got) = 0;
+	bool next(resultEvent result, void *arg)
+	{
+		return next(result, arg, 0);
+	}
 	virtual bool listen(KServerSelectable *st,resultEvent result) {
 		return false;
 	}
@@ -136,8 +127,6 @@ public:
 	{
 		return NULL;
 	}
-	void removeList(KSelectable *st);
-	void addList(KSelectable *rq, int list);
 	friend class KSelectable;
 	friend class KConnectionSelectable;
 	friend class KServerSelectable;
@@ -148,10 +137,13 @@ public:
 protected:
 	friend class KSelectorManager;
 	friend class KAsyncFetchObject;
-	KMutex listLock;
+	//KMutex listLock;
 	kgl_list list[KGL_LIST_BLOCK];
+
 	virtual void select()=0;
 	void checkTimeOut();
+	void remove_list(KSelectable *st);
+	void add_list(KSelectable *rq, int list);
 	int model;
 	void internelAddRequest(KHttpRequest *rq);
 #ifdef MALLOCDEBUG
@@ -172,6 +164,10 @@ private:
 	virtual bool read_hup(KSelectable *st,resultEvent result,bufferEvent buffer,void *arg)
 	{
 		return false;
+	}
+	virtual void remove_read_hup(KSelectable *st)
+	{
+
 	}
 	virtual bool write(KSelectable *st,resultEvent result,bufferEvent buffer,void *arg) = 0;
 	//先调用halfconnect,再调用connect事件.

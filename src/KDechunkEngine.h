@@ -41,7 +41,7 @@ public:
 			if (next_line == NULL) {
 				return dechunk_continue;//continue;
 			}
-			int skip_length = next_line - (*buf) + 1;
+			int skip_length = (int)(next_line - (*buf) + 1);
 			(*buf) += skip_length;
 			buf_len -= skip_length;
 			//	chunk_size = 0;
@@ -120,7 +120,7 @@ public:
 			//½áÊø
 			next_line = (char *) memchr(*buf, '\n', buf_len);
 			assert(next_line);
-			int skip_length = next_line - (*buf) + 1;
+			int skip_length = (int)(next_line - (*buf) + 1);
 			(*buf) += skip_length;
 			buf_len -= skip_length;
 			if (chunk_size == 0) {

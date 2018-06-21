@@ -113,6 +113,7 @@
 #include "KConnectionCloseMark.h"
 #include "KMinObjVerifiedMark.h"
 #include "KTryFileAcl.h"
+#include "KMapRedirectMark.h"
 #include "malloc_debug.h"
 #ifdef ENABLE_TCMALLOC
 #include "google/heap-checker.h"
@@ -138,11 +139,11 @@ KAccess::KAccess() {
 	actionParsed = false;
 }
 KAccess::~KAccess() {
-	destroy();
+	inter_destroy();
 }
-void KAccess::destroy() {
-	std::map<std::string,KTable *>::iterator it;
-	lock.WLock();
+void KAccess::inter_destroy()
+{
+	std::map<std::string, KTable *>::iterator it;
 	for (it = tables.begin(); it != tables.end(); it++) {
 		(*it).second->release();
 	}
@@ -153,6 +154,10 @@ void KAccess::destroy() {
 		this->default_jump->release();
 		this->default_jump = NULL;
 	}
+}
+void KAccess::destroy() {
+	lock.WLock();
+	inter_destroy();
 	lock.WUnlock();
 }
 int KAccess::getType(int type) {
@@ -239,6 +244,7 @@ void KAccess::loadModel() {
 	addMarkModel(REQUEST_RESPONSE,new KFlagMark());
 	addMarkModel(REQUEST,new KRewriteMark());
 	addMarkModel(REQUEST,new KRedirectMark());
+	addMarkModel(REQUEST, new KMapRedirectMark());
 	addMarkModel(REQUEST_RESPONSE,new KHttp10Mark());
 	addMarkModel(REQUEST_RESPONSE,new KCounterMark());
 	addMarkModel(REQUEST_RESPONSE,new KAuthMark());

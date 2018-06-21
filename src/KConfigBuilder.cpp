@@ -119,7 +119,6 @@ void KConfigBuilder::build(std::stringstream &s) {
 			if (conf.service[i]->protocols.size()>0) {
 				s << "protocols='" << conf.service[i]->protocols << "' ";
 			}
-			s << "sni='" << (conf.service[i]->sni?"1":"0") << "' ";
 			s << "http2='" << (conf.service[i]->http2 ?"1":"0") << "' ";
 
 		}
@@ -137,7 +136,6 @@ void KConfigBuilder::build(std::stringstream &s) {
 	}
 #endif
 	s << "\t<lang>" << conf.lang << "</lang>\n";
-	s << "\t<keep_alive>" << conf.keep_alive << "</keep_alive>\n";
 	s << "\t<keep_alive_count>" << conf.keep_alive_count << "</keep_alive_count>\n";
 	s << "\t<timeout>" << conf.time_out << "</timeout>\n";
 	s << "\t<connect_timeout>" << conf.connect_time_out << "</connect_timeout>\n";

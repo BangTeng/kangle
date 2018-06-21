@@ -143,7 +143,7 @@ inline void processReadyedRequest(KHttpRequest *rq)
 inline void processQueueRequest(KHttpRequest *rq)
 {
 	if (rq->fetchObj->isSync()) {
-		rq->c->removeRequest(rq,true);
+		rq->c->add_sync(rq);
 		SET(rq->flags,RQ_SYNC);
 	} else {
 		CLR(rq->flags,RQ_SYNC);
@@ -196,7 +196,7 @@ inline void processRequest(KHttpRequest *rq)
 #ifdef ENABLE_REQUEST_QUEUE
 	if(TEST(rq->workModel,WORK_MODEL_MANAGE|WORK_MODEL_INTERNAL) || !rq->fetchObj->needQueue()){
 		if (rq->fetchObj->isSync()) {
-			rq->c->removeRequest(rq,true);
+			rq->c->add_sync(rq);
 			SET(rq->flags,RQ_SYNC);
 		} else {
 			CLR(rq->flags,RQ_SYNC);
@@ -235,9 +235,9 @@ inline void processRequest(KHttpRequest *rq)
 inline void attach_av_pair_to_buff(const char* attr, const char *val, KBuffer *buffer) {
 	assert(attr && val && buffer);
 	if (*attr) {
-		buffer->write_all(attr, strlen(attr));
+		buffer->write_all(attr, (int)strlen(attr));
 		buffer->write_all(": ", 2);
-		buffer->write_all(val, strlen(val));
+		buffer->write_all(val, (int)strlen(val));
 	}
 	buffer->write_all("\r\n", 2);
 }
@@ -264,13 +264,13 @@ inline bool async_send_valide_object(KHttpRequest *rq, KHttpObject *obj)
 		}
 	} else if (TEST(rq->flags,RQ_HAS_IF_NONE_MATCH)) {
 		kgl_str_t *if_none_match = rq->ctx->if_none_match;
-		if (if_none_match && obj->matchEtag(if_none_match->data, if_none_match->len)) {
+		if (if_none_match && obj->matchEtag(if_none_match->data, (int)if_none_match->len)) {
 			rq->status_code = STATUS_NOT_MODIFIED;
 		}
 		rq->ctx->clean_if_none_match();
 	} else if (TEST(rq->flags,RQ_IF_RANGE_ETAG)) {
 		kgl_str_t *if_none_match = rq->ctx->if_none_match;
-		if (if_none_match==NULL || !obj->matchEtag(if_none_match->data, if_none_match->len)) {
+		if (if_none_match==NULL || !obj->matchEtag(if_none_match->data, (int)if_none_match->len)) {
 			CLR(rq->flags, RQ_HAVE_RANGE);
 			rq->range_from = 0;
 			rq->range_to = -1;

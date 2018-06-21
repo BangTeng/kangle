@@ -349,30 +349,36 @@ public:
 	friend class KServerSocket;
 public:
 	static void get_addr(const sockaddr_i *addr, ip_addr *to);
-	inline void setnodelay() {
-	#ifdef LINUX
+	inline void set_nodelay() {
+#ifndef NDEBUG
+		delay = false;
+#endif
+#ifdef LINUX
 		int flag = 0;
 		setsockopt(sockfd, IPPROTO_TCP, TCP_CORK,(const void *) &flag, sizeof(int));
-	#elif BSD_OS
+#elif BSD_OS
 		int flag = 0;
 		setsockopt(sockfd, IPPROTO_TCP, TCP_NOPUSH,(const void *) &flag, sizeof(int));
-	#else
+#else
 		int flag = 1;
 		setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY,(const char *) &flag, sizeof(int));
-	#endif
+#endif
 	}
-	inline void setdelay()
+	inline void set_delay()
 	{
-	#ifdef LINUX
+#ifndef NDEBUG
+		delay = true;
+#endif
+#ifdef LINUX
 		int flag = 1;
 		setsockopt(sockfd, IPPROTO_TCP, TCP_CORK,(const void *) &flag, sizeof(int));
-	#elif BSD_OS
+#elif BSD_OS
 		int flag = 1;
 		setsockopt(sockfd, IPPROTO_TCP, TCP_NOPUSH,(const void *) &flag, sizeof(int));
-	#else
+#else
 		int flag = 0;
 		setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY,(const char *) &flag, sizeof(int));
-	#endif
+#endif
 	}
 	inline void setnoblock() {
 #ifndef NDEBUG
@@ -395,7 +401,7 @@ public:
 	 * flag = 1 wait write
 	 */
 	//	static bool WaitForReadWrite(SOCKET sockfd, int flag, int timeo);
-	static struct addrinfo *getaddr(const char *host, int port, int ai_family = AF_UNSPEC, int ai_flags = 0);
+	static struct addrinfo *getaddr(const char *host, int ai_family = AF_UNSPEC, int ai_flags = 0);
 	static bool getaddr(const char *host, int port, sockaddr_i *m_a,int ai_family=AF_UNSPEC,int ai_flags=0);
 	static bool getaddr(const char *host, ip_addr *ip);
 	static u_short getportinfo(sockaddr_i *m_a);
@@ -411,6 +417,7 @@ public:
 #ifndef NDEBUG
 	bool blockFlag;
 	bool shutdownFlag;
+	bool delay;
 #endif
 protected:
 	SOCKET sockfd;
@@ -477,7 +484,7 @@ public:
 	}
 	inline StreamState write_all(const char *buf)
 	{
-		return write_all(buf,strlen(buf));
+		return write_all(buf,(int)strlen(buf));
 	}
 	u_short get_remote_port();
 	inline void get_remote_ip(char *ips,int ips_len)
@@ -540,18 +547,16 @@ public:
 		socklen_t sin_size = sizeof(client->addr);
 #ifdef HAVE_ACCEPT4
 #ifndef NDEBUG
-                client->blockFlag = !noblock;
+		client->blockFlag = !noblock;
 #endif
 		int flag = SOCK_CLOEXEC;
 		if(noblock){
 			flag|=SOCK_NONBLOCK;
 		}
-		client->sockfd = ::accept4(sockfd, (struct sockaddr *) &client->addr,
-				&sin_size,flag);
+		client->sockfd = ::accept4(sockfd, (struct sockaddr *) &client->addr,&sin_size,flag);
 		return client->sockfd!=INVALID_SOCKET;
 #else
-		client->sockfd = ::accept(sockfd, (struct sockaddr *) &client->addr,
-				&sin_size);
+		client->sockfd = ::accept(sockfd, (struct sockaddr *) &client->addr,&sin_size);
 		if (client->sockfd == INVALID_SOCKET) {
 			return false;
 		}

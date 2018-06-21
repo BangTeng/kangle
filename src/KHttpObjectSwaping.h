@@ -31,7 +31,7 @@ public:
 	{
 		clean_buffer();
 		this->buffer_size = buffer_size;
-		this->buffer_left = buffer_size;
+		this->buffer_left = (int)buffer_size;
 		buffer = (char *)aio_alloc_buffer(buffer_size);
 	}
 	void clean_buffer()

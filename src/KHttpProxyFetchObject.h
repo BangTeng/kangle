@@ -60,7 +60,7 @@ protected:
 			return client->parser->body;
 		}
 		if (hot) {
-			len = hot - header;
+			len = (int)(hot - header);
 			hot = NULL;
 			return header;
 		}

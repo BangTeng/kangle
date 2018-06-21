@@ -18,7 +18,7 @@
 #include "KSqliteDiskCacheIndex.h"
 #endif
 #ifdef ENABLE_DISK_CACHE
-#ifndef _WIN32
+#ifdef LINUX
 #include <sys/vfs.h>
 #endif
 //扫描进程是否存在
@@ -579,15 +579,17 @@ bool get_disk_size(INT64 &total_size,INT64 &free_size) {
 	}
 	total_size = TotalNumberOfBytes.QuadPart;
 	free_size = FreeBytesAvailable.QuadPart;
-#else
+	return true;
+#elif LINUX
 	struct statfs buf;
 	if (statfs(path.c_str(), &buf) != 0) {
 		return false;
 	}
 	total_size = (INT64)buf.f_blocks * (INT64)buf.f_bsize;
 	free_size = (INT64)buf.f_bsize * (INT64)buf.f_bavail;
-#endif
 	return true;
+#endif
+	return false;
 }
 INT64 get_need_free_disk_size(int used_radio)
 {

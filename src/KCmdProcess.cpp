@@ -111,7 +111,7 @@ void KMPCmdProcess::handleRequest(KHttpRequest *rq,KExtendProgram *rd)
 		return;
 	}
 	if (sp == NULL) {
-		rq->c->removeRequest(rq, true);
+		//rq->c->removeRequest(rq, true);
 		MPVProcessPowerParam *param = new MPVProcessPowerParam;
 		param->rq = rq;
 		param->rd = rd;

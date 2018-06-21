@@ -177,6 +177,7 @@ KUpstreamSelectable *KPoolableSocketContainer::getPoolSocket(KHttpRequest *rq) {
 	lock.Lock();
 	KUpstreamSelectable *socket = internalGetPoolSocket(rq);
 	lock.Unlock();
+	//printf("get pool socket=[%p] url=[%s]\n", socket,rq->url->path);
 	return socket;
 }
 void KPoolableSocketContainer::clean()

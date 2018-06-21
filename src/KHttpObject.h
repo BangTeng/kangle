@@ -144,7 +144,7 @@ public:
 			while (*charsetend && !IS_SPACE((unsigned char)*charsetend)
 					&& *charsetend != ';')
 				charsetend++;
-			int charset_len = charsetend - p;
+			int charset_len = (int)(charsetend - p);
 			char *charset = (char *)malloc(charset_len+1);
 			memcpy(charset,p,charset_len);
 			charset[charset_len] = '\0';

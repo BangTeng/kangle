@@ -2,7 +2,7 @@
 #AM_LDFLAGS=-rdynamic -lssl -lcrypto
 AM_CXXFLAGS=-I../module/access -I../module/whm
 AM_LDFLAGS=-L../lib
-LDADD=-laio
+LDADD=
 bin_PROGRAMS=kangle
 AUTOMAKE_OPTIONS=subdir-objects
 kangle_SOURCES =  \
@@ -241,5 +241,6 @@ KTempFileStream.cpp KHttpFilterStream.cpp KHttpFilterHookCollectResponse.cpp\
 KAccessDso.h KAccessDso.cpp KHttpStream.h KHttpFilterHookCollectResponse.h KHttpFilterStream.h KTempFileStream.h\
 KRandAcl.h KConnectionSelectable.cpp KConnectionSelectable.h KReadWriteBuffer.cpp KReadWriteBuffer.h KResponseContext.h KResponseContext.cpp\
 KUpstreamSelectable.h KUpstreamSelectable.cpp KRequestList.h KSimulateRequest.cpp  KSimulateRequest.h KMinObjVerifiedMark.h KCloudIpAcl.cpp katom.h KCondWait.h\
-KCname.h KCname.cpp KDechunkEngine.h KHttpEnv.h KHuffDecode.cpp KMemPool.cpp KMemPool.h KHttp2.h KHttp2.cpp KHttp2Table.cpp KHttp2WriteBuffer.h KHttp2WriteBuffer.cpp KSendBuffer.h KIpMap.cpp KIpMap.h\
-KGeoMark.cpp KLogDrill.cpp KGeoMark.h KLogDrill.h KQueueMark.h KQueueMark.cpp KAsyncFile.cpp KAsyncFile.h KAioSelectable.cpp KAioSelectable.h KHttpObjectSwaping.cpp KHttpObjectSwaping.h
+KAddr.h KAddr.cpp KDechunkEngine.h KHttpEnv.h KHuffDecode.cpp KMemPool.cpp KMemPool.h KHttp2.h KHttp2.cpp KHttp2Table.cpp KHttp2WriteBuffer.h KHttp2WriteBuffer.cpp KSendBuffer.h KIpMap.cpp KIpMap.h\
+KGeoMark.cpp KLogDrill.cpp KGeoMark.h KLogDrill.h KQueueMark.h KQueueMark.cpp KAsyncFile.cpp KAsyncFile.h KAioSelectable.cpp KAioSelectable.h KHttpObjectSwaping.cpp KHttpObjectSwaping.h\
+KMapRedirectMark.cpp KMapRedirectMark.h KEpollNoticeSelectable.h KEpollNoticeSelectable.cpp

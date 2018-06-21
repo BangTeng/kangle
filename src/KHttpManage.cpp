@@ -35,6 +35,7 @@
 #include "KUrlParser.h"
 #include "KHttpFilterDsoManage.h"
 #include "KCache.h"
+#include "KAddr.h"
 
 #include "server.h"
 #include "lang.h"
@@ -200,14 +201,19 @@ bool KHttpManage::runCommand() {
 		*/
 		s << "</pre>";
 		return sendHttp(s.str());
-	} else if (cmd=="dci") {
 #ifdef ENABLE_DB_DISK_INDEX
+	} else if (cmd=="dci") {
 		std::stringstream s;
 		if (dci) {
 			s << "dci queue: " << dci->getWorker()->getQueue();
 			s << " memory: " << dci->memory_used();
 		}
 		return sendHttp(s.str());
+#endif
+#ifdef RQ_LEAK_DEBUG
+	} else if (cmd == "dump_connection") {
+		selectorManager.dump_all_connection();
+		return sendHttp("see server.log");
 #endif
 	} else {
 		return sendHttp("500\ncommand is error");
@@ -406,17 +412,11 @@ bool KHttpManage::config() {
 		s << "<table border=0><tr><td valign=top>";		
 		s << klang["config_listen"] << ":";
 		s << "<table border=1>";
-		s << "<tr><td>" << LANG_OPERATOR << "</td><td>" << LANG_IP
-				<< "</td><td>" << LANG_PORT << "</td><td>"
-				<< klang["listen_type"] << "</td></tr>";
-		//显示配置侦听，一个配置侦听并不等于一个成功侦听，如侦听失败，或者由于ipv4/ipv6的原因，一个配置侦听会对应两个成功侦听。
+		s << "<tr><td>" << LANG_OPERATOR << "</td><td>" << LANG_IP	<< "</td><td>" << LANG_PORT << "</td><td>" << klang["listen_type"] << "</td></tr>";
 		for (size_t i = 0; i < conf.service.size(); i++) {
 			s << "<tr><td>";
 			s << "[<a href=\"javascript:if(confirm('really delete')){ window.location='/deletelisten?id=";
-			s << i << "';}\">" << LANG_DELETE
-					<< "</a>][<a href='/newlistenform?action=edit&id=" << i
-					<< "'>" << LANG_EDIT << "</a>]</td>";
-			//s << "<td>" << conf.service[i]->name << "</td>";
+			s << i << "';}\">" << LANG_DELETE << "</a>][<a href='/newlistenform?action=edit&id=" << i << "'>" << LANG_EDIT << "</a>]</td>";
 			s << "<td>" << conf.service[i]->ip << "</td>";
 			s << "<td>" << conf.service[i]->port << "</td>";
 			s << "<td>" << getWorkModelName(conf.service[i]->model) << "</td>";
@@ -424,14 +424,12 @@ bool KHttpManage::config() {
 		}
 		s << "</table>";
 		s << "[<a href='/newlistenform'>" << klang["new_listen"] << "</a>]<br>";
-		s << "connect time out:<input name='connect_time_out' size=5 value='" << conf.connect_time_out << "'><br>";
+		s << klang["connect_time_out"] << ":<input name='connect_time_out' size=5 value='" << conf.connect_time_out << "'><br>";
 		s <<  LANG_TIME_OUT << ":<input name='time_out' size=5 value='"	<< conf.time_out << "'><br>";
-		s <<  klang["keep_alive_timeout"] << ":<input name='keep_alive' size=5 value='" << conf.keep_alive << "'>"<< klang["int_disable_note"] << "<br>";
 		s << klang["keep_alive_count"]	<< ":<input name='keep_alive_count' size=6 value='" << conf.keep_alive_count << "'>"  << "<br>";
 		s << klang["worker_thread"] << ":<select name='worker_thread'>";
 		for (int i=0;i<10;i++) {
 			int count = (1<<i)/2;
-			
 			s << "<option value='" << count << "' ";
 			if (count==conf.select_count) {
 				s << "selected";
@@ -506,9 +504,7 @@ bool KHttpManage::config() {
 		ipLock.Unlock();
 		s << "' name=max_per_ip value="	<< conf.max_per_ip << "><br>";
 		
-		s <<  klang["min_free_thread"]
-				<< ":<input type=text size=3 name=min_free_thread value='"
-				<< conf.min_free_thread << "'><br>";
+		s <<  klang["min_free_thread"]	<< ":<input type=text size=3 name=min_free_thread value='"	<< conf.min_free_thread << "'><br>";
 
 #ifdef ENABLE_REQUEST_QUEUE
 		s << klang["max_worker"] << ":<input type=text size=4 name='max_worker' value='";
@@ -622,7 +618,6 @@ bool KHttpManage::configsubmit() {
 	if (item == 0) {
 		conf.set_time_out(atoi(getUrlValue("time_out").c_str()));
 		conf.set_connect_time_out(atoi(getUrlValue("connect_time_out").c_str()));
-		conf.keep_alive = atoi(getUrlValue("keep_alive").c_str());
 		conf.keep_alive_count = atoi(getUrlValue("keep_alive_count").c_str());
 		int worker_thread = atoi(getUrlValue("worker_thread").c_str());
 		if (worker_thread!=conf.select_count) {
@@ -832,8 +827,7 @@ bool KHttpManage::parseUrl(char *url) {
 	return false;
 
 }
-bool KHttpManage::sendHttp(const char *msg, INT64 content_length,
-	const char *content_type, const char *add_header, int max_age) {
+bool KHttpManage::sendHttp(const char *msg, INT64 content_length,const char *content_type, const char *add_header, int max_age) {
 	KStringBuf s;
 	rq->responseStatus(STATUS_OK);
 	rq->responseHeader(kgl_response_server, conf.serverName, conf.serverNameLength);
@@ -852,18 +846,7 @@ bool KHttpManage::sendHttp(const char *msg, INT64 content_length,
 		rq->responseHeader(kgl_expand_string("Cache-control"), s.getBuf(), s.getSize());
 	}
 	buff *gzipOut = NULL;
-#ifdef ENABLE_HTTP2
-	if (rq->http2_ctx == NULL) {
-#endif
-		if (conf.keep_alive == 0 || !TEST(rq->flags, RQ_HAS_KEEP_CONNECTION) || content_length<0) {
-			SET(rq->flags, RQ_CONNECTION_CLOSE);
-			rq->responseHeader(kgl_expand_string("Connection"), kgl_expand_string("close"));
-		} else {
-			rq->responseHeader(kgl_expand_string("Connection"), kgl_expand_string("keep-alive"));
-		}
-#ifdef ENABLE_HTTP2
-	}
-#endif
+	rq->responseConnection();
 	if (content_length > conf.min_gzip_length && msg && TEST(rq->raw_url.encoding, KGL_ENCODING_GZIP)) {
 		buff in;
 		memset(&in, 0, sizeof(in));
@@ -950,32 +933,18 @@ bool KHttpManage::sendErrPage(const char *err_msg, int close_flag) {
 }
 bool KHttpManage::sendLeftMenu() {
 	stringstream s;
-	s << "<html><head><title>" << PROGRAM_NAME << "(" << VER_ID << ") "
-			<< LANG_MANAGE
-			<< "</title><LINK href=/main.css type='text/css' rel=stylesheet></head><body>";
-	
+	s << "<html><head><title>" << PROGRAM_NAME << "(" << VER_ID << ") "	<< LANG_MANAGE	<< "</title><LINK href=/main.css type='text/css' rel=stylesheet></head><body>";
 	s << "<img border=0 src='/logo.gif' alt='logo'>";
-	
-	s << "<table><tr><td height=30><a href=/main target=mainFrame>"
-			<< LANG_HOME << "</a></td></tr>";
-	s
-			<< "<tr><td height=30><a href='/accesslist?access_type=0' target=mainFrame>"
-			<< klang["lang_requestAccess"] << "</a></td></tr>";
-	s
-			<< "<tr><td height=30><a href='/accesslist?access_type=1' target=mainFrame>"
-			<< klang["lang_responseAccess"] << "</a></td></tr>";
-
-	s << "<tr><td height=30><a href=/acserver target=mainFrame>"
-			<< klang["extends"] << "</a></td></tr>\n";
+	s << "<table><tr><td height=30><a href=/main target=mainFrame>"	<< LANG_HOME << "</a></td></tr>";
+	s << "<tr><td height=30><a href='/accesslist?access_type=0' target=mainFrame>"<< klang["lang_requestAccess"] << "</a></td></tr>";
+	s << "<tr><td height=30><a href='/accesslist?access_type=1' target=mainFrame>"	<< klang["lang_responseAccess"] << "</a></td></tr>";
+	s << "<tr><td height=30><a href=/acserver target=mainFrame>" << klang["extends"] << "</a></td></tr>\n";
 #ifndef HTTP_PROXY
-	s << "<tr><td height=30><a href='/vhslist' target=mainFrame>" << LANG_VHS
-			<< "</a></td></tr>\n";
-	s << "<tr><td height=30><a href='/process' target=mainFrame>"
-			<< klang["process"] << "</a></td></tr>\n";
+	s << "<tr><td height=30><a href='/vhslist' target=mainFrame>" << LANG_VHS	<< "</a></td></tr>\n";
+	s << "<tr><td height=30><a href='/process' target=mainFrame>" << klang["process"] << "</a></td></tr>\n";
 #endif
 #ifdef ENABLE_WRITE_BACK
-	s << "<tr><td height=30><a href=/writeback target=mainFrame>"
-			<< LANG_WRITE_BACK << "</a></td></tr>";
+	s << "<tr><td height=30><a href=/writeback target=mainFrame>" << LANG_WRITE_BACK << "</a></td></tr>";
 #endif
 	//if (conf.max_per_ip > 0)
 	s << "<tr><td height=30><a href=/connect_per_ip target=mainFrame>"
@@ -994,8 +963,7 @@ bool KHttpManage::sendLeftMenu() {
 	 //*/
 
 	//*
-	s
-			<< "<tr><td height=30><a href=\"javascript:if(confirm('really reboot')){ window.parent.location='/reboot';}\">";
+	s << "<tr><td height=30><a href=\"javascript:if(confirm('really reboot')){ window.parent.location='/reboot';}\">";
 	s << klang["reboot"] << "</a>";
 	//*/
 	s << "</table></body></html>";
@@ -1075,6 +1043,10 @@ bool KHttpManage::sendMainFrame() {
 	} else {
 		s << total_disk_size;
 	}
+	INT64 total_size, free_size;	
+	if (get_disk_size(total_size, free_size)) {
+		s << "(" << (total_size - free_size) * 100 / total_size << "%)";
+	}
 #endif
 	s << "<h3>" << LANG_UPTIME << "</h3>" << LANG_TOTAL_RUNING << " ";
 	if (total_run_time >= 86400) {
@@ -1107,6 +1079,7 @@ bool KHttpManage::sendMainFrame() {
 	s << "<tr><td>async io</td><td>" << katom_get((void *)&kgl_aio_count) << "</td></tr>\n";
 	s << "<tr><td>" << klang["io_worker_info"] << "</td><td>" << conf.ioWorker->getWorker() << "/" << conf.ioWorker->getQueue() << "</td></tr>\n";
 	s << "<tr><td>" << klang["dns_worker_info"] << "</td><td>" << conf.dnsWorker->getWorker() << "/" << conf.dnsWorker->getQueue() << "</td></tr>\n";
+	s << "<tr><td>addr cache:</td><td>" << get_addr_cache_count() << "</td></tr>\n";
 #ifdef ENABLE_DB_DISK_INDEX
 	s << "<tr><td>dci queue:</td><td>" << (dci?dci->getWorker()->getQueue():0) << "</td></tr>\n";
 	s << "<tr><td>dci mem:</td><td>" << (dci ? dci->memory_used():0) << "</td></tr>\n";
@@ -1427,7 +1400,6 @@ bool KHttpManage::start_listen(bool &hit) {
 			host->certificate_key = getUrlValue("certificate_key");
 			host->cipher = getUrlValue("cipher");
 			host->protocols = getUrlValue("protocols");
-			host->sni = getUrlValue("sni")=="1";
 			host->http2 = getUrlValue("http2")=="1";
 		}
 #endif
@@ -1530,13 +1502,6 @@ bool KHttpManage::start_listen(bool &hit) {
                         << (host ? host->certificate_key : "") << "'><br>";
 		s << "cipher:<input name='cipher' size=32 value='" << (host ? host->cipher : "") << "'><br>";
 		s << "protocols:<input name='protocols' size=32 value='" << (host ? host->protocols : "") << "'><br>";
-#ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
-		s << "<input type='checkbox' name='sni' value='1' ";
-		if(host==NULL || host->sni){
-			s << "checked";
-		}
-		s << ">sni";
-#endif
 #if (ENABLE_HTTP2 && TLSEXT_TYPE_next_proto_neg)
 		s << "<input type='checkbox' name='http2' value='1' ";
 		if(host==NULL || host->http2){
@@ -2368,6 +2333,10 @@ function sortrq(index)\
 	}
 	void create_cache_dir(const char *disk_dir);
 	if (strcmp(rq->url->path,"/format_disk_cache_dir.km")==0) {
+		string dir = getUrlValue("dir");
+		if (!dir.empty()) {
+			SAFE_STRCPY(conf.disk_cache_dir2, dir.c_str());
+		}
 		create_cache_dir(conf.disk_cache_dir2);
 		init_disk_cache(false);
 		return sendErrPage("format disk cache done.");

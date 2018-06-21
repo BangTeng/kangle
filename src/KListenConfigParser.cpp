@@ -46,7 +46,6 @@ bool KListenConfigParser::startElement(std::string &context, std::string &qName,
 #ifdef KSOCKET_SSL
 		m_host->certificate = attribute["certificate"];
 		m_host->certificate_key = attribute["certificate_key"];
-		m_host->sni = attribute["sni"]=="1";
 		m_host->http2 = attribute["http2"]=="1";
 		m_host->cipher = attribute["cipher"];
 		m_host->protocols = attribute["protocols"];

@@ -2,7 +2,7 @@
 #include "KHttpRequest.h"
 #include "KSelector.h"
 #include "ssl_utils.h"
-#include "KCname.h"
+#include "KAddr.h"
 
 #ifdef ENABLE_TCMALLOC
 #include "google/heap-checker.h"
@@ -53,18 +53,8 @@ int httpSSLCertCallback(SSL *ssl, void *arg)
 	if (c->sni->svh) {
 		return 1;
 	}
-#ifdef ENABLE_CNAME_BIND
-	if (c->ls->cname_vhc) {
-		char cname[256];
-		int len = kgl_find_cache_cname(servername,cname,sizeof(cname));
-		if (len<0) {
-			return -1;
-		}
-		c->sni->result = conf.gvm->queryVirtualHost(c->ls,&c->sni->svh,cname,len,true);
-	}
-#endif
 	if (c->sni->result==query_vh_host_not_found) {
-		c->sni->result = conf.gvm->queryVirtualHost(c->ls,&c->sni->svh,servername,0,false);
+		c->sni->result = conf.gvm->queryVirtualHost(c->ls,&c->sni->svh,servername,0);
 	}
 	if (query_vh_success != c->sni->result) {
 		return 1;
@@ -89,17 +79,8 @@ static int http_ssl_sni(SSL *ssl)
 	}
 	c->sni = new KSSLSniContext;
 	c->sni->result = query_vh_host_not_found;
-#ifdef ENABLE_CNAME_BIND
-	if (c->ls->cname_vhc) {
-		char cname[256];
-		int len = kgl_find_cache_cname(servername, cname, sizeof(cname));
-		if (len>0) {
-			c->sni->result = conf.gvm->queryVirtualHost(c->ls, &c->sni->svh, cname, len, true);
-		}
-	}
-#endif
 	if (c->sni->result == query_vh_host_not_found) {
-		c->sni->result = conf.gvm->queryVirtualHost(c->ls, &c->sni->svh, servername, 0, false);
+		c->sni->result = conf.gvm->queryVirtualHost(c->ls, &c->sni->svh, servername, 0);
 		if (c->sni->result != query_vh_success) {
 			return SSL_TLSEXT_ERR_OK;
 		}
@@ -285,6 +266,89 @@ static void __lock_thread (int mode, int n, const char *file, int line)
 		ssl_lock[n].Unlock();
 	}
 }
+bool kgl_ssl_session_id_context(SSL_CTX *ssl_ctx, const char *cert_file)
+{
+	int                   n, i;
+//	X509                 *cert;
+	X509_NAME            *name;
+	EVP_MD_CTX            md;
+	unsigned int          len;
+	STACK_OF(X509_NAME)  *list;
+	u_char                buf[EVP_MAX_MD_SIZE];
+	KFile fp;
+	/*
+	* Session ID context is set based on the string provided,
+	* the server certificate, and the client CA list.
+	*/
+
+	EVP_MD_CTX_init(&md);
+
+	if (EVP_DigestInit_ex(&md, EVP_sha1(), NULL) == 0) {
+		klog(KLOG_ERR,"EVP_DigestInit_ex() failed");
+		goto failed;
+	}
+
+	if (EVP_DigestUpdate(&md, cert_file, strlen(cert_file)) == 0) {
+		klog(KLOG_ERR,"EVP_DigestUpdate() failed");
+		goto failed;
+	}
+	
+	if (fp.open(cert_file, fileRead)) {
+		char buffer[512];
+		int total_read = 0;
+		while (total_read < 1048576) {
+			int read_len = fp.read(buffer, sizeof(buffer));
+			if (read_len <= 0) {
+				break;
+			}
+			total_read += read_len;
+			if (EVP_DigestUpdate(&md, buffer, read_len) == 0) {
+				klog(KLOG_ERR,"EVP_DigestUpdate() failed");
+				break;
+			}
+		}
+	}
+	fp.close();
+	list = SSL_CTX_get_client_CA_list(ssl_ctx);
+
+	if (list != NULL) {
+		n = sk_X509_NAME_num(list);
+
+		for (i = 0; i < n; i++) {
+			name = sk_X509_NAME_value(list, i);
+
+			if (X509_NAME_digest(name, EVP_sha1(), buf, &len) == 0) {
+				klog(KLOG_ERR,"X509_NAME_digest() failed");
+				goto failed;
+			}
+
+			if (EVP_DigestUpdate(&md, buf, len) == 0) {
+				klog(KLOG_ERR,"EVP_DigestUpdate() failed");
+				goto failed;
+			}
+		}
+	}
+
+	if (EVP_DigestFinal_ex(&md, buf, &len) == 0) {
+		klog(KLOG_ERR,"EVP_DigestUpdate() failed");
+		goto failed;
+	}
+
+	EVP_MD_CTX_cleanup(&md);
+
+	if (SSL_CTX_set_session_id_context(ssl_ctx, buf, len) == 0) {
+		klog(KLOG_ERR,"SSL_CTX_set_session_id_context() failed");
+		return false;
+	}
+	return true;
+
+failed:
+
+	EVP_MD_CTX_cleanup(&md);
+
+	return false;
+}
+
 void init_ssl()
 {
 #ifdef ENABLE_TCMALLOC
@@ -304,15 +368,6 @@ void init_ssl()
 	}
 }
 void resultSSLAccept(void *arg,int got);
-void ssl_cname_call_back(KHttpRequest *rq,const char *cname,int len)
-{
-	if (len<0) {
-		delete rq;
-		return;
-	}
-	//try again
-	resultSSLAccept(rq,0);
-}
 void resultSSLAccept(void *arg,int got)
 {
 	KHttpRequest *rq = (KHttpRequest *)arg;
@@ -344,7 +399,7 @@ void resultSSLAccept(void *arg,int got)
 					c->sni = NULL;
 				}
 				rq->c = NULL;
-				c->removeRequest(rq,false);
+				//c->removeRequest(rq,false);
 				delete rq;
 				c->http2 = new KHttp2();
 				c->set_flag(STF_APP_HTTP2);
@@ -353,31 +408,23 @@ void resultSSLAccept(void *arg,int got)
 				return;
 			}
 #endif
-			rq->init();
+			rq->init(NULL);
 			SET(rq->raw_url.flags,KGL_URL_SSL);
 			rq->c->read(rq,resultRequestRead,bufferRequestRead);
 			return;
 		}
 	case ret_want_read:
+#ifndef ENABLE_KSSL_BIO
+		rq->c->clear_flag(STF_RREADY);
+#endif
 		rq->c->read(rq,resultSSLAccept,NULL);
 		return;
 	case ret_want_write:
+#ifndef ENABLE_KSSL_BIO
+		rq->c->clear_flag(STF_WREADY);
+#endif
 		rq->c->write(rq,resultSSLAccept,NULL);
 		return;
-#ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
-#ifdef ENABLE_CNAME_BIND
-	case ret_sni_resolve:
-	{
-		const char *servername = SSL_get_servername(socket->getSSL(), TLSEXT_NAMETYPE_host_name);
-		if (servername==NULL) {
-			delete rq;
-			return;
-		}
-		kgl_find_cname(servername,ssl_cname_call_back,rq);
-        return;
-	}
-#endif
-#endif
 	default:
 		delete rq;
 		return;
@@ -411,8 +458,7 @@ void KSSLSocket::get_next_proto_negotiated(const unsigned char **data,unsigned *
 #endif
 #endif
 }
-SSL_CTX * KSSLSocket::init_server(const char *cert_file, const char *key_file,
-		const char *verified_file) {
+SSL_CTX * KSSLSocket::init_server(const char *cert_file, const char *key_file,const char *verified_file) {
 	SSL_CTX * ctx = init_ctx(true);
 	if (ctx == NULL) {
 		fprintf(stderr, "cann't init_ctx\n");
@@ -458,6 +504,7 @@ SSL_CTX * KSSLSocket::init_server(const char *cert_file, const char *key_file,
 			return NULL;
 		}
 	}
+	/*
 	int session_context_len = strlen(cert_file);
 	const char *session_context = cert_file;
 	int pos = session_context_len - SSL_MAX_SSL_SESSION_ID_LENGTH;
@@ -466,6 +513,8 @@ SSL_CTX * KSSLSocket::init_server(const char *cert_file, const char *key_file,
 		session_context += pos;
 	}
 	SSL_CTX_set_session_id_context(ctx,(const unsigned char *)session_context,session_context_len);
+	*/
+	kgl_ssl_session_id_context(ctx, cert_file);
 	SSL_CTX_set_session_cache_mode(ctx,SSL_SESS_CACHE_SERVER);
 	//SSL_CTX_sess_set_cache_size(ctx,1000);
 	return ctx;
@@ -638,6 +687,25 @@ void KSSLSocket::set_ssl_protocols(SSL_CTX *ctx, const char *protocols)
 		}
 #endif
 	}	
+}
+ssl_status KSSLSocket::ssl_shutdown()
+{
+	if (ssl == NULL) {
+		return ret_error;
+	}
+	int n = SSL_shutdown(ssl);
+	if (n == 1) {
+		return ret_ok;
+	}
+	int err = SSL_get_error(ssl, n);
+	switch (err) {
+	case SSL_ERROR_WANT_READ:		
+		return ret_want_read;
+	case SSL_ERROR_WANT_WRITE:		
+		return ret_want_write;
+	default:
+		return ret_error;
+	}
 }
 ssl_status KSSLSocket::handshake() {
 	assert(ssl);

@@ -41,7 +41,7 @@
 #endif
 #endif
 #ifndef VERSION
-#define VERSION         "3.5.12.11"
+#define VERSION         "3.5.13"
 #endif
 #define VER_ID   VERSION
 #ifndef MAX
@@ -141,44 +141,43 @@
 #endif
 ///////////////////////////////////////////////////////////////////
 /**
-* obj->index.flags 物件标志位
+* obj->index.flags
 */
-#define FLAG_DEAD               1      /* 物件已死，等待清除 */
-#define FLAG_URL_FREE           (1<<1) /* 物件中的url要负责清理 */
-#define FLAG_IN_MEM             (1<<2) /* 物件存在于内存中 */
-#define FLAG_IN_DISK            (1<<3) /* 物件存于磁盘上 */
-//#define OBJ_GZIPED              (1<<4) /* gzip压缩了 */
-#define FLAG_NO_BODY            (1<<5) /* 物件无body */
+#define FLAG_DEAD               1      /* */
+#define FLAG_URL_FREE           (1<<1) /* */
+#define FLAG_IN_MEM             (1<<2) /* */
+#define FLAG_IN_DISK            (1<<3) 
+//#define OBJ_GZIPED              (1<<4) /* gzip*/
+#define FLAG_NO_BODY            (1<<5) /* body */
 #define OBJ_MUST_REVALIDATE     (1<<6) /* must-revalidate */
-#define OBJ_IS_STATIC2          (1<<7) /* 静态化2 */
-#define OBJ_IS_READY            (1<<8) /* 物件准备就绪 */
+#define OBJ_IS_STATIC2          (1<<7) /* */
+#define OBJ_IS_READY            (1<<8) /* 准 */
 //////////////////////////////////////////////////////////////////
-#define ANSW_HAS_EXPIRES        (1<<9) /* 回应有Expire头 */
-#define ANSW_NO_CACHE           (1<<10) /* 不应缓存 */
-#define ANSW_HAS_MAX_AGE        (1<<11) /* 回应有Max-Age头 */
-#define ANSW_LAST_MODIFIED      (1<<12) /* 物件有Last-Modified */
-#define ANSW_HAS_CONTENT_LENGTH (1<<13) /* 有Content-Length头 */
-//#define OBJ_DEFLATED            (1<<14) /* deflate压缩了*/
-#define ANSW_HAS_CONTENT_RANGE  (1<<15) /* 有Content-Range */
-#define ANSW_CHUNKED            (1<<16) /* 回应是chunk数据 */
+#define ANSW_HAS_EXPIRES        (1<<9) /* */
+#define ANSW_NO_CACHE           (1<<10) /**/
+#define ANSW_HAS_MAX_AGE        (1<<11) /**/
+#define ANSW_LAST_MODIFIED      (1<<12) /* */
+#define ANSW_HAS_CONTENT_LENGTH (1<<13) 
+//#define OBJ_DEFLATED            (1<<14) 
+#define ANSW_HAS_CONTENT_RANGE  (1<<15) 
+#define ANSW_CHUNKED            (1<<16) 
 /////////////////////////////////////////////////////////////////////
-#define FLAG_RQ_INTERNAL        (1<<17) /* 内部请求产生的物件 */
-//#define FLAG_RQ_GZIP            (1<<18) /* gzip请求产生的数据 */
+#define FLAG_RQ_INTERNAL        (1<<17) 
 /////////////////////////////////////////////////////////////////////
-#define FLAG_NO_DISK_CACHE      (1<<19) /* 不用磁盘缓存 */
-#define FLAG_NO_NEED_CACHE      ANSW_NO_CACHE /*@deprecate 不需缓存 */
-//#define FLAG_NEED_GZIP          (1<<20)  /* 需要gzip压缩 */
-#define OBJ_IS_GUEST            (1<<21)  /* 游客缓存 */
+#define FLAG_NO_DISK_CACHE      (1<<19) /*  */
+#define FLAG_NO_NEED_CACHE      ANSW_NO_CACHE 
+//#define FLAG_NEED_GZIP          (1<<20)  /*  */
+#define OBJ_IS_GUEST            (1<<21)  /*  */
 /////////////////////////////////////////////////////////////////////
 //#define OBJ_IS_DELTA            (1<<22)
 #define OBJ_HAS_ETAG            (1<<23)
 /////////////////////////////////////////////////////////////////////
-#define OBJ_CACHE_RESPONSE      (1<<24) /* 缓存了也要检查response检查 */
-#define ANSW_LOCAL_SERVER       (1<<25) /* 本地应用(fastcgi等) */
+#define OBJ_CACHE_RESPONSE      (1<<24) 
+#define ANSW_LOCAL_SERVER       (1<<25) 
 #define ANSW_XSENDFILE          (1<<26) /* x-accel-redirect */
 /////////////////////////////////////////////////////////////////////
-#define FLAG_BIG_OBJECT_PROGRESS (1<<27) /* 未完大物件*/
-#define FLAG_BIG_OBJECT          (1<<28) /* 大物件 */
+#define FLAG_BIG_OBJECT_PROGRESS (1<<27)
+#define FLAG_BIG_OBJECT          (1<<28)
 #define OBJ_INDEX_SAVED          (1<<29)
 #define OBJ_INDEX_UPDATE         (1<<30)
 #define OBJ_NOT_OK               (1<<31)
@@ -209,7 +208,6 @@
 
 
 /**
-* 请求标志位
 * rq->flags
 */
 #define RQ_QUEUED              1
@@ -249,7 +247,7 @@
 #ifdef ENABLE_TPROXY
 #define  RF_TPROXY_TRUST_DNS (1<<1)
 #endif
-#define  RF_PROXY_RAW_URL    (1<<2) /* 反向代理时用raw_url */
+#define  RF_PROXY_RAW_URL    (1<<2) /*raw_url */
 #define  RF_DOUBLE_CACHE_EXPIRE (1<<3)
 #define  RF_UPSTREAM_NOKA    (1<<4)
 #define  RF_ALWAYS_ONLINE    (1<<5)
@@ -277,13 +275,11 @@
 #define  RQF_CC_PASS         (1<<30)
 #define  RQF_CC_HIT          (1<<31)
 
-/**
-* 请求的列队
-*/
-#define KGL_LIST_KA               0
+
+#define KGL_LIST_CONNECT          0
 #define KGL_LIST_RW               1
-#define KGL_LIST_CONNECT          2
-#define KGL_LIST_SYNC             3
+#define KGL_LIST_SYNC             2
+#define KGL_LIST_READY            3
 #define KGL_LIST_BLOCK            4
 #define KGL_LIST_NONE             5
 
@@ -311,7 +307,6 @@
 #define ENABLE_MULTI_SERVER        1
 #define ENABLE_SIMULATE_HTTP       1
 #ifdef ENABLE_DISK_CACHE
-	//开启sqlite磁盘索引
 	#define ENABLE_DB_DISK_INDEX       1
 	#define ENABLE_SQLITE_DISK_INDEX   1
 #endif
@@ -333,7 +328,7 @@
 #define ENABLE_SUB_VIRTUALHOST     1
 #define ENABLE_BASED_PORT_VH       1
 #define ENABLE_LOG_DRILL           1
-
+#define ENABLE_LOCAL_ERROR         1
 //#define ENABLE_PIPE_LOG            1
 #if defined(ENABLE_FORCE_CACHE) || defined(ENABLE_STATIC_URL)
 	#define ENABLE_STATIC_ENGINE       1
@@ -345,13 +340,12 @@ enum Proto_t {
 	Proto_http, Proto_fcgi, Proto_ajp,Proto_uwsgi,Proto_scgi,Proto_hmux,Proto_spdy,Proto_tcp
 };
 /**
-* HASH_SIZE 只能为2的n次方,要启用多hash,还要定义MULTI_HASH为1
+* 
 */
 #define	HASH_SIZE	(1024)
 #define	HASH_MASK	(HASH_SIZE-1)
 #define MULTI_HASH      1
 #ifdef  LINUX
-	//unix开启sendfile功能
 	#define ENABLE_SENDFILE      1
 #endif
 
@@ -364,9 +358,10 @@ enum Proto_t {
 	# define unlikely(x) (x)
 #endif
 //end define likely and unlikely
-
 #ifndef DISABLE_KSAPI_FILTER
 	//enable ksapi filter
 	#define ENABLE_KSAPI_FILTER 1
 #endif //DISABLE_KSAPI_FILTER
+//for test
+//#define ENABLE_KSSL_BIO            1
 #endif //global.h

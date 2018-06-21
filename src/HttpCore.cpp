@@ -274,7 +274,7 @@ bool send_error(KHttpRequest *rq, KHttpObject *obj, int code,const char* reason)
 	assert(rq->c->socket);
 	KStringBuf event_id(32);
 	if (conf.log_event_id) {
-		event_id.add(rq->request_msec, INT64_FORMAT_HEX);
+		event_id.add(rq->begin_time_msec, INT64_FORMAT_HEX);
 		event_id.WSTR("-");
 		event_id.add((INT64)rq, INT64_FORMAT_HEX);
 	}
@@ -292,12 +292,6 @@ bool send_error(KHttpRequest *rq, KHttpObject *obj, int code,const char* reason)
 	s << "</font></h3></p>\n<p>Please check or <a href='javascript:location.reload()'>try again</a> later.</p>\n";
 	if (*conf.hostname) {
 		s << "<div>hostname: " << conf.hostname << "</div>";
-	}
-	if (conf.log_event_id) {
-		s << "<div>event id: ";
-		s.write_all(event_id.getBuf(), event_id.getSize());
-		s << "</div>";
-		rq->responseHeader(kgl_expand_string("x-event-id"), event_id.getBuf(), event_id.getSize());
 	}
 	s << "<hr>\n";
 	s << "<div id='pb'>";
@@ -698,7 +692,7 @@ void processCacheRequest(KHttpRequest *rq) {
 	KHttpObject *obj = rq->ctx->obj;
 	if (!TEST(obj->index.flags,FLAG_IN_MEM)) {
 		KMutex *lock = obj->getLock();
-		rq->c->removeRequest(rq,true);
+		//rq->c->removeRequest(rq,true);
 		lock->Lock();
 		if (obj->data==NULL) {
 #ifdef ENABLE_DISK_CACHE
@@ -1203,7 +1197,7 @@ KFetchObject *bindVirtualHost(KHttpRequest *rq,RequestError *error,KAccess **htr
 	char *indexPath = NULL;
 	bool indexFileFindedResult = false;
 	if(rq->svh->vh->status!=0){
-		error->set(STATUS_SERVICE_UNAVAILABLE,"The virtualhost is closed");
+		error->set(STATUS_SERVICE_UNAVAILABLE,"virtual host is closed");
 		return NULL;
 	}
 	if (!rq->svh->bindFile(rq,rq->ctx->obj,result,htresponse,handled)) {
@@ -1747,7 +1741,6 @@ FUNC_TYPE FUNC_CALL stage_sync(void *param)
 	KHttpRequest *rq = (KHttpRequest *)param;
 	assert(rq->fetchObj->isSync());
 	//请求时间重新计时
-	rq->request_msec = kgl_current_msec;
 	rq->fetchObj->open(rq);
 	KTHREAD_RETURN;	
 }

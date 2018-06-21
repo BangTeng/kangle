@@ -13,6 +13,7 @@
 #include "KHttpHeader.h"
 #include "KMutex.h"
 #include "KMemPool.h"
+#include "md5.h"
 #ifdef ENABLE_HTTP2
 #define  KGL_SUCCESS     0
 #define  KGL_ERROR      -1
@@ -173,9 +174,17 @@ struct http2_frame_window_update {
 struct http2_frame_rst_stream {
 	uint32_t status;
 };
+struct http2_frame_ping {
+	uint64_t opaque;
+};
+struct http2_frame_goaway {
+	uint32_t last_stream_id;
+	uint32_t error_code;
+};
 #pragma pack(pop)
 class KHttp2Context;
 class KHttp2;
+bool test_http2();
 typedef int (*http2_header_parser_pt)(KHttp2Context *ctx, kgl_str_t *name, kgl_str_t *value);
 typedef int (*http2_accept_handler_pt)(KHttp2Context *ctx);
 typedef u_char *(KHttp2::*kgl_http_v2_handler_pt) (u_char *pos, u_char *end);
@@ -189,10 +198,15 @@ typedef struct {
 class kgl_sync_result
 {
 public:
+	KHttp2 *http2;
+	KHttp2Context *ctx;
 	KCondWait cond;
-	int got;
-	LPWSABUF buf;
+	union {
+		LPWSABUF buf;
+		INT64 send_header_body_len;
+	};
 	int bufCount;
+	int got;
 };
 typedef struct {
 	kgl_str_t                        name;
@@ -209,6 +223,7 @@ struct kgl_http_v2_state_t {
 	unsigned                         parse_name : 1;
 	unsigned                         parse_value : 1;
 	unsigned                         index : 1;
+	unsigned						keep_pool : 1;
 	kgl_pool_t						 *pool;
 	kgl_http_v2_header_t             header;
 	size_t                           header_limit;
@@ -216,7 +231,7 @@ struct kgl_http_v2_state_t {
 	u_char                          *field_start;
 	u_char                          *field_end;
 	size_t                           field_rest;
-	KHttp2Context				*stream;
+	KHttp2Context					*stream;
 	u_char                           buffer[8192];
 	size_t                           buffer_used;
 	kgl_http_v2_handler_pt           handler;
@@ -242,32 +257,13 @@ public:
 	{
 		memset(this, 0, sizeof(KHttp2Node));
 	}
-	uint32_t                       id;
+	uint32_t                  id;
 	KHttp2Node				 *index;
-	//KHttp2Node				 *parent;
-	//kgl_list                      queue;
-	//kgl_list                      children;
-	//kgl_list                      reuse;
-	uint8_t                       rank;
-	uint8_t                       weight;
-	double                        rel_weight;
+	uint8_t                   rank;
+	uint8_t                   weight;
+	double                    rel_weight;
 	KHttp2Context            *stream;
-	/*
-	void updateChildren(int level=0)
-	{
-		
-		kgl_list         *q;
-		KHttp2Node  *child;
-		assert(level < 16);
-		klist_foreach(q,&children)
-		{
-			child = kgl_list_data(q, KHttp2Node, queue);
-			child->rank = this->rank + 1;
-			child->rel_weight = (this->rel_weight / 256) * child->weight;
-			child->updateChildren(level+1);
-		}
-	}
-	*/
+
 };
 class KUpstreamSelectable;
 class KHttp2Context
@@ -281,6 +277,7 @@ public:
 	kgl_array_t  *cookies;
 #ifndef NDEBUG
 	INT64 orig_content_length;
+	//KMD5_CTX md5;
 #endif
 	INT64 content_left;
 	friend class KHttp2;
@@ -288,17 +285,16 @@ public:
 	unsigned  out_closed:1;
 	unsigned  rst : 1;
 	unsigned  parsed_header : 1;
-	unsigned  admin_stream : 1;
+	
 	unsigned  destroy_by_http2:1;
 	unsigned  skip_data:1;
 	unsigned  know_content_length:1;
+	int send_window;
+	size_t recv_window;
 	KHttp2HeaderFrame *send_header;
 	kgl_http2_event *write_wait;
 	kgl_http2_event *read_wait;
 	KSendBuffer *read_buffer;
-	size_t recv_window;
-	int ev_refs;
-	int send_window;
 	http2_buff *build_write_buffer(kgl_http2_event *e, int &len)
 	{
 		http2_buff *buf_out = NULL;
@@ -315,13 +311,15 @@ public:
 			new_buf->skip_data_free = 1;
 			new_buf->data = (char *)vc[i].iov_base;
 			new_buf->used = (uint16_t)MIN(len, (int)vc[i].iov_len);
+#ifndef NDEBUG
+		//	KMD5Update(&md5, (unsigned char *)new_buf->data, new_buf->used);
+#endif
 			//fwrite(new_buf->data, 1, new_buf->used, stdout);
 			len -= new_buf->used;
 			total_len += new_buf->used;
 			if (last) {
 				last->next = new_buf;
-			}
-			else {
+			} else {
 				buf_out = new_buf;
 			}
 			last = new_buf;
@@ -331,8 +329,12 @@ public:
 		e->len = total_len;
 		http2_buff *new_buf = new http2_buff;
 		http2_frame_header *data = (http2_frame_header *)malloc(sizeof(http2_frame_header));
-		e->refs_buff = new_buf;
-		new_buf->ctx = this;
+		if (last) {
+			//notice to last
+			last->ctx = this;
+		} else {
+			new_buf->ctx = this;
+		}
 		new_buf->data = (char *)data;
 		new_buf->used = sizeof(http2_frame_header);
 		memset(data, 0, sizeof(http2_frame_header));
@@ -379,6 +381,9 @@ private:
 		memset(this,0,sizeof(KHttp2Context));
 		recv_window = KGL_HTTP_V2_STREAM_RECV_WINDOW;
 		this->send_window = send_window;
+#ifndef NDEBUG
+		//KMD5Init(&md5);
+#endif
 	}
 	~KHttp2Context()
 	{
@@ -413,13 +418,14 @@ public:
 	bool add_header(KHttp2Context *ctx,const char *name, hlen_t name_len, const char *val, hlen_t val_len);
 	void read(KHttp2Context *ctx,resultEvent result,bufferEvent buffer,void *arg);
 	void read_hup(KHttp2Context *ctx, resultEvent result, void *arg);
-	void remove_event(KHttp2Context *ctx);
+	void remove_read_hup(KHttp2Context *ctx);
 	void shutdown(KHttp2Context *ctx);
 	void write(KHttp2Context *ctx,resultEvent result,bufferEvent buffer,void *arg);
 	void release(KHttp2Context *ctx);
 	void release_stream(KHttp2Context *ctx);
 	void release_admin(KHttp2Context *ctx);
-	int send_header(KHttp2Context *ctx,INT64 body_len);
+	int sync_send_header(KHttp2Context *ctx,INT64 body_len);
+	int send_header(KHttp2Context *ctx, INT64 body_len);
 	void write_end(KHttp2Context *ctx);
 public:
 	void getReadBuffer(iovec *buf,int &bufCount);
@@ -448,24 +454,14 @@ private:
 	u_char *close(bool read, int status);
 	void init(KConnectionSelectable *c);
 	~KHttp2();
-	http2_buff *get_frame(uint32_t sid, size_t length, uint8_t type, u_char flags)
-	{
-		http2_buff *buf = new http2_buff;
-		http2_frame_header *h = (http2_frame_header *)malloc(length + sizeof(http2_frame_header));
-		buf->used = length + sizeof(http2_frame_header);
-		memset(h, 0, length + sizeof(http2_frame_header));
-		buf->data = (char *)h;
-		h->set_length_type(length, type);
-		h->flags = flags;
-		h->stream_id = htonl(sid);
-		return buf;
-	}
 	bool can_destroy() {
 		return processing == 0 && write_processing == 0 && read_processing == 0;
 	}
 	void destroy();
 	void startRead();
-	void startWrite(bool check_write_processing = true);
+	void startWrite();
+	void ping();
+	void goaway(int error_code);
 	KHttp2Context *create_stream();
 	int copyReadBuffer(KHttp2Context *ctx,bufferEvent buffer,void *arg);
 	void setDependency(KHttp2Node *node, uint32_t depend, bool exclusive);
@@ -476,15 +472,17 @@ private:
 	size_t                           frame_size;
 	size_t							 max_stream;
 	KHttp2WriteBuffer write_buffer;
-	KMutex lock;
 	KHttp2Node **streams_index;
 	kgl_http_v2_state_t state;
 	kgl_http_v2_hpack_t hpack;
-	time_t last_stream_time;
-	uint32_t last_sid;
+	INT64 last_stream_msec;
+	uint32_t last_peer_sid;
+	uint32_t last_self_sid;
 	unsigned write_processing : 1;
 	unsigned read_processing : 1;
-	unsigned goaway : 1;
+	unsigned peer_goaway : 1;
+	unsigned self_goaway : 1;
+	unsigned pinged : 1;
 	
 	unsigned processing;
 private:

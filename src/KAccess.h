@@ -128,6 +128,7 @@ private:
 			std::vector<std::string> table_names);	
 private:
 	void setChainAction();
+	void inter_destroy();
 	KRWLock lock;
 	int default_jump_type;
 	std::string jump_name;

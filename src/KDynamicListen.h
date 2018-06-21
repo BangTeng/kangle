@@ -26,12 +26,6 @@ public:
 		if (port > a.port) {
 			return false;
 		}
-		if (ssl > a.ssl) {
-			return true;
-		}
-		if (ssl < a.ssl) {
-			return false;
-		}
 		return ipv4 < a.ipv4;
 	}
 	std::string ip;

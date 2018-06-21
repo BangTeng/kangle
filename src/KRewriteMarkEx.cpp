@@ -116,7 +116,7 @@ bool KRewriteRule::mark(KHttpRequest *rq, KHttpObject *obj,
 		return false;
 	}
 	//²âÊÔpath
-	KRegSubString *subString = reg.matchSubString(rq->url->path + prefix.size(), len - prefix.size(), 0);
+	KRegSubString *subString = reg.matchSubString(rq->url->path + prefix.size(), (int)(len - prefix.size()), 0);
 	bool match_result = (subString!=NULL);
 	if (revert==match_result) {
 		if (subString) {
@@ -216,7 +216,7 @@ bool KRewriteRule::mark(KHttpRequest *rq, KHttpObject *obj,
 					}
 				}
 			} else {
-				push_redirect_header(rq,u,strlen(u),code);
+				push_redirect_header(rq,u,(int)strlen(u),code);
 				jumpType = JUMP_DENY;
 			}
 		}

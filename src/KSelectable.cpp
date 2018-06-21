@@ -2,10 +2,20 @@
 #include "KSelector.h"
 #include "KSSLSocket.h"
 #include "KPipeStream.h"
+#include "time_utils.h"
 #define MAXSENDBUF 16
-void KSelectable::asyncWrite(void *arg, resultEvent result, bufferEvent buffer)
+void KSelectable::shutdown_socket()
 {
-	selector->addList(this, KGL_LIST_RW);
+	//printf("st=[%p] shutdown_socket\n", this);
+	sock->shutdown(SHUT_RDWR);
+#ifdef _WIN32
+	sock->cancelIo();
+#endif
+}
+void KSelectable::async_write(void *arg, resultEvent result, bufferEvent buffer)
+{
+	assert(selector->is_same_thread());
+	//selector->addList(this, KGL_LIST_RW);
 #ifdef ENABLE_KSSL_BIO
 	if (isSSL()) {
 		sslWrite(arg, result, buffer);
@@ -17,7 +27,7 @@ void KSelectable::asyncWrite(void *arg, resultEvent result, bufferEvent buffer)
 	}
 }
 #ifdef ENABLE_KSSL_BIO
-bool KSelectable::sslRead(void *arg, resultEvent result, bufferEvent buffer)
+void KSelectable::sslRead(void *arg, resultEvent result, bufferEvent buffer)
 {
 	KSSLSocket *ssl_socket = static_cast<KSSLSocket *>(getSocket());
 	KSSLBIO *ssl_bio = &ssl_socket->ssl_bio[READ_PIPE];
@@ -27,13 +37,11 @@ bool KSelectable::sslRead(void *arg, resultEvent result, bufferEvent buffer)
 	ssl_bio->st = this;
 	if (BIO_pending(ssl_bio->bio) > 0) {
 		eventRead(arg, result, buffer);
-		return true;
+		return;
 	}
 	if (!selector->read(this, resultSSLBIORead, bufferSSLBIORead, ssl_bio)) {
 		result(arg, -1);
-		return true;
 	}
-	return false;
 }
 void KSelectable::sslWrite(void *arg, resultEvent result, bufferEvent buffer)
 {
@@ -63,26 +71,27 @@ void KSelectable::sslWrite(void *arg, resultEvent result, bufferEvent buffer)
 void KSelectable::lowEventRead(void *arg,resultEvent result,bufferEvent buffer)
 {
 	if (buffer==NULL) {
-                result(arg,0);
-                return;
-        }
-        WSABUF recvBuf[1];
-        memset(&recvBuf,0,sizeof(recvBuf));
-        int bufferCount = 1;
-        KSocket *server = getSocket();
-        buffer(arg,recvBuf,bufferCount);
-        assert(recvBuf[0].iov_len>0);
-        int got = server->recv((char *)recvBuf[0].iov_base,recvBuf[0].iov_len);
+			result(arg,0);
+			return;
+	}
+	WSABUF recvBuf[1];
+	memset(&recvBuf,0,sizeof(recvBuf));
+	int bufferCount = 1;
+	KSocket *server = getSocket();
+	buffer(arg,recvBuf,bufferCount);
+	assert(recvBuf[0].iov_len>0);
+	int got = server->recv((char *)recvBuf[0].iov_base,recvBuf[0].iov_len);
 	if (got>=0) {
-                result(arg,got);
-                return;
-        }
-        if (errno==EAGAIN) {
-                if (!selector->read(this,result,buffer,arg)) {
-                        result(arg,-1);
-                }
-                return;
-        }
+			result(arg,got);
+			return;
+	}
+	if (errno==EAGAIN) {
+		CLR(st_flags,STF_RREADY);
+		if (!selector->read(this,result,buffer,arg)) {
+				result(arg,-1);
+		}
+		return;
+	}
 	result(arg,-1);
 }
 void KSelectable::lowEventWrite(void *arg,resultEvent result,bufferEvent buffer)
@@ -103,6 +112,7 @@ void KSelectable::lowEventWrite(void *arg,resultEvent result,bufferEvent buffer)
 		return;
 	}
 	if (errno==EAGAIN) {
+		CLR(st_flags,STF_WREADY);
 		if (!selector->write(this,result,buffer,arg)) {
 			result(arg,-1);
 		}
@@ -111,9 +121,9 @@ void KSelectable::lowEventWrite(void *arg,resultEvent result,bufferEvent buffer)
 	result(arg,-1);
 }
 #endif
-bool KSelectable::asyncRead(void *arg,resultEvent result,bufferEvent buffer,int list)
+void KSelectable::async_read(void *arg,resultEvent result,bufferEvent buffer)
 {
-	selector->addList(this, list);
+	assert(selector->is_same_thread());
 #ifdef KSOCKET_SSL
 	if (isSSL()) {
 		KSSLSocket *sslsocket = static_cast<KSSLSocket *>(getSocket());
@@ -121,18 +131,18 @@ bool KSelectable::asyncRead(void *arg,resultEvent result,bufferEvent buffer,int 
 		if (pending_read>0) {
 			//ssl still have data to read
 			eventRead(arg, result, buffer);
-			return true;
+			return;
 		}
 #ifdef ENABLE_KSSL_BIO
-		return sslRead(arg, result, buffer);
+		sslRead(arg, result, buffer);
+		return;
 #endif
 	}
 #endif
 	if (!selector->read(this,result,buffer,arg)) {
 		result(arg,-1);
-		return true;
 	}
-	return false;
+	return;
 }
 void KSelectable::eventRead(void *arg,resultEvent result,bufferEvent buffer)
 {
@@ -151,17 +161,13 @@ void KSelectable::eventRead(void *arg,resultEvent result,bufferEvent buffer)
 		result(arg,got);
 		return;
 	}
-	if (errno==EAGAIN) {
-		if (!selector->read(this,result,buffer,arg)) {
-			result(arg,-1);
-		}
-		return;
-	}
 #ifdef KSOCKET_SSL
 	if (isSSL()) {
+		CLR(st_flags, STF_RREADY);
 		KSSLSocket *sslsocket = static_cast<KSSLSocket *>(server);
 		int err = sslsocket->get_ssl_error(got);
-		if (err==SSL_ERROR_WANT_READ) {
+		//printf("error=[%d]\n", err);
+		if (errno == EAGAIN || err==SSL_ERROR_WANT_READ) {
 #ifdef ENABLE_KSSL_BIO
 			sslRead(arg, result, buffer);
 			return;
@@ -173,6 +179,13 @@ void KSelectable::eventRead(void *arg,resultEvent result,bufferEvent buffer)
 		}
 	}
 #endif
+	if (errno == EAGAIN) {
+		CLR(st_flags, STF_RREADY);
+		if (!selector->read(this, result, buffer, arg)) {
+			result(arg, -1);
+		}
+		return;
+	}
 	result(arg,-1);
 }
 void KSelectable::eventWrite(void *arg,resultEvent result,bufferEvent buffer)
@@ -188,20 +201,16 @@ void KSelectable::eventWrite(void *arg,resultEvent result,bufferEvent buffer)
 	buffer(arg,recvBuf,bufferCount);
 	assert(recvBuf[0].iov_len>0);
 	int got = server->writev(recvBuf,bufferCount,isSSL());
+	//printf("write got=[%d]\n",got);
 	if (got>=0) {
 		result(arg,got);
 		return;
 	}
-	if (errno==EAGAIN) {
-		if (!selector->write(this,result,buffer,arg)) {
-			result(arg,-1);
-		}
-		return;
-	}
 #ifdef KSOCKET_SSL
 	if (isSSL()) {
+		CLR(st_flags, STF_WREADY);
 		KSSLSocket *sslsocket = static_cast<KSSLSocket *>(server);
-		if (sslsocket->get_ssl_error(got)==SSL_ERROR_WANT_WRITE) {
+		if (errno == EAGAIN || sslsocket->get_ssl_error(got)==SSL_ERROR_WANT_WRITE) {
 #ifdef ENABLE_KSSL_BIO
 			sslWrite(arg, result, buffer);
 			return;
@@ -213,5 +222,12 @@ void KSelectable::eventWrite(void *arg,resultEvent result,bufferEvent buffer)
 		}
 	}
 #endif
+	if (errno == EAGAIN) {
+		CLR(st_flags, STF_WREADY);
+		if (!selector->write(this, result, buffer, arg)) {
+			result(arg, -1);
+		}
+		return;
+	}
 	result(arg,-1);
 }

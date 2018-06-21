@@ -67,10 +67,10 @@ bool KAjpMessage::putString(const char *str, int len) {
 	return true;
 }
 bool KAjpMessage::putString(const std::string &str) {
-	return putString(str.c_str(), str.size());
+	return putString(str.c_str(), (int)str.size());
 }
 bool KAjpMessage::putString(const char *str) {
-	return putString(str, strlen(str));
+	return putString(str, (int)strlen(str));
 }
 bool KAjpMessage::end() {
 	if(pos>4){

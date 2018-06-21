@@ -101,9 +101,9 @@ private:
 	time_t getHttp2ExpireTime()
 	{
 		int lifeTime = this->lifeTime;
-		if (lifeTime <= 30) {
-			//http2最少60秒连接时间
-			lifeTime = 30;
+		if (lifeTime <= 10) {
+			//http2最少10秒连接时间
+			lifeTime = 10;
 		}
 		return kgl_current_sec + lifeTime;
 	}

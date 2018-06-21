@@ -35,25 +35,75 @@
 #define MAXEVENT	256
 //#endif
 KEpollSelector::KEpollSelector() {
+#ifdef EPOLL_CLOEXEC
+	kdpfd = epoll_create1(EPOLL_CLOEXEC);
+#else
 	kdpfd = epoll_create(MAXEVENT);
-	aio_st = new KAioSelectable(kdpfd);
+#endif
+	aio_st = new KAioSelectable(this);
+	notice_st = new KEpollNoticeSelectable(this);
 #ifdef EPOLLRDHUP
 	//printf("epoll support read_hup event\n");
 #endif
 }
-
+void KEpollSelector::handle_read_event(KSelectable *st)
+{
+	//printf("handle_read_event st=[%p]\n",st);
+	if (TEST(st->st_flags,STF_ET)) {
+		CLR(st->st_flags,STF_READ);
+	}
+#ifdef ENABLE_KSSL_BIO
+	st->lowEventRead(st->e[OP_READ].arg,st->e[OP_READ].result,st->e[OP_READ].buffer);
+#else
+	st->eventRead(st->e[OP_READ].arg,st->e[OP_READ].result,st->e[OP_READ].buffer);
+#endif
+}
+void KEpollSelector::handle_write_event(KSelectable *st)
+{
+	CLR(st->st_flags,STF_WRITE|STF_RDHUP);
+#ifdef ENABLE_KSSL_BIO
+	st->lowEventWrite(st->e[OP_WRITE].arg,st->e[OP_WRITE].result,st->e[OP_WRITE].buffer);
+#else
+	st->eventWrite(st->e[OP_WRITE].arg,st->e[OP_WRITE].result,st->e[OP_WRITE].buffer);
+#endif
+}
 KEpollSelector::~KEpollSelector() {
-	close(kdpfd);
+	::close(kdpfd);
 }
 void KEpollSelector::select() {
 	epoll_event events[MAXEVENT];
+	uint32_t ev;
 	for (;;) {
 #ifdef MALLOCDEBUG
-		if (closeFlag) {
+		if (closed_flag) {
 			delete this;
 			return;
 		}
 #endif
+		for (;;) {
+			kgl_list *l = klist_head(&list[KGL_LIST_READY]);
+			if (l == &list[KGL_LIST_READY]) {
+				break;
+			}
+			KSelectable *st = kgl_list_data(l,KSelectable,queue);
+			klist_remove(l);
+			memset(l, 0, sizeof(kgl_list));
+			count--;
+			uint16_t st_flags = st->st_flags;
+			if (TEST(st_flags,STF_WREADY) && TEST(st_flags,STF_WRITE|STF_RDHUP)) {
+				handle_write_event(st);
+				CLR(st_flags,STF_WRITE|STF_RDHUP);
+			}
+			if (TEST(st_flags,STF_RREADY) && TEST(st_flags,STF_READ)) {
+				handle_read_event(st);
+				CLR(st_flags,STF_READ);
+			}
+			if (TEST(st_flags,STF_READ|STF_WRITE) &&
+				TEST(st_flags,STF_ET) &&
+				st->queue.next==NULL) {
+				add_list(st,KGL_LIST_RW);
+			}
+		}
 		checkTimeOut();
 		int ret = epoll_wait(kdpfd, events, MAXEVENT,tmo_msec);
 		if (utm) {
@@ -64,67 +114,48 @@ void KEpollSelector::select() {
 		//}
 		for (int n = 0; n < ret; ++n) {
 			KSelectable *st = ((KSelectable *) events[n].data.ptr);
-			assert(TEST(st->st_flags,STF_LOCK)==0);
-			if (TEST(events[n].events,EPOLLRDHUP|EPOLLOUT)) {
-				assert(TEST(st->st_flags,STF_WRITE|STF_RDHUP));
-				SET(st->st_flags,STF_WLOCK);
-			} else if (TEST(events[n].events,EPOLLIN|EPOLLPRI)) {
-				assert(TEST(st->st_flags,STF_READ));
-				SET(st->st_flags,STF_RLOCK);
-			} else if (TEST(st->st_flags,STF_RDHUP|STF_WRITE)) {
-				SET(st->st_flags,STF_WLOCK);
-			} else {
-				assert(TEST(st->st_flags,STF_READ));
-				SET(st->st_flags,STF_RLOCK);
+			remove_list(st);
+			ev = events[n].events;
+			//klog(KLOG_DEBUG,"event happened st=[%p] ev=[%d]\n",st,ev);
+			if (TEST(ev, EPOLLHUP | EPOLLERR)) {
+				SET(st->st_flags, STF_ERR);
 			}
-			if (TEST(st->st_flags,STF_ONE_SHOT)) {
-				CLR(st->st_flags,STF_READ|STF_WRITE|STF_RDHUP);
-			}
-		}
-		for (int n = 0; n < ret; ++n) {
-			KSelectable *st = ((KSelectable *) events[n].data.ptr);
-			if (TEST(st->st_flags,STF_WLOCK)) {
-				CLR(st->st_flags,STF_WLOCK);
-				assert(TEST(st->st_flags,STF_RLOCK)==0);
-				assert(st->e[OP_WRITE].result);
-				if (TEST(events[n].events,EPOLLERR)) {
-					st->e[OP_WRITE].result(st->e[OP_WRITE].arg,-1);
-					continue;
+			if (TEST(ev,EPOLLRDHUP)) {
+				SET(st->st_flags,STF_WREADY);
+				if (TEST(st->st_flags,STF_WRITE|STF_RDHUP)) {
+					add_list(st,KGL_LIST_READY);
 				}
-#ifdef ENABLE_KSSL_BIO
-				st->lowEventWrite(st->e[OP_WRITE].arg,st->e[OP_WRITE].result,st->e[OP_WRITE].buffer);
-#else
-				st->eventWrite(st->e[OP_WRITE].arg,st->e[OP_WRITE].result,st->e[OP_WRITE].buffer);
-#endif
-				continue;
+			} else if (TEST(ev,EPOLLOUT)) {
+				SET(st->st_flags,STF_WREADY);
+				if (TEST(st->st_flags,STF_WRITE)) {
+					add_list(st,KGL_LIST_READY);
+				}
 			}
-			assert(TEST(st->st_flags,STF_RLOCK|STF_WLOCK)==STF_RLOCK);
-			CLR(st->st_flags,STF_RLOCK);
-			assert(st->e[OP_READ].result);
-			if (TEST(events[n].events,EPOLLERR)) {
-					st->e[OP_READ].result(st->e[OP_READ].arg,-1);
-					continue;
+			if (TEST(ev,EPOLLIN|EPOLLPRI)) {
+				SET(st->st_flags,STF_RREADY);
+				if (TEST(st->st_flags,STF_READ) && st->queue.next==NULL) {
+					add_list(st,KGL_LIST_READY);
+				}
 			}
-#ifdef ENABLE_KSSL_BIO
-			st->lowEventRead(st->e[OP_READ].arg,st->e[OP_READ].result,st->e[OP_READ].buffer);
-#else
-			st->eventRead(st->e[OP_READ].arg,st->e[OP_READ].result,st->e[OP_READ].buffer);
-#endif
 		}
 	}
 
 }
 void KEpollSelector::removeSocket(KSelectable *st) {
-	if (!TEST(st->st_flags,STF_EV)) {
+	if (!TEST(st->st_flags,STF_REV|STF_WEV)) {
 		//socket not set event
 		return;
 	}
+	remove_list(st);
 	SOCKET sockfd = st->getSocket()->get_socket();
 #ifndef NDEBUG
+	if (TEST(st->st_flags,STF_ET)) {
+		assert(TEST(st->st_flags,STF_READ|STF_WRITE|STF_RDHUP)==0);
+	}
 	klog(KLOG_DEBUG,"removeSocket st=%p,sockfd=%d\n",st,sockfd);
 #endif
 	struct epoll_event ev;
-	CLR(st->st_flags,STF_EV|STF_READ|STF_WRITE|STF_RDHUP|STF_ONE_SHOT);
+	CLR(st->st_flags,STF_REV|STF_WEV|STF_ET|STF_RREADY|STF_WREADY);
 	if (epoll_ctl(kdpfd, EPOLL_CTL_DEL,sockfd, &ev) != 0) {
 		klog(KLOG_ERR, "epoll del sockfd error: fd=%d,errno=%d\n", sockfd,errno);
 		return;
@@ -139,13 +170,13 @@ bool KEpollSelector::listen(KServerSelectable *st,resultEvent result)
 	st->e[OP_WRITE].result = NULL;
 	SOCKET sockfd = st->getSocket()->get_socket();
 	int poll_op;
-	if (TEST(st->st_flags,STF_EV)) {
+	if (TEST(st->st_flags,STF_REV)) {
 		poll_op = EPOLL_CTL_MOD;
 	} else {
 		poll_op = EPOLL_CTL_ADD;
 	}
 	CLR(st->st_flags,STF_WRITE|STF_RDHUP);
-	SET(st->st_flags,STF_READ|STF_EV);
+	SET(st->st_flags,STF_READ|STF_REV);
 	ev.events = EPOLLIN;
 	ev.data.ptr = static_cast<KSelectable *>(st);
 	int ret = epoll_ctl(kdpfd, poll_op, sockfd, &ev);
@@ -158,130 +189,145 @@ bool KEpollSelector::listen(KServerSelectable *st,resultEvent result)
 }
 bool KEpollSelector::read_hup(KSelectable *st,resultEvent result,bufferEvent buffer,void *arg)
 {
+	//printf("st=[%p] read_hup\n",st);
 #ifdef EPOLLRDHUP
-	SOCKET sockfd = st->getSocket()->get_socket();
-	if (sockfd==INVALID_SOCKET) {
+	if (TEST(st->st_flags,STF_READ|STF_WRITE)) {
 		return false;
 	}
-	if (TEST(st->st_flags,STF_LOCK)) {
-		return false;
-	}
-	struct epoll_event ev;
+	SET(st->st_flags,STF_RDHUP);
 	st->e[OP_WRITE].arg = arg;
 	st->e[OP_WRITE].result = result;
 	st->e[OP_WRITE].buffer = buffer;
-	int poll_op;
-	if (TEST(st->st_flags,STF_EV)) {
-		poll_op = EPOLL_CTL_MOD;
-	} else {
-		poll_op = EPOLL_CTL_ADD;
-	}
-	CLR(st->st_flags,STF_WRITE|STF_READ);
-	SET(st->st_flags, STF_EV|STF_RDHUP|STF_ONE_SHOT);
-	ev.events = EPOLLRDHUP
-#ifdef ENABLE_ONESHOT_MODEL
-	|EPOLLONESHOT
-#endif
-	;
-	ev.data.ptr = st;
-#ifndef NDEBUG
-	klog(KLOG_DEBUG,"read_hup sockfd=%d,st=%p\n",sockfd,st);
-#endif
-	int ret = epoll_ctl(kdpfd, poll_op, sockfd, &ev);
-	if (ret !=0) {
-		CLR(st->st_flags,STF_RDHUP);
-		klog(KLOG_ERR, "epoll set insertion error: fd=%d,errno=%d %s\n", sockfd,errno,strerror(errno));
-		return false;
+	if (!TEST(st->st_flags,STF_WEV|STF_REV)) {
+		if (!add_event(st,STF_WEV|STF_REV)) {
+			CLR(st->st_flags,STF_RDHUP);
+			return false;
+		}
 	}
 	return true;
 #else
 	return false;
 #endif
 }
-
+bool KEpollSelector::add_event(KSelectable *st,uint16_t ev)
+{
+	struct epoll_event event;
+	int op = EPOLL_CTL_ADD;
+	uint32_t events = 0;
+	uint16_t prev_ev = st->st_flags;
+	if (TEST(ev,STF_REV)) {
+		events |= EPOLLIN|EPOLLRDHUP|EPOLLET;
+		if (TEST(prev_ev,STF_WEV)) {
+			op = EPOLL_CTL_MOD;
+			events|=EPOLLOUT;
+		}
+		SET(st->st_flags,STF_REV|STF_ET|STF_WREADY);
+	}
+	if (TEST(ev,STF_WEV)) {
+		events |= EPOLLOUT|EPOLLRDHUP|EPOLLET;
+		if (TEST(prev_ev,STF_REV)) {
+			op = EPOLL_CTL_MOD;
+			events|=EPOLLIN;
+		}
+		SET(st->st_flags,STF_WEV|STF_ET);
+	}
+	SOCKET sockfd = st->getSocket()->get_socket();
+	event.events = events;
+#ifndef NDEBUG
+	klog(KLOG_DEBUG,"%s event [%d] epoll event=[%lld] sockfd=[%d],st=[%p]\n",op==EPOLL_CTL_ADD?"add":"modify",ev,int64_t(events),sockfd,st);
+#endif
+	event.data.ptr = st;
+	int ret = epoll_ctl(kdpfd, op, sockfd, &event);
+	if (ret !=0) {
+		klog(KLOG_ERR, "epoll ctl error fd=%d,errno=%d %s\n", sockfd,errno,strerror(errno));
+		return false;
+	}
+	return true;
+}
 bool KEpollSelector::read(KSelectable *st,resultEvent result,bufferEvent buffer,void *arg)
 {
-	struct epoll_event ev;
+	//printf("st=[%p] read\n",st);
+	assert(TEST(st->st_flags,STF_READ)==0);
 	st->e[OP_READ].arg = arg;
 	st->e[OP_READ].result = result;
 	st->e[OP_READ].buffer = buffer;
-	if (TEST(st->st_flags,STF_RLOCK)) {
+	SET(st->st_flags,STF_READ);
+	CLR(st->st_flags,STF_RDHUP);
+	if (TEST(st->st_flags,STF_RREADY)) {
+		add_list(st,KGL_LIST_READY);
 		return true;
 	}
-	int poll_op;
-	if (TEST(st->st_flags,STF_EV)) {
-		poll_op = EPOLL_CTL_MOD;
-	} else {
-		poll_op = EPOLL_CTL_ADD;
+	if (!TEST(st->st_flags,STF_REV)) {
+		if (!add_event(st,STF_REV)) {
+			CLR(st->st_flags,STF_READ);
+			return false;
+		}
 	}
-	CLR(st->st_flags,STF_WRITE|STF_RDHUP);
-	SET(st->st_flags,STF_READ|STF_EV|STF_ONE_SHOT);
-	SOCKET sockfd = st->getSocket()->get_socket();
-	ev.events = EPOLLIN
-#ifdef ENABLE_ONESHOT_MODEL
-	|EPOLLONESHOT
-#endif
-	;
-#ifndef NDEBUG
-	klog(KLOG_DEBUG,"read sockfd=%d,st=%p\n",sockfd,st);
-#endif
-	ev.data.ptr = st;
-	int ret = epoll_ctl(kdpfd, poll_op, sockfd, &ev);
-	if (ret !=0) {
-		CLR(st->st_flags,STF_READ);
-		klog(KLOG_ERR, "epoll set insertion error: fd=%d,errno=%d %s\n", sockfd,errno,strerror(errno));
-		return false;
+	if (st->queue.next==NULL) {
+		add_list(st,KGL_LIST_RW);
 	}
 	return true;
 }
 bool KEpollSelector::write(KSelectable *st,resultEvent result,bufferEvent buffer,void *arg)
 {
-	struct epoll_event ev;
+	//printf("st=[%p] write\n",st);
+	assert(TEST(st->st_flags,STF_WRITE)==0);
 	st->e[OP_WRITE].arg = arg;
 	st->e[OP_WRITE].result = result;
 	st->e[OP_WRITE].buffer = buffer;
-	int poll_op;
-	if (TEST(st->st_flags,STF_EV)) {
-		poll_op = EPOLL_CTL_MOD;
-	} else {
-		poll_op = EPOLL_CTL_ADD;
-	}
-	if (TEST(st->st_flags,STF_WLOCK)) {
+	SET(st->st_flags,STF_WRITE);
+	CLR(st->st_flags,STF_RDHUP);
+	if (TEST(st->st_flags,STF_WREADY)) {
+		add_list(st,KGL_LIST_READY);
 		return true;
 	}
-	CLR(st->st_flags,STF_READ|STF_RDHUP);
-	SET(st->st_flags,STF_WRITE|STF_EV|STF_ONE_SHOT);
-	SOCKET sockfd = st->getSocket()->get_socket();
-	ev.events = EPOLLOUT
-#ifdef EPOLLRDHUP
-	|EPOLLRDHUP
-#endif
-#ifdef ENABLE_ONESHOT_MODEL
-	|EPOLLONESHOT
-#endif
-	;
-	if (TEST(st->st_flags, STF_ALWAYS_READ)) {
-		SET(ev.events, EPOLLIN);
-		SET(st->st_flags,STF_READ);
+	if (!TEST(st->st_flags,STF_WEV)) {
+		if (!add_event(st,STF_REV|STF_WEV)) {
+			CLR(st->st_flags,STF_WRITE);
+			return false;
+		}
 	}
-	ev.data.ptr = st;
-#ifndef NDEBUG
-	klog(KLOG_DEBUG,"write sockfd=%d,st=%p,ev=[%d]\n",sockfd,st,ev.events);
-#endif
-	int ret = epoll_ctl(kdpfd, poll_op, sockfd, &ev);
-	if (ret !=0) {
-		CLR(st->st_flags,STF_WRITE);
-		klog(KLOG_ERR, "epoll set insertion error: fd=%d,errno=%d %s\n", sockfd,errno,strerror(errno));
-		return false;
+	if (st->queue.next==NULL) {
+		add_list(st,KGL_LIST_RW);
 	}
 	return true;
 }
 bool KEpollSelector::connect(KSelectable *st,resultEvent result,void *arg)
 {
-	return write(st,result,NULL,arg);
+	//printf("st=[%p] connect\n",st);
+	assert(TEST(st->st_flags,STF_READ|STF_WRITE|STF_RDHUP|STF_REV|STF_WEV)==0);
+	st->e[OP_WRITE].arg = arg;
+	st->e[OP_WRITE].result = result;
+	st->e[OP_WRITE].buffer = NULL;
+	SET(st->st_flags,STF_WRITE);
+	if (!TEST(st->st_flags,STF_WEV|STF_REV)) {
+		if (!add_event(st,STF_WEV|STF_REV)) {
+			CLR(st->st_flags,STF_WRITE);
+			return false;
+		}
+	}
+	add_list(st,KGL_LIST_CONNECT);
+	return true;
 }
-bool KEpollSelector::next(KSelectable *st,resultEvent result,void *arg)
+void KEpollSelector::remove_read_hup(KSelectable *st)
 {
-	return write(st,result,NULL,arg);
+	assert(is_same_thread());
+	if (!TEST(st->st_flags,STF_RDHUP)) {
+		return;
+	}
+	assert(TEST(st->st_flags,STF_READ|STF_WRITE)==0);
+	CLR(st->st_flags,STF_RDHUP);
+	//if st in ready list,remove it
+	remove_list(st);
+}
+bool KEpollSelector::next(resultEvent result,void *arg,int got)
+{
+	KSelectable *next_st = new KSelectable;
+	memset(next_st,0,sizeof(KSelectable));
+	next_st->selector = this;
+	next_st->e[OP_READ].arg = arg;
+	next_st->e[OP_READ].result = result;
+	next_st->e[OP_READ].buffer = NULL;
+	return notice_st->notice(next_st,got);
 }
 #endif

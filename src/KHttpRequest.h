@@ -103,8 +103,8 @@ class KHttpFilterContext;
 class KHttpRequestData
 {
 public:
-	int flags;
-	int filter_flags;
+	uint32_t flags;
+	uint32_t filter_flags;
 	//post数据还剩多少数据没处理
 	INT64 left_read;
 	//post数据长度
@@ -118,6 +118,9 @@ public:
 	unsigned short status_code;
 	unsigned short cookie_stick;
 	INT64 send_size;
+	INT64 begin_time_msec;
+	INT64 first_response_time_msec;
+
 };
 class KHttpRequest: public KHttpProtocolParserHook,public KStream,public KHttpRequestData {
 public:
@@ -159,8 +162,6 @@ public:
 #endif
 		state = STATE_UNKNOW;
 		this->c = c;
-		//active_msec = kgl_current_msec;
-		request_msec = kgl_current_msec;
 		pool = NULL;
 	}
 	inline ~KHttpRequest()
@@ -176,7 +177,7 @@ public:
 	}
 	void close();
 	void clean(bool keep_alive=true);
-	void init();
+	void init(kgl_pool_t *pool);
 	bool isBad();
 	char *get_read_buf(int &size);
 	char *get_write_buf(int &size);
@@ -230,8 +231,6 @@ public:
 	char *hot;
 	char *readBuf;
 	size_t current_size;
-	INT64 request_msec;
-	//INT64 active_msec;
 	void setState(u_char state) {
 #ifdef ENABLE_STAT_STUB
 		if (this->state==state) {
@@ -360,6 +359,7 @@ public:
 		}
 		setState(STATE_SEND);
 		this->status_code = status_code;
+		first_response_time_msec = kgl_current_msec;
 #ifdef ENABLE_HTTP2
 		if (http2_ctx) {
 			return c->http2->add_status(http2_ctx,status_code);

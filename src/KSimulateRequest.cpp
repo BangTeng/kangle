@@ -65,7 +65,7 @@ int asyncHttpRequest(kgl_async_http *ctx)
 	}
 	rq->c->socket = ss;
 	rq->workModel = WORK_MODEL_SIMULATE;
-	rq->init();
+	rq->init(NULL);
 	if (TEST(ctx->flags, KF_SIMULATE_GZIP)) {
 		KHttpHeader *h = new_http_header(kgl_expand_string("Accept-Encoding"), kgl_expand_string("gzip"));
 		h->next = ss->rh;

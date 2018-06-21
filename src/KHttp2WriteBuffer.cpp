@@ -3,9 +3,7 @@
 #ifdef ENABLE_HTTP2
 kgl_http2_event::~kgl_http2_event()
 {
-	if (refs_buff) {
-		refs_buff->ctx = NULL;
-	}
+	
 }
 http2_buff::~http2_buff()
 {
@@ -14,25 +12,17 @@ http2_buff::~http2_buff()
 		free(data);
 	}
 }
-void http2_buff::clean(KHttp2 *http2)
-{
-	kgl_http2_event *e = NULL;
-	assert(http2);
-	http2->lock.Lock();
+void http2_buff::clean()
+{	
 	if (ctx) {
-		e = ctx->write_wait;
-		ctx->write_wait = NULL;
+		assert(ctx->write_wait != NULL);
+		kgl_http2_event *e = ctx->write_wait;
+		ctx->write_wait = NULL;		
+		assert(e->result);
+		e->result(e->arg, e->len);
+		delete e;
 		ctx = NULL;
 	}
-	if (e == NULL) {
-		http2->lock.Unlock();
-		return;
-	}
-	e->refs_buff = NULL;
-	assert(e->result);
-	http2->lock.Unlock();
-	e->result(e->arg, e->len);
-	delete e;
 }
 http2_buff * KHttp2WriteBuffer::clean()
 {

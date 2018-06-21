@@ -233,7 +233,7 @@ bool KSocket::getaddr(const char *host, ip_addr *ip) {
 	freeaddrinfo(res);
 	return true;
 }
-static struct addrinfo *getaddr(const char *host, int port, int ai_family, int ai_flags)
+static struct addrinfo *getaddr(const char *host, int ai_family, int ai_flags)
 {
 	struct addrinfo *res;
 #ifndef KSOCKET_IPV6
@@ -302,9 +302,16 @@ bool KClientSocket::connect(sockaddr_i &m_adr, int tmo, sockaddr_i *bind_addr) {
 bool KClientSocket::connect(const char *unixfile,int tmo)
 {
 	struct sockaddr_un sun2;
-        if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0)
+#ifdef SOCK_CLOEXEC
+        if ((sockfd = socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0)) < 0) {
                 return false;
+	}
+#else
+        if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
+                return false;
+	}
 	setCloseOnExec();
+#endif
 	memset(&sun2, 0, sizeof(struct sockaddr_un));
         sun2.sun_family = AF_UNIX;
         strncpy(sun2.sun_path, unixfile, sizeof(sun2.sun_path));
@@ -317,10 +324,17 @@ bool KClientSocket::connect(const char *unixfile,int tmo)
 bool KClientSocket::halfconnect(const char *unixfile)
 {
 	struct sockaddr_un sun2;
-	if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0)
+#ifdef SOCK_CLOEXEC
+	if ((sockfd = socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC|SOCK_NONBLOCK, 0)) < 0) {
 		return false;
+	}
+#else
+	if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
+		return false;
+	}
 	setCloseOnExec();
 	::setnoblock(sockfd);
+#endif
 	memset(&sun2, 0, sizeof(struct sockaddr_un));
 	sun2.sun_family = AF_UNIX;
 	strncpy(sun2.sun_path, unixfile, sizeof(sun2.sun_path));
@@ -401,10 +415,10 @@ bool KClientSocket::connect(const char *host, int port, int tmo, sockaddr_i *bin
 	}
 	return connect(sock_addr, tmo, bind_addr);
 }
-int KClientSocket::connect(SOCKET sockfd, const struct sockaddr *serv_addr,
-		socklen_t addrlen, int tmo) {
-	if (tmo == 0)
+int KClientSocket::connect(SOCKET sockfd, const struct sockaddr *serv_addr,socklen_t addrlen, int tmo) {
+	if (tmo == 0) {
 		return ::connect(sockfd, serv_addr, addrlen);
+	}
 	::setnoblock(sockfd);
 	::connect(sockfd, serv_addr, addrlen);
 	::setblock(sockfd);
@@ -523,21 +537,25 @@ bool KServerSocket::listen(int flag) {
 bool KUnixServerSocket::open(const char *path)
 {
 	int flags = 1;
-        struct sockaddr_un sun2;
+	struct sockaddr_un sun2;
 	unlink(path);
-        if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0)
-                return false;
+#ifdef SOCK_CLOEXEC
+	if ((sockfd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0)) == INVALID_SOCKET) {
+		return false;
+	}
+#else
+	if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
+		return false;
+	}
+#endif
 	setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &flags, sizeof(flags));
-        memset(&sun2, 0, sizeof(struct sockaddr_un));
-        sun2.sun_family = AF_UNIX;
-        strncpy(sun2.sun_path, path, sizeof(sun2.sun_path));
+	memset(&sun2, 0, sizeof(struct sockaddr_un));
+	sun2.sun_family = AF_UNIX;
+	strncpy(sun2.sun_path, path, sizeof(sun2.sun_path));
 	int addr_len = sizeof(sun2);
 	if (::bind(sockfd, (struct sockaddr *) &sun2, addr_len) < 0) {
 		return false;
 	}
-	if (::listen(sockfd, 4096) < 0) {
-		return false;
-	}
-	return true;
+	return ::listen(sockfd, 4096) >= 0;
 }
 #endif

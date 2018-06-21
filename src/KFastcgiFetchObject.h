@@ -44,7 +44,7 @@ protected:
 			if (bodyEnd) {
 				break;
 			}
-			int len = end - hot;
+			int len = (int)(end - hot);
 			if (len<=0) {
 				break;
 			}

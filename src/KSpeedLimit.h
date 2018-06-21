@@ -7,6 +7,7 @@ class KSpeedLimit : public KCountableEx
 public:
 	KSpeedLimit()
 	{
+		speed_limit = 0;
 		current_send_time = 0;
 	}
 	void setSpeedLimit(int speed_limit)

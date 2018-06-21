@@ -41,49 +41,51 @@
 #ifdef ENABLE_ATOM
 #include "katom.h"
 #endif
-//事件
-#define STF_READ        0x1
-#define STF_WRITE       0x2
-#define STF_RDHUP       0x4 //3
-#define STF_EV          0x8 //4
-#define STF_ALWAYS_READ 0x10//5
-#define STF_ONE_SHOT    0x20//6
-//类型
-#define STF_SSL         0x40//7
-#define STF_FILE        0x80//8
-#define STF_CLOSED      0x100//9
-//锁
-#ifdef _WIN32
-#define STF_RLOCK       STF_READ
-#define STF_WLOCK       STF_WRITE
-#else
-#define STF_RLOCK       0x200//10
-#define STF_WLOCK       0x400//11
-#endif
-#define STF_LOCK        (STF_RLOCK|STF_WLOCK)
-#define STF_REVENT      (STF_READ|STF_RLOCK)
-#define STF_WEVENT      (STF_WRITE|STF_RDHUP|STF_WLOCK)
+
+#define STF_READ        1
+#define STF_WRITE       (1<<1)
+#define STF_RDHUP       (1<<2)
+
+
+#define STF_REV         (1<<3)
+#define STF_WEV         (1<<4)
+#define STF_ET          (1<<5)
+#define STF_ERR         (1<<6)
+
+#define STF_RREADY      (1<<7)
+#define STF_WREADY      (1<<8)
+
+#define STF_SSL         (1<<9)
+#define STF_FILE        (1<<10)
+#define STF_RTIME_OUT   (1<<11)
+#define STF_REVENT      STF_READ
+#define STF_WEVENT      (STF_WRITE|STF_RDHUP)
 #define STF_EVENT       (STF_REVENT|STF_WEVENT)
 
-//应用层
-#define STF_RQ_OK       0x800//12
-#define STF_RQ_PER_IP   0x1000//13
-#define STF_APP_HTTP2   0x2000//14
-#define STF_NO_KA       0x4000//15
+#define STF_RLOCK       STF_READ
+#define STF_WLOCK       STF_WRITE
+#define STF_LOCK        (STF_RLOCK|STF_WLOCK)
 
+#define STF_RQ_OK       (1<<12)
+#define STF_RQ_PER_IP   (1<<13)
+#define STF_APP_HTTP2   (1<<14)
+#define STF_NO_KA       (1<<15)
 
+#define ST_ERR_TIME_OUT    -2
 
+//#define RQ_LEAK_DEBUG               1
+class KSelectable;
+class KHttpRequest;
+class KHttp2;
 struct kgl_event
 {
 #ifdef _WIN32
 	WSAOVERLAPPED lp;
 #endif
 	void *arg;
-	bufferEvent buffer;
 	resultEvent result;
+	bufferEvent buffer;
 };
-class KHttpRequest;
-class KHttp2;
 class KSelectable {
 public:
 	KSocket *getSocket()
@@ -105,17 +107,13 @@ public:
 	{
 		SET(st_flags,flag);
 	}
-	bool isClosed()
+	bool is_http2()
 	{
-		return TEST(st_flags,STF_CLOSED)>0;
+		return TEST(st_flags, STF_APP_HTTP2)>0;
 	}
 	bool isSSL()
 	{
 		return TEST(st_flags,STF_SSL)>0;
-	}
-	bool is_evset()
-	{
-		return TEST(st_flags,STF_EV)>0;
 	}
 	void bind_socket(KSocket *sock)
 	{
@@ -126,15 +124,26 @@ public:
 		this->fd = fd;
 		SET(st_flags, STF_FILE);
 	}
+	bool is_error()
+	{
+		return TEST(st_flags, STF_ERR)>0;
+	}
+	void shutdown_socket();
 	uint16_t st_flags;
-	u_char tmo_left;
-	u_char tmo;
+	uint8_t tmo_left;
+	uint8_t tmo;
 	union {
 		KHttpRequest *rq;
 		KHttp2 *http2;
 	} app_data;
 	kgl_list queue;
-	INT64 active_msec;
+#ifdef RQ_LEAK_DEBUG
+	kgl_list queue_edge;
+#endif
+	union {
+		INT64 active_msec;
+		int next_got;
+	};
 	KSelector *selector;
 	kgl_event e[2];
 	union {
@@ -148,14 +157,14 @@ public:
 	friend class KPortSelector;
 	friend class KAsyncFetchObject;
 	friend class KSSLBIO;
-	bool asyncRead(void *arg,resultEvent result,bufferEvent buffer,int list = KGL_LIST_RW);
-	void asyncWrite(void *arg, resultEvent result, bufferEvent buffer);
+	void async_read(void *arg,resultEvent result,bufferEvent buffer);
+	void async_write(void *arg, resultEvent result, bufferEvent buffer);
 
 protected:
 	void eventRead(void *arg,resultEvent result,bufferEvent buffer);
 	void eventWrite(void *arg,resultEvent result,bufferEvent buffer);
 #ifdef ENABLE_KSSL_BIO
-	bool sslRead(void *arg, resultEvent result, bufferEvent buffer);
+	void sslRead(void *arg, resultEvent result, bufferEvent buffer);
 	void sslWrite(void *arg, resultEvent result, bufferEvent buffer);
 	void lowEventRead(void *arg,resultEvent result,bufferEvent buffer);
 	void lowEventWrite(void *arg,resultEvent result,bufferEvent buffer);
@@ -164,10 +173,9 @@ protected:
 class KHttpRequest;
 struct KBlockRequest
 {
-	KSelectable *rq;
+	KSelectable *st;
 	void *arg;
-	int op;
-	timer_func func;
+	resultEvent func;
 	INT64 active_msec;
 	KBlockRequest *next;
 	KBlockRequest *prev;

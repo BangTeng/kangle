@@ -201,7 +201,7 @@ bool KApiFetchObject::addHeader(const char *attr, int len) {
 		return false;
 	}
 	if (len == 0) {
-		len = strlen(attr);
+		len = (int)strlen(attr);
 	}
 	if (sa.parse.pull(attr, len, &sa.hook) == HTTP_PARSE_SUCCESS) {
 		sa.tr.obj->data->headers = sa.parse.stealHeaders(NULL);

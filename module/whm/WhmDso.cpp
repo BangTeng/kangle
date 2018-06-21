@@ -74,8 +74,7 @@ BOOL whmCreateProcess(WhmContext *ctx,WHM_CMD_DATA *cmd)
 			pthread_attr_init(&attr);
 			pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);//设置线程为分离
 	#endif
-			int ret = pthread_create(&id, &attr, createProcessThread, (void *) param);
-			if (!PTHREAD_CREATE_SUCCESSED(ret)) {
+			if (!PTHREAD_CREATE_SUCCESSED(pthread_create(&id, &attr, createProcessThread, (void *) param))) {
 				delete st;
 				delete param;
 				return FALSE;

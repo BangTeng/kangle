@@ -34,8 +34,12 @@
 #include "KNsVirtualHost.h"
 #include "malloc_debug.h"
 
-//#define ENABLE_SSL_CNAME_BINDING 1
 int KServer::failedTries = 0;
+void next_server_request(void *arg,int got)
+{
+	KConnectionSelectable *c = (KConnectionSelectable *)arg;
+	selectorManager.startRequest(c);
+}
 void handle_server_listen(void *arg, int got)
 {
 	KServerSelectable *ss = (KServerSelectable *)arg;
@@ -80,9 +84,6 @@ KServer::KServer() {
 	closed = false;
 	started = false;
 	vhc = NULL;
-#ifdef ENABLE_CNAME_BIND
-	cname_vhc = NULL;
-#endif
 	dynamic = false;
 	static_flag = false;
 }
@@ -104,7 +105,6 @@ void KServerSelectable::listen_event()
 		socket = new KSSLSocket(server->ssl_ctx);
 		ssl_model = true;
 #ifdef _WIN32
-		//windows ssl 要工作在非阻塞模式
 		noblocking = true;
 #endif
 	} else {
@@ -129,8 +129,16 @@ void KServerSelectable::listen_event()
 	}
 	if (server->is_multi_selectale()) {
 		selector->bindSelectable(c);
+	} else {
+		selectorManager.getSelector()->bindSelectable(c);
 	}
-	selectorManager.startRequest(c);
+	if (selector==c->selector) {
+		selectorManager.startRequest(c);
+		return;
+	}
+	if (!c->selector->next(next_server_request,c)) {
+		perror("next call\n");
+	}
 }
 KServer::~KServer() {
 	this->close();
@@ -147,11 +155,6 @@ KServer::~KServer() {
 	if (vhc) {
 		delete vhc;
 	}
-#ifdef ENABLE_CNAME_BIND
-	if (cname_vhc) {
-		delete cname_vhc;
-	}
-#endif
 }
 void KServer::close() {
 	closed = true;
@@ -172,6 +175,9 @@ void KServer::close() {
 #ifdef KSOCKET_SSL
 bool KServer::load_ssl()
 {
+	if (is_ssl_loaded()) {
+		return true;
+	}
 	std::string certFile = certificate;
 	if(!certFile.empty() && !isAbsolutePath(certFile.c_str())){
 		certFile = conf.path + certificate;
@@ -183,26 +189,19 @@ bool KServer::load_ssl()
 	if (certFile.empty()) {
 		return false;
 	}
-	ssl_ctx = KSSLSocket::init_server(
-					(certFile.size() > 0 ? certFile.c_str() : NULL),
+	ssl_ctx = KSSLSocket::init_server((certFile.size() > 0 ? certFile.c_str() : NULL),
 					privateKeyFile.c_str(),
 					NULL);
 	if (ssl_ctx == NULL) {
-		klog(KLOG_ERR,
-				"Cann't init ssl context certificate=[%s],certificate_key=[%s]\n",
-				certificate.c_str(), certificate_key.c_str());
+		klog(KLOG_ERR,"Cann't init ssl context certificate=[%s],certificate_key=[%s]\n",
+			certificate.c_str(), certificate_key.c_str());
 		return false;
 	}
-#ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
-#ifndef ENABLE_SSL_CNAME_BINDING
-	if(sni && 0 == SSL_CTX_set_tlsext_servername_callback(ssl_ctx,httpSSLServerName)){
-			klog(KLOG_WARNING, "kangle was built with SNI support, however, now it is linked "
-				"dynamically to an OpenSSL library which has no tlsext support, "
-				"therefore SNI is not available");
+	if(0 == SSL_CTX_set_tlsext_servername_callback(ssl_ctx,httpSSLServerName)){
+		klog(KLOG_WARNING, "kangle was built with SNI support, however, now it is linked "
+			"dynamically to an OpenSSL library which has no tlsext support, "
+			"therefore SNI is not available");
 	}
-#endif
-
-#endif
 #ifdef ENABLE_HTTP2
 	SSL_CTX_set_ex_data(ssl_ctx, kangle_ssl_ctx_index, &http2);
 #ifdef TLSEXT_TYPE_application_layer_protocol_negotiation
@@ -229,13 +228,7 @@ void KServer::bindVirtualHost(KVirtualHost *vh,bool high)
 	KVirtualHostContainer **vhc;
 	std::list<KSubVirtualHost *>::iterator it2;
 	for (it2 = vh->hosts.begin(); it2 != vh->hosts.end(); it2++) {
-#ifdef ENABLE_CNAME_BIND
-		if ((*it2)->cname)
-			vhc = &this->cname_vhc;
-		else
-#endif
-			vhc = &this->vhc;
-
+		vhc = &this->vhc;
 		if (*vhc==NULL) {
 			*vhc = new KVirtualHostContainer;
 		}
@@ -246,7 +239,6 @@ void KServer::remove_static(KVirtualHost *vh)
 {
 #ifndef HTTP_PROXY
 	if (vh->binds.empty()) {
-		//优先级低绑定
 		removeVirtualHost(vh);
 		return;
 	}
@@ -256,7 +248,6 @@ void KServer::add_static(KVirtualHost *vh)
 {
 #ifndef HTTP_PROXY
 	if (vh->binds.empty()) {
-		//优先级低绑定
 		bindVirtualHost(vh,false);
 		return;
 	}
@@ -268,12 +259,7 @@ void KServer::removeVirtualHost(KVirtualHost *vh)
 	KVirtualHostContainer **vhc;
 	std::list<KSubVirtualHost *>::iterator it2;	
 	for (it2 = vh->hosts.begin(); it2 != vh->hosts.end(); it2++) {
-#ifdef ENABLE_CNAME_BIND
-		if ((*it2)->cname)
-			vhc = &this->cname_vhc;
-		else
-#endif
-			vhc = &this->vhc;
+		vhc = &this->vhc;
 		if (*vhc==NULL) {
 			continue;
 		}
@@ -296,11 +282,6 @@ bool KServer::isEmpty()
 	if (vhc && !vhc->isEmpty()) {
 		return false;
 	}
-#ifdef ENABLE_CNAME_BIND
-	if (cname_vhc && !cname_vhc->isEmpty()) {
-		return false;
-	}
-#endif
 	return true;
 }
 void KServer::unbindAllVirtualHost()
@@ -390,7 +371,6 @@ bool KServer::internal_open(int flag)
 		break;
 	}
 	if (!all_result) {
-		//确保一个
 		while (server_selectable && server_selectable->next) {
 			KServerSelectable *next = server_selectable;
 			delete server_selectable;

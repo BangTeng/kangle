@@ -31,7 +31,9 @@
 #include "time_utils.h"
 intmap m_ip;
 KMutex ipLock;
-std::map<KHttpRequest *,bool> all_request;
+#ifdef RQ_LEAK_DEBUG
+kgl_list all_connection;
+#endif
 unsigned total_connect = 0;
 KSelectorManager selectorManager;
 using namespace std;
@@ -99,8 +101,6 @@ KSelector *KSelectorManager::newSelector() {
 	return new KEpollSelector();
 #elif BSD_OS
 	return new KKqueueSelector();
-#elif HAVE_PORT_H
-	return new KPortSelector();
 	
 #else
 	return NULL;
@@ -111,9 +111,12 @@ KSelectorManager::KSelectorManager() {
 	sizeHash = 0;
 	onReadyList = NULL;
 }
+
 void KSelectorManager::init(unsigned size)
 {
-	//保证listenIndex为2的n次方，最大为32.
+#ifdef RQ_LEAK_DEBUG
+	klist_init(&all_connection);
+#endif
 	for (int i=0;i<7;i++) {
 		count = (1<<i);
 		if(count==(int)size){
@@ -158,16 +161,14 @@ void KSelectorManager::setTimeOut()
 	if (conf.connect_time_out <= 0) {
 		conf.connect_time_out = conf.time_out;
 	}
-	for (int i=0; i<count; i++) {
-		//设置超时时间
-		selectors[i]->timeout[KGL_LIST_KA] = (conf.keep_alive>0?conf.keep_alive:conf.time_out) * 1000;
-		selectors[i]->timeout[KGL_LIST_RW] = conf.time_out * 1000;
-		selectors[i]->timeout[KGL_LIST_CONNECT] = conf.connect_time_out * 1000;
+	for (int i=0; i<count; i++) {	
 		selectors[i]->tmo_msec = 100;
 	}
+	//set_time_out(KGL_LIST_KA,(conf.keep_alive>0 ? conf.keep_alive : conf.time_out) * 1000);
+	set_time_out(KGL_LIST_RW,conf.time_out * 1000);
+	set_time_out(KGL_LIST_CONNECT,conf.connect_time_out * 1000);
 	selectors[0]->utm = true;
 }
-
 KSelectorManager::~KSelectorManager() {
 
 }
@@ -175,17 +176,12 @@ KSelectorManager::~KSelectorManager() {
 void KSelectorManager::close()
 {
 	for (int i = 0; i<count; i++) {
-		selectors[i]->timeout[KGL_LIST_KA] = 1;
 		selectors[i]->timeout[KGL_LIST_RW] = 1;
 		selectors[i]->timeout[KGL_LIST_CONNECT] = 1;
 		selectors[i]->close();
 	}
 }
 void KSelectorManager::destroy() {
-
-	for (int i = 0; i < count; i++) {
-		delete selectors[i];
-	}
 	xfree(selectors);
 }
 #endif
@@ -213,7 +209,7 @@ bool KSelectorManager::listen(KServer *server,resultEvent result)
 	assert(ss == NULL);
 	return true;
 }
-void WINAPI get_connection_call_back(void *arg)
+void get_connection_call_back(void *arg,int got)
 {
 	KConnectionInfo *ci = (KConnectionInfo *)arg;
 	ci->count = ci->selector->getConnection(ci->info,ci->vh_name,ci->translate,ci->total_count);
@@ -231,7 +227,9 @@ std::string KSelectorManager::getConnectionInfo(int &totalCount, int debug,const
 		ci[i].count = 0;
 		ci[i].total_count = &total_count;
 		ci[i].selector = selectors[i];
-		selectors[i]->addTimer(NULL,get_connection_call_back,ci+i,0);
+		if (!selectors[i]->next(get_connection_call_back, &ci[i])) {
+			ci[i].wait.notice();
+		}
 	}
 	for (unsigned i=0;i<=sizeHash;i++) {
 		ci[i].wait.wait();
@@ -241,6 +239,25 @@ std::string KSelectorManager::getConnectionInfo(int &totalCount, int debug,const
 	delete[] ci;
 	return s.str();
 }
+#ifdef RQ_LEAK_DEBUG
+void KSelectorManager::dump_all_connection()
+{
+	int connection_count = 0;
+	ipLock.Lock();
+	kgl_list *l;
+	klist_foreach(l, &all_connection)
+	{
+		connection_count++;
+		KSelectable *st = (KSelectable *)kgl_list_data(l, KSelectable, queue_edge);
+		char ip[MAXIPLEN];
+		KConnectionSelectable *c = static_cast<KConnectionSelectable *>(st);
+		c->socket->get_remote_ip(ip, MAXIPLEN);
+		klog(KLOG_ERR,"%s\tc=[%p]\tqueue=[%p]\tst_flags=[%d]\ttime=[%d]\n", ip, c, c->queue.next,c->st_flags, (int)(kgl_current_msec - c->active_msec));
+	}
+	klog(KLOG_ERR, "dump_count=[%d],total_connect=[%d]\n", connection_count, total_connect);
+	ipLock.Unlock();
+}
+#endif
 void KSelectorManager::onReady(void (WINAPI *call_back)(void *arg),void *arg)
 {
 	if (isInit()) {

@@ -81,7 +81,7 @@
 #include "KCdnContainer.h"
 #include "KWriteBackManager.h"
 #include "KDynamicListen.h"
-#include "KCname.h"
+#include "KAddr.h"
 #include "KMemPool.h"
 #include "KLogDrill.h"
 
@@ -104,6 +104,7 @@ int serial = 0 ;
 int worker_index = 0;
 bool nodaemon = false;
 bool nofork = false;
+int open_file_limit = 0;
 /*
  * 定义是否以一个cmd扩展运行
  */
@@ -158,7 +159,9 @@ void killworker(int sig)
 extern "C" {
 	extern void __libc_freeres();
 }
+#ifdef _WIN32
 void LogEvent(LPCTSTR pFormat, ...);
+#endif
 #endif
 void checkMemoryLeak()
 {	
@@ -358,15 +361,6 @@ void sigcatch(int sig) {
 			configReload = true;
 		}
 		break;
-	case SIGUSR1:
-		if(workerProcess.size()>0){
-			killworker(sig);
-		} else {
-#ifdef ENABLE_LOG_DRILL
-			flush_log_drill();
-#endif
-		}
-		break;
 	case SIGUSR2:
 		if(workerProcess.size()>0){
 			killworker(SIGUSR2);
@@ -547,14 +541,8 @@ static int Usage(bool only_version = false) {
 #ifdef MALLOCDEBUG
 			" malloc-debug"
 #endif
-#ifdef ENABLE_ONESHOT_MODEL
-			" one-shot"
-#endif
 #ifdef ENABLE_KSAPI_FILTER
 			" ksapi-filter"
-#endif
-#ifdef ENABLE_CNAME_BIND
-			" cname_bind"
 #endif
 #ifndef NDEBUG
 		" debug"
@@ -573,9 +561,6 @@ static int Usage(bool only_version = false) {
 		"   [-h --help]      print the current message\n"
 		"   [-d level]       start in debug model,level=0-3\n"
 		"   [-r --reload]    reload config file graceful\n"
-#ifdef ENABLE_LOG_DRILL
-		"   [-l --log-drill] flush log drill\n"
-#endif
 #ifndef _WIN32
 		"   [--reboot]       reboot server\n"
 #endif
@@ -653,18 +638,16 @@ int parse_args(int argc, char ** argv) {
 	}
 #ifndef _WIN32
 	int c;
-	struct option long_options[] = { { "log-drill", 0, 0, 'l' },
-			{ "reload", 0, 0, 'r' }, { "version", 0, 0, 'v' }, { "help", 0, 0,
-					'h' }, { "reboot", 0, 0, 'b' }, { 0, 0, 0, 0 } };
+	struct option long_options[] = { { "reload", 0, 0, 'r' },
+	{ "version", 0, 0, 'v' }, 
+	{ "help", 0, 0,	'h' }, 
+	{ "reboot", 0, 0, 'b' }, 
+	{ 0, 0, 0, 0 } };
 	int opt_index = 0;
 	while ((c = getopt_long(argc, argv, "lgnrz:mfqa:cd:hvr?", long_options,
 			&opt_index)) != -1) {
 		switch (c) {
 		case 0:
-			break;
-		case 'l':
-			service_to_signal(SIGUSR1);
-			my_exit(0);
 			break;
 		case 'b':
 			ret = 0;
@@ -829,6 +812,7 @@ bool init_resource_limit(int numcpu)
 	}
 	if (0==getrlimit(RLIMIT_NOFILE,&rlim)) {
 		klog(KLOG_ERR,"max open file limit [cur:%d,max:%d]\n",rlim.rlim_cur,rlim.rlim_max);
+		open_file_limit = rlim.rlim_max;
 	} else {
 		klog(KLOG_ERR,"get max open file limit error [%d]\n",errno);
 	}
@@ -844,13 +828,14 @@ unsigned getpagesize() {
 #endif
 void init_program() {
 	//printf("sizeof (rq) = %d\n",sizeof(KHttpRequest));
+#ifdef ENABLE_LOG_DRILL
+	init_log_drill();
+#endif
 	init_aio_align_size();
 	spProcessManage.setName("api:sp");
 	initFastcgiData();
 	kgl_pagesize = getpagesize();
-#ifdef ENABLE_CNAME_BIND
-	init_cname_worker();
-#endif
+	init_addr_worker();
 	int select_count = conf.select_count;
 	if(select_count<=0){
 		select_count = numberCpu;
@@ -860,9 +845,6 @@ void init_program() {
 	}
 	
 	selectorManager.init(select_count);
-#ifdef ENABLE_LOG_DRILL
-	init_log_drill();
-#endif
 }
 
 #ifndef _WIN32
@@ -980,7 +962,6 @@ void StartAll() {
 	m_pid = getpid();
 	parse_config(true);
 	init_program();
-	selectorManager.start();
 	if (cmd_extend) {
 		//forcmdextend();
 		fprintf(stderr,"don't support cmd extend model\n");
@@ -1015,6 +996,7 @@ void StartAll() {
 		m_thread.start(NULL,clean_tempfile_thread);
 	}
 #endif
+	selectorManager.start();
 	time_thread(NULL);
 #ifdef MALLOCDEBUG
 	checkMemoryLeak();
@@ -1040,7 +1022,6 @@ int main(int argc, char **argv) {
 #endif
 		my_exit(0);
 	}
-	assert(test());
 	LoadDefaultConfig();
 
 	numberCpu = GetNumberOfProcessors();

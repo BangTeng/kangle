@@ -2,6 +2,9 @@
 #define KFILE_H_asdf1231
 #include "global.h"
 #include <stdarg.h>
+#ifndef _WIN32
+#include <fcntl.h>
+#endif
 enum fileModel
 {
 	fileRead,
@@ -253,7 +256,10 @@ public:
 			other_flag,
 			NULL);
 #else
-		int f = O_CLOEXEC|O_NOATIME;
+		int f = O_CLOEXEC;
+#ifdef O_NOATIME
+		SET(f,O_NOATIME);
+#endif
 		if (TEST(flag,KFILE_NOFOLLOW)) {
 			SET(f,O_NOFOLLOW);
 		}
@@ -261,7 +267,11 @@ public:
 			SET(f, O_DIRECT);
 		}
 		if (TEST(flag, KFILE_DSYNC)) {
+#ifdef O_DSYNC
 			SET(f, O_DSYNC);
+#else
+			SET(f,O_SYNC);
+#endif
 		}
 		switch(model){
 		case fileRead:
@@ -295,8 +305,10 @@ public:
 	{
 #ifdef _WIN32
 		FlushFileBuffers(fp);
-#else
+#elif O_DSYNC
 		fdatasync(fp);
+#else
+		fsync(fp);
 #endif
 	}
 	int vfprintf(const char *fmt,va_list ap)
@@ -453,7 +465,7 @@ public:
 private:
 	bool flush()
 	{
-		int len = hot - buffer;
+		int len = (int)(hot - buffer);
 		bool result = KFile::write(buffer, len) == len;
 		hot = buffer;
 		buffer_left = buffer_size;

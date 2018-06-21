@@ -110,9 +110,6 @@ char *build_domain_name(domain_t src,int len,bool wide)
 }
 void iterator_call_back(inter_domain_iterator_arg *it,bool wide,void *vh)
 {
-	if (it->domain_len<=0) {
-		return;
-	}
 	char *domain = build_domain_name(it->domain,it->domain_len,wide);
 	it->it(it->arg,domain,vh);
 	free(domain);

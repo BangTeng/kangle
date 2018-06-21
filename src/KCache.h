@@ -17,16 +17,12 @@ struct KCacheInfo
 	INT64 mem_size;
 	INT64 disk_size;
 };
-/**
-* 缓存接口。采用LRU淘汰算法，由内存和磁盘两级缓存组成
-*/
+
 class KCache
 {
 public:
 	KCache();
-	//初始化缓存系统
 	void init(bool firstTime = false);
-	//更新obj
 	void rate(KHttpObject *obj)
 	{
 		if (obj->in_cache == 0) {
@@ -52,7 +48,7 @@ public:
 		*/
 #endif
 	}
-	//清除obj
+	//obj
 	void dead(KHttpObject *obj,const char *file,int line)
 	{
 		if (obj->in_cache == 0) {
@@ -65,7 +61,6 @@ public:
 		objList[obj->list_state].dead(obj);
 		cacheLock.Unlock();
 	}
-	//查找obj
 	KHttpObject * find(KHttpRequest *rq, u_short url_hash)
 	{
 		return objHash[url_hash].get(rq->url,
@@ -74,9 +69,7 @@ public:
 			TEST(rq->filter_flags, RF_NO_DISK_CACHE) > 0,
 			rq->min_obj_verified);
 	}
-	//迭代所有的obj，由handler处理。
 	void iterator(objHandler handler, void *param);
-	//增加obj到缓存中，list_state指定是加到哪一级缓存
 	bool add(KHttpObject *obj, int list_state)
 	{
 		if (obj->h == HASH_SIZE) {
@@ -137,7 +130,6 @@ public:
 		klog(KLOG_ERR, "cache count limit kill count=[%d]\n", kill_count);
 		return true;
 	}
-	//刷新缓存
 	void flush(INT64 maxMemSize,INT64 maxDiskSize,bool disk_is_radio)
 	{
 		INT64 total_size = 0;
@@ -155,10 +147,9 @@ public:
 		}
 		objList[LIST_IN_DISK].move(kill_disk_size, false);		
 #endif
-		klog(KLOG_NOTICE, "cache flush, killed memory size=[" INT64_FORMAT "],killed disk size=[" INT64_FORMAT "]\n", kill_mem_size, kill_disk_size);
+		//klog(KLOG_NOTICE, "cache flush, killed memory size=[" INT64_FORMAT "],killed disk size=[" INT64_FORMAT "]\n", kill_mem_size, kill_disk_size);
 		return;
 	}
-	//得到缓存大小
 	void getSize(INT64 &memSize,INT64 &diskSize)
 	{
 		int i;
@@ -216,7 +207,6 @@ public:
 	{
 		cacheLock.Lock();
 #ifdef ENABLE_DB_DISK_INDEX
-		//清除死物件
 		for (int i=0;i<2;i++) {
 			KHttpObject *obj = objList[i].getHead();
 			while (obj) {

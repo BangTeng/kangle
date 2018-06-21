@@ -54,7 +54,6 @@ public:
 	char *doc_root;
 	KVirtualHost *vh;
 	domain_t bind_host;
-	bool cname;
 	bool wide;
 	bool allSuccess;
 	bool fromTemplete;

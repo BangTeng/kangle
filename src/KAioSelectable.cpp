@@ -1,3 +1,5 @@
+#include "global.h"
+#ifdef LINUX
 #include <sys/eventfd.h>
 #include <sys/epoll.h>
 #include <assert.h>
@@ -5,6 +7,7 @@
 #include "KAsyncFile.h"
 #include "KMemPool.h"
 #include "KHttpRequest.h"
+#include "KEpollSelector.h"
 #define NUM_EVENTS 128
 void resultAioEvent(void *arg,int got)
 {
@@ -23,29 +26,30 @@ void aio_result(KAsyncFile *ctx,struct iocb *iocb, long res, long res2)
 	char *buf = ctx->buf + ctx->offset_adjust;
 	ctx->event(buf,MIN(length,ctx->length));
 }
-KAioSelectable::KAioSelectable(int epfd)
+KAioSelectable::KAioSelectable(KEpollSelector *selector)
 {
 	KSelectable *st = static_cast<KSelectable *>(this);
 	memset(st,0,sizeof(KSelectable));
+	this->selector = selector;
 	fd = eventfd(0, EFD_CLOEXEC);
 	if (fd == -1) {
-			perror("eventfd");
-	 }
-	st->set_flag(STF_READ|STF_EV);
+		perror("eventfd");
+	}
+	st->set_flag(STF_READ|STF_REV);
 	st->e[OP_READ].arg = this;
 	st->e[OP_READ].result = resultAioEvent;
 	st->e[OP_READ].buffer = NULL;
 	struct epoll_event epevent;
 	epevent.events = EPOLLIN;
 	epevent.data.ptr = st;
-	if (epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &epevent)) {
+	if (epoll_ctl(selector->get_epoll_fd(), EPOLL_CTL_ADD, fd, &epevent)) {
 		perror("epoll_ctl");
 		return ;
 	}
 	memset(&aio_ctx,0,sizeof(aio_ctx));
-	 if (io_setup(128, &aio_ctx)) {
-	        perror("io_setup");
-	  }
+	if (io_setup(128, &aio_ctx)) {
+		perror("io_setup");
+	}
 }
 KAioSelectable::~KAioSelectable()
 {
@@ -149,3 +153,4 @@ bool KAioSelectable::write(KAsyncFile *ctx,char *buf,INT64 offset,int length,aio
 	 katom_dec((void *)&kgl_aio_count);
 	 return false;
 }
+#endif

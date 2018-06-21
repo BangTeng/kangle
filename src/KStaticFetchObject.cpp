@@ -177,7 +177,7 @@ void KStaticFetchObject::asyncReadBody(KHttpRequest *rq)
 		stage_rdata_end(rq,STREAM_WRITE_SUCCESS);
 		return;
 	}
-	rq->c->removeRequest(rq, true);
+	//rq->c->removeRequest(rq, true);
 	if (!rq->c->selector->aio_read(ad->aio_fp, ad->buf, ad->offset, len, resultStaticAsyncRead, rq)) {
 		stage_rdata_end(rq, STREAM_WRITE_FAILED);
 		return;

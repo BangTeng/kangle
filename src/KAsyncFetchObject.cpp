@@ -39,9 +39,15 @@ void resultSSLConnect(void *arg,int got)
 	}
 		return;
 	case ret_want_read:
+#ifndef ENABLE_KSSL_BIO
+		fo->client->clear_flag(STF_RREADY);
+#endif
 		fo->client->upstream_read(rq,resultSSLConnect,NULL);
 		return;
 	case ret_want_write:
+#ifndef ENABLE_KSSL_BIO
+		fo->client->clear_flag(STF_WREADY);
+#endif
 		fo->client->upstream_write(rq,resultSSLConnect,NULL);
 		return;
 	default:
@@ -50,7 +56,12 @@ void resultSSLConnect(void *arg,int got)
 	}
 }
 #endif
-
+void next_connection_result(void *arg, int got)
+{
+	KHttpRequest *rq = (KHttpRequest *)arg;
+	KAsyncFetchObject *fo = static_cast<KAsyncFetchObject *>(rq->fetchObj);
+	fo->connect_result(rq, got>0);
+}
 void proxyConnect(KHttpRequest *rq)
 {
 	KAsyncFetchObject *fo = static_cast<KAsyncFetchObject *>(rq->fetchObj);
@@ -208,7 +219,6 @@ void resultUpstreamHttp2ReadHeader(void *arg,int got)
 }
 void KAsyncFetchObject::handleConnectResult(KHttpRequest *rq,int got)
 {
-	//printf("upstream connect result=[%d]\n",got);
 	if (got==-1) {
 		handleUpstreamError(rq,STATUS_GATEWAY_TIMEOUT,"connect to remote host time out",got);
 		return;
@@ -261,19 +271,17 @@ void KAsyncFetchObject::open(KHttpRequest *rq)
 }
 void KAsyncFetchObject::read_hup(KHttpRequest *rq)
 {
-	//printf("read_hup\n");
 	if (!conf.read_hup) {
 		return;
 	}
      
 	rq->c->read_hup(rq, request_connection_broken);
 }
-void KAsyncFetchObject::connectCallBack(KHttpRequest *rq,KUpstreamSelectable *client,bool half_connection)
+void KAsyncFetchObject::connect_result(KHttpRequest *rq, bool half_connection)
 {
-	assert(this->client == NULL);
-	this->client = client;
-	if (this->client==NULL) {
-		handleError(rq,STATUS_GATEWAY_TIMEOUT,"Cann't connect to remote host");
+	assert(rq->c->selector->is_same_thread());
+	if (this->client == NULL) {
+		handleError(rq, STATUS_GATEWAY_TIMEOUT, "Cann't connect to remote host");
 		return;
 	}
 	client->tmo = rq->c->tmo;
@@ -282,10 +290,20 @@ void KAsyncFetchObject::connectCallBack(KHttpRequest *rq,KUpstreamSelectable *cl
 	}
 	read_hup(rq);
 	if (half_connection) {
-		client->connect(rq,resultUpstreamConnectResult);
+		client->connect(rq, resultUpstreamConnectResult);
 	} else {
 		sendHead(rq);
 	}
+}
+void KAsyncFetchObject::connectCallBack(KHttpRequest *rq,KUpstreamSelectable *client,bool half_connection)
+{
+	assert(this->client == NULL);
+	this->client = client;
+	if (rq->c->selector->is_same_thread()) {
+		connect_result(rq, half_connection);
+		return;
+	}
+	rq->c->selector->next(next_connection_result, rq, half_connection);
 }
 void KAsyncFetchObject::sendHead(KHttpRequest *rq)
 {
@@ -302,23 +320,12 @@ void KAsyncFetchObject::sendHead(KHttpRequest *rq)
 		handleError(rq, STATUS_SERVER_ERROR, "cann't build head");
 		return;
 	}
-	client->socket->setdelay();
+	client->socket->set_delay();
 	client->upstream_write(rq,resultUpstreamSendHead,bufferUpstreamSendHead);
 }
 void KAsyncFetchObject::continueReadBody(KHttpRequest *rq)
 {
 	if (rq->ctx->connection_upgrade) {
-#ifndef _WIN32
-		if (rq->c->is_event(rq, STF_WEVENT)) {
-			//printf("client is write event\n");
-			return;
-		}
-		if (client->is_upstream_event(STF_WEVENT)) {
-			//printf("upstream is write event\n");
-			return;
-		}
-		rq->c->read(rq, resultUpstreamReadPost, bufferUpstreamReadPost);
-#endif
 		client->upstream_read(rq, resultUpStreamReadBodyResult, bufferUpStreamReadBodyResult);
 		return;
 	}
@@ -329,26 +336,20 @@ void KAsyncFetchObject::continueReadBody(KHttpRequest *rq)
 	read_hup(rq);
 	client->upstream_read(rq,resultUpStreamReadBodyResult,bufferUpStreamReadBodyResult);
 }
-//解析完body数据之后，从缓冲区读body数据并处理
 void KAsyncFetchObject::readBody(KHttpRequest *rq)
 {
 	int bodyLen;
 	for (;;) {
-		//对缓冲区的body解析
 		char *body = nextBody(rq,bodyLen);
 		if (body==NULL) {
-			//缓冲区没有了
 			break;
 		}
-		//处理收到了的body数据
 		if (!pushHttpBody(rq,body,bodyLen)) {
 			return;
 		}
 	}
-	//继续读body
 	continueReadBody(rq);
 }
-//处理读到body数据
 void KAsyncFetchObject::handleReadBody(KHttpRequest *rq,int got)
 {
 	if (got<=0) {
@@ -362,9 +363,7 @@ void KAsyncFetchObject::handleReadBody(KHttpRequest *rq,int got)
 		return;
 	}
 	assert(header);
-	//解析body
 	parseBody(rq,header,got);
-	//解析完继续处理body数据
 	readBody(rq);
 }
 void KAsyncFetchObject::handleHttp2ReadHead(KHttpRequest *rq,int got)
@@ -375,7 +374,6 @@ void KAsyncFetchObject::handleHttp2ReadHead(KHttpRequest *rq,int got)
 	}
 	rq->ctx->obj->data->headers = client->parser->stealHeaders(rq->ctx->obj->data->headers);
 	assert(got==0);
-	//发送成功，进入发送成功阶段,此阶段禁止重试
 	badStage = BadStage_SendSuccess;
 	readHeadSuccess(rq);
 }
@@ -412,7 +410,7 @@ void KAsyncFetchObject::sendHeadSuccess(KHttpRequest *rq)
 void KAsyncFetchObject::startReadHead(KHttpRequest *rq)
 {
 	
-	client->socket->setnodelay();
+	client->socket->set_nodelay();
 	client->upstream_read(rq,resultUpstreamReadHead,bufferUpstreamReadHead);
 }
 void KAsyncFetchObject::handleSendHead(KHttpRequest *rq,int got)
@@ -422,7 +420,6 @@ void KAsyncFetchObject::handleSendHead(KHttpRequest *rq,int got)
 		handleUpstreamError(rq,STATUS_SERVER_ERROR,"Cann't Send head to remote server",got);
 		return;
 	}
-	//发送成功，进入发送成功阶段,此阶段禁止重试
 	badStage = BadStage_SendSuccess;
 	if(buffer->readSuccess(got)){
 		//continue send head
@@ -524,14 +521,6 @@ void KAsyncFetchObject::readPost(KHttpRequest *rq)
 		return;
 	}
 #endif
-#ifndef _WIN32
-	if (rq->ctx->connection_upgrade) {
-		if (rq->c->is_event(rq, STF_WEVENT) || client->is_upstream_event(STF_WEVENT)) {
-			return;
-		}
-		client->upstream_read(rq, resultUpStreamReadBodyResult, bufferUpStreamReadBodyResult);
-	}
-#endif
 	rq->c->read(rq,resultUpstreamReadPost,bufferUpstreamReadPost);
 }
 void KAsyncFetchObject::sendPost(KHttpRequest *rq)
@@ -553,7 +542,6 @@ void KAsyncFetchObject::readHeadSuccess(KHttpRequest *rq)
 			rq->http2_ctx == NULL &&
 #endif
 			rq->c->tmo < 10) {
-			//超时时间加5个周期
 			rq->c->tmo += 5;
 		}
 		if (

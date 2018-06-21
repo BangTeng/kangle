@@ -2,8 +2,10 @@
 #define KASYNCSELECTABLE_H
 #include "KSelectable.h"
 #include "KFile.h"
-#ifndef _WIN32
+#ifdef LINUX
 #include <libaio.h>
+#elif BSD_OS
+#include <aio.h>
 #endif
 extern int kgl_aio_align_size;
 void init_aio_align_size();
@@ -11,16 +13,18 @@ void *aio_alloc_buffer(size_t size);
 void aio_free_buffer(void *buf);
 void resultAsyncFileEvent(void *arg, int got);
 class KAsyncFile
-#ifdef _WIN32
+#ifndef LINUX
 	: public KSelectable
 #endif
 {
 public:
 	void event(char *buf,int got);
-#ifndef _WIN32
+#ifdef LINUX
 	struct iocb iocb;
 	int offset_adjust;
 	int length;
+#elif BSD_OS
+	struct aiocb iocb;
 #endif
 	char *buf;
 	void *arg;

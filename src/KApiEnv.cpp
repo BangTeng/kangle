@@ -130,7 +130,7 @@ bool KApiEnv::getAllHttp(char *buf, int *buf_size) {
 	for (it = httpVars.begin(); it != httpVars.end(); it++) {
 		char *attr = (*it).first;
 		char *val = (*it).second;
-		int len = strlen(attr) + strlen(val) + 9;
+		int len = (int)(strlen(attr) + strlen(val) + 9);
 		totalLen += len;
 		if (*buf_size <= totalLen) {
 			continue;
@@ -151,7 +151,7 @@ bool KApiEnv::getAllHttp(char *buf, int *buf_size) {
 		}
 		strncpy(buf, ": ", 2);
 		buf += 2;
-		int val_len = strlen(val);
+		int val_len = (int)strlen(val);
 		strncpy(buf, val, val_len);
 		buf += val_len;
 		strcpy(buf, "\r\n");

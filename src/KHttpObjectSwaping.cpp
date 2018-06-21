@@ -32,7 +32,7 @@ void swap_obj_result(KHttpRequest *rq, KHttpObject *obj, KHttpObjectBody *data, 
 	}
 	lock->Unlock();
 	if (result == swap_in_success) {
-		assert(data->status_code > 0);
+		assert(obj->data->status_code > 0);
 		if (TEST(obj->index.flags, FLAG_BIG_OBJECT)) {
 			cache.getHash(obj->h)->incSize(obj->index.head_size);
 		} else {
@@ -165,20 +165,15 @@ void KHttpObjectSwaping::swapResult(KHttpRequest *rq, KHttpObject *obj, swap_in_
 	while (queue) {
 		next = queue->next;
 		KHttpRequest *trq = queue->rq;
-		if (rq == trq 
-#ifdef ENABLE_HTTP2
-			|| trq->http2_ctx == NULL
-#endif
-		) {
+		if (trq->c->selector == rq->c->selector){
 			queue->cb(trq, obj, result);
 			delete queue;
 		} else {
-			//确保http2在主线程上回调
 			swap_in_next_call_param *cp = new swap_in_next_call_param;
 			cp->queue = queue;
 			cp->obj = obj;
 			cp->result = result;
-			trq->c->next(swap_in_next_call, cp);
+			trq->c->selector->next(swap_in_next_call, cp);
 		}
 		queue = next;
 	}
@@ -204,7 +199,7 @@ void KHttpObjectSwaping::swapin(KHttpRequest *rq,KHttpObject *obj)
 	}
 	delete aio_swap;
 	aio_swap = NULL;
-	//退化为普通swap
+	//锟剿伙拷为锟斤拷通swap
 	//}
 	//*/
 	if (!conf.ioWorker->tryStart(rq, handle_sync_swapin)) {

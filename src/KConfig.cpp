@@ -256,7 +256,6 @@ void init_config(KConfig *conf)
 	conf->mallocdebug = true;
 #endif
 	conf->time_out = 60;
-	conf->keep_alive = 30;
 	conf->keep_alive_count = 0;
 	conf->max = 500;
 	conf->refresh = REFRESH_AUTO;

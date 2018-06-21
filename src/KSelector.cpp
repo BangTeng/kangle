@@ -35,6 +35,17 @@
 #include "KHttpManage.h"
 #include "KRequestQueue.h"
 #include "time_utils.h"
+struct adjust_time_param
+{
+	KSelector *selector;
+	INT64 t;
+};
+void next_adjust_time(void *arg, int got)
+{
+	adjust_time_param *param = (adjust_time_param *)arg;
+	param->selector->adjustTime(param->t);
+	delete param;
+}
 inline rb_node *rbInsertRequest(rb_root *root,KBlockRequest *brq,bool &isfirst)
 {
 	struct rb_node **n = &(root->rb_node), *parent = NULL;
@@ -51,7 +62,6 @@ inline rb_node *rbInsertRequest(rb_root *root,KBlockRequest *brq,bool &isfirst)
 		} else {
 			isfirst = false;
 			brq->next = tmp;
-			//prev指向最后一个
 			brq->prev = tmp->prev;
 			(*n)->data = brq;
 		    return *n;
@@ -74,7 +84,7 @@ FUNC_TYPE FUNC_CALL selectorThread(void *param) {
 void KSelector::selectThread()
 {
 	thread_id = pthread_self();
-#ifndef _WIN32
+#ifdef LINUX
 	cpu_set_t mask;
 	CPU_ZERO(&mask);
         CPU_SET(sid, &mask);
@@ -105,7 +115,15 @@ bool KSelector::startSelect() {
 }
 void KSelector::adjustTime(INT64 t)
 {
-	listLock.Lock();
+	if (!is_same_thread()) {
+		adjust_time_param *param = new adjust_time_param;
+		param->selector = this;
+		param->t = t;
+		if (!next(next_adjust_time, param)) {
+			delete param;
+		}
+		return;
+	}
 	rb_node *node = rb_first(&blockList);
 	while (node) {
 		KBlockRequest *brq = (KBlockRequest *)node->data;
@@ -113,63 +131,48 @@ void KSelector::adjustTime(INT64 t)
 		brq->active_msec += t;
 		node = rb_next(node);
 	}
-	listLock.Unlock();
 }
-void KSelector::addTimer(KSelectable *rq,timer_func func,void *arg,int msec)
+void KSelector::add_timer(resultEvent func,void *arg,int msec)
 {
 	KBlockRequest *brq = new KBlockRequest;
-	brq->rq = rq;
-	brq->op = STAGE_OP_TIMER;
 	brq->active_msec = kgl_current_msec + msec;
 	brq->func = func;
 	brq->arg = arg;
-	listLock.Lock();
-	assert(rq==NULL || rq->selector == this);
-	if (rq && rq->queue.next) {
-		assert(count > 0);
-		count--;			
-		klist_remove(&rq->queue);
-		memset(&rq->queue, 0, sizeof(rq->queue));
-	}
-	bool isFirst = true;
-	rb_node *node = rbInsertRequest(&blockList,brq,isFirst);
-	if (isFirst) {
+	assert(is_same_thread());
+	bool is_first = true;
+	rb_node *node = rbInsertRequest(&blockList, brq, is_first);
+	if (is_first) {
 		blockBeginNode = node;
 	}
-	listLock.Unlock();
 }
-void KSelector::addList(KSelectable *rq, int list)
+void KSelector::add_list(KSelectable *rq, int list)
 {
+	assert(is_same_thread());
 	rq->tmo_left = rq->tmo;
 	assert(rq->selector == this);
 	rq->active_msec = kgl_current_msec;
 	assert(list >= 0 && list<KGL_LIST_NONE);
-	listLock.Lock();
 	if (rq->queue.next) {
 		klist_remove(&rq->queue);
 	} else {
 		count++;
 	}
 	klist_append(&this->list[list], &rq->queue);
-	listLock.Unlock();
 }
-void KSelector::removeList(KSelectable *st)
+void KSelector::remove_list(KSelectable *st)
 {
+	assert(is_same_thread());
 	assert(st->selector == this);
-	listLock.Lock();
 	if (st->queue.next == NULL) {
-		listLock.Unlock();
 		return;
 	}
 	klist_remove(&st->queue);
 	memset(&st->queue, 0, sizeof(st->queue));
 	assert(count > 0);
 	count--;
-	listLock.Unlock();
 }
 void KSelector::checkTimeOut() {
-	listLock.Lock();
-	for(int i=0;i<KGL_LIST_SYNC;i++){
+	for (int i=0;i<KGL_LIST_SYNC;i++) {
 		for (;;) {
 			kgl_list *l = klist_head(&list[i]);
 			if (l == &list[i]) {
@@ -180,8 +183,8 @@ void KSelector::checkTimeOut() {
 				break;
 			}
 			klist_remove(l);
+			memset(l, 0, sizeof(kgl_list));
 			if (rq->tmo_left > 0) {
-				//还有额外超时时间
 				rq->tmo_left--;
 				rq->active_msec = kgl_current_msec;
 				klist_append(&list[i], l);
@@ -191,16 +194,19 @@ void KSelector::checkTimeOut() {
 #ifndef NDEBUG
 			klog(KLOG_DEBUG, "request timeout st=%p\n", (KSelectable *)rq);
 #endif
-			rq->getSocket()->shutdown(SHUT_RDWR);
 			assert(count > 0);
-			count--;			
-#ifdef _WIN32
-			rq->getSocket()->cancelIo();
-#endif
+			if (TEST(rq->st_flags, STF_RTIME_OUT | STF_READ) == (STF_RTIME_OUT | STF_READ)) {
+				//set read time out
+				klist_append(&list[i], l);
+				rq->active_msec = kgl_current_msec;
+				assert(rq->e[OP_READ].result);
+				rq->e[OP_READ].result(rq->e[OP_READ].arg, ST_ERR_TIME_OUT);
+				continue;
+			}
+			count--;
+			rq->shutdown_socket();
 		}
 	}
-	KBlockRequest *activeRequest = NULL;
-	KBlockRequest *last = NULL;
 	while (blockBeginNode) {
 		KBlockRequest *rq = (KBlockRequest *)blockBeginNode->data;
 		assert(rq);
@@ -211,30 +217,8 @@ void KSelector::checkTimeOut() {
 		rb_erase(blockBeginNode,&blockList);
 		delete blockBeginNode;
 		blockBeginNode = next;
-		if (activeRequest==NULL) {
-			activeRequest = rq;
-		} else {
-			last->next = rq;
-		}
-		last = rq->prev;
-		assert(last && last->next==NULL);
-	}
-	listLock.Unlock();
-	while (activeRequest) {
-		last = activeRequest->next;
-		//debug("%p is active\n",activeRequest);
-		int op = activeRequest->op;
-		assert(op==STAGE_OP_TIMER);
-		if (op==STAGE_OP_TIMER) {
-			//自定义的定时器
-			activeRequest->func(activeRequest->arg);
-			delete activeRequest;
-			activeRequest = last;
-			continue;
-		}
-		delete activeRequest;
-		activeRequest = last;
-	}
+		rq->func(rq->arg, 0);
+	}	
 }
 void KSelector::bindSelectable(KSelectable *st)
 {
@@ -245,8 +229,7 @@ unsigned KSelector::getConnection(std::stringstream &s,const char *vh_name,bool 
 {
 	time_t now_time = kgl_current_sec;
 	unsigned totalCount = 0;
-	rb_node *node;
-	listLock.Lock();
+	assert(is_same_thread());
 	s << "\n//selector index=" << this->sid << ",count=" << this->count << "\n";
 	for(int i = 0;i<KGL_LIST_BLOCK;i++){
 		s << "\n//list=" << i << "\n";
@@ -261,7 +244,7 @@ unsigned KSelector::getConnection(std::stringstream &s,const char *vh_name,bool 
 			if (TEST(st->st_flags, STF_APP_HTTP2)) {		
 				KHttp2 *http2 = st->app_data.http2;
 				
-				http2->lock.Lock();
+				
 				for (int k = 0; k < kgl_http_v2_index_size(); k++) {
 					KHttp2Node *node = http2->streams_index[k];
 					while (node) {
@@ -276,14 +259,13 @@ unsigned KSelector::getConnection(std::stringstream &s,const char *vh_name,bool 
 							getConnectionTr(rq, s, now_time, translate);
 							s << "));\n";
 							totalCount++;
-							if (conf.max_connect_info>0 && katom_inc((void *)total_count)>conf.max_connect_info) {
-								http2->lock.Unlock();
+							if (conf.max_connect_info>0 && katom_inc((void *)total_count)>conf.max_connect_info) {								
 								goto done;
 							}
 						}						
 					}
 				}
-				http2->lock.Unlock();				
+								
 				continue;
 			}
 #endif
@@ -299,58 +281,8 @@ unsigned KSelector::getConnection(std::stringstream &s,const char *vh_name,bool 
 			}
 		}		
 	}
-	node = blockBeginNode;
-	while (node) {
-		s << "\n//list=block\n";
-		KBlockRequest *brq = (KBlockRequest *)node->data;
-		KHttpRequest *rq = NULL;
-		if (brq->rq && !TEST(brq->rq->st_flags, STF_APP_HTTP2)) {
-			rq = brq->rq->app_data.rq;
-		}
-		if (rq) {
-		
-				if (vh_name == NULL || (rq->svh && strcmp(rq->svh->vh->name.c_str(),vh_name)==0)){
-					s << "rqs.push(new Array(";
-					getConnectionTr(rq,s,now_time,translate);
-					s << "));\n";
-					totalCount++;
-					if (conf.max_connect_info>0 && katom_inc((void *)total_count)>conf.max_connect_info) {
-						goto done;
-					}
-				}	
-
-		}
-		node = rb_next(node);
-	}
 done:
-	listLock.Unlock();
 	return totalCount;
-}
-struct next_timer_func {
-	resultEvent func;
-	void *arg;
-};
-static void WINAPI next_call_back(void *arg)
-{
-	next_timer_func *timer_arg = (next_timer_func *)arg;
-	timer_arg->func(timer_arg->arg, 0);
-	delete timer_arg;
-}
-void KSelector::callback(KSelectable *st, resultEvent func, void *arg)
-{
-	if (st == NULL || !next(st, func, arg)) {
-		next_timer_func *timer_arg = new next_timer_func;
-		timer_arg->arg = arg;
-		timer_arg->func = func;
-		addTimer(st, next_call_back, timer_arg, 0);
-	}
-}
-void KSelector::addTimer(KSelectable *st, resultEvent func, void *arg, int msec)
-{
-	next_timer_func *timer_arg = new next_timer_func;
-	timer_arg->arg = arg;
-	timer_arg->func = func;
-	addTimer(st, next_call_back, timer_arg, 0);
 }
 void KSelector::getConnectionTr(KHttpRequest *rq, std::stringstream &s,time_t now_time,bool translate)
 {	
@@ -374,7 +306,7 @@ void KSelector::getConnectionTr(KHttpRequest *rq, std::stringstream &s,time_t no
 #endif
 	}
 	s << "','" << rq->getClientIp();
-	s << "','" << (now_time - rq->request_msec/1000);
+	s << "','" << (now_time - rq->begin_time_msec/1000);
 	s << "','";
 	if (translate) {
 		s << klang[rq->getState()];

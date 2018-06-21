@@ -7,15 +7,10 @@
 #include "KSelector.h"
 #include "malloc_debug.h"
 #ifdef ENABLE_REQUEST_QUEUE
-/*
-定义一个全局的队列
-*/
 KRequestQueue globalRequestQueue;
-//需要扩展队列的，异步请求开始
 inline void stage_async_need_queue(KHttpRequest *rq)
 {
-	//请求时间重新计时
-	rq->request_msec = kgl_current_msec;
+	rq->begin_time_msec = kgl_current_msec;
 	rq->fetchObj->open(rq);
 }
 void resultQueuedRequestTimeOut(void *arg,int got)
@@ -31,12 +26,9 @@ void resultQueuedRequestTimeOut(void *arg,int got)
 }
 bool checkQueuedRequestTimeOut(KHttpRequest *rq)
 {
-	if (kgl_current_msec - rq->request_msec > conf.time_out * 1000) {
+	if (kgl_current_msec - rq->begin_time_msec > conf.time_out * 1000) {
 		CLR(rq->flags,RQ_SYNC);
-		//cut the stack call.
-		//rq->c->handler = handleQueuedRequestTimeOut;
-		//rq->c->selector->addRequest(rq,KGL_LIST_RW,STAGE_OP_NEXT);
-		rq->c->next(resultQueuedRequestTimeOut,rq);
+		rq->c->selector->next(resultQueuedRequestTimeOut,rq);
 		return true;
 	}
 	return false;
@@ -47,9 +39,7 @@ void resultAsyncNextRequest(void *arg,int got)
 	assert(rq->fetchObj && !rq->fetchObj->isSync());
 	stage_async_need_queue(rq);
 }
-/*
-从主线程过来的释放队列，不能阻塞，处理rq是工作线程问题。
-*/
+
 void async_queue_destroy(KRequestQueue *queue)
 {
 	//KRequestQueue *queue = rq->ctx->queue;
@@ -69,8 +59,7 @@ void async_queue_destroy(KRequestQueue *queue)
 			stageEndRequest(rq);
 		}
 	} else {
-		//这里要切断堆栈，否则有可能会有过多的调用。
-		rq->c->next(resultAsyncNextRequest,rq);
+		rq->c->selector->next(resultAsyncNextRequest,rq);
 	}
 }
 FUNC_TYPE FUNC_CALL thread_queue(void *param)
@@ -89,7 +78,6 @@ FUNC_TYPE FUNC_CALL thread_queue(void *param)
 				break;
 			}
 		} else {
-			//同步工作线程调用异步请求，工作性质传给异步请求。本身退出。
 			stage_async_need_queue(rq);
 			break;
 		}
@@ -148,13 +136,11 @@ bool KRequestQueue::start(KHttpRequest *rq)
 			result = true;
 			if(!TEST(rq->flags,RQ_SYNC)){
 				//in queue
-				rq->c->removeRequest(rq,true);
+				rq->c->add_sync(rq);
 			}
 		}
 	}
 	refsLock.Unlock();
-	//startResult 标识为直接处理请求，但结果(result)未知。
-	//result = true时结果已经可知道,直接放到queue中。
 	if (startResult) {
 		result = startDirect(rq);
 		if (!result) {

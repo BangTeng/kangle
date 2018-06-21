@@ -50,6 +50,7 @@
 #endif
 using namespace std;
 char *getString(char *str, char **substr);
+
 void test_file()
 {
 	const char *test_file = "c:\\windows\\temp\\test.txt";
@@ -231,7 +232,27 @@ void test_line_file()
 		printf("line=[%s]\n", line);
 	}
 }
+void test_suffix_corrupt() {
+        char *str = new char[4];
+        memcpy(str,"test1",5);
+	delete[] str;
+}
+void test_prefix_corrupt() {
+        char *str = (char *)malloc(4);
+	void *pp = str - 1;
+	memcpy(pp,"test",4);
+        free(str);
+}
+void test_freed_memory() {
+        char *str = (char *)malloc(4);
+        free(str);
+        memcpy(str,"test",4);
+}
+
 bool test() {
+	//test_freed_memory();
+	//test_suffix_corrupt();
+	//test_prefix_corrupt();
 	//printf("sizeof(KSelectable) = %d\n",sizeof(KSelectable));
 	//printf("sizeof(KConnectionSelectable)=%d\n",sizeof(KConnectionSelectable));
 	//printf("sizeof(KHttpRequest) = %d\n",sizeof(KHttpRequest));
@@ -244,6 +265,9 @@ bool test() {
 	//printf("sizeof(kgl_str_t)=%d\n",sizeof(kgl_str_t));
 	//test_ip_map();
 	//test_line_file();
+#ifdef ENABLE_HTTP2
+	test_http2();
+#endif
 	buff b;
 	b.flags = 0;
 	test_url_decode();

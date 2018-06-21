@@ -322,7 +322,7 @@ inline char *rand_password(int len)
 {
 	std::stringstream s;
 	const char *base_password = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-	int base_len=strlen(base_password);
+	int base_len=(int)strlen(base_password);
     if(len<8){
         len=8;
     }

@@ -43,7 +43,7 @@ void upstream_sign_request(KHttpRequest *rq, KHttpEnv *s)
 	KMD5Init(&context);
 	KMD5Update(&context, (unsigned char *)v.getBuf(), v.getSize());
 	int upstream_sign_len = conf.upstream_sign_len;
-	if (upstream_sign_len > sizeof(conf.upstream_sign)) {
+	if (upstream_sign_len > (int)sizeof(conf.upstream_sign)) {
 		upstream_sign_len = sizeof(conf.upstream_sign);
 	}
 	KMD5Update(&context, (unsigned char *)conf.upstream_sign, upstream_sign_len);

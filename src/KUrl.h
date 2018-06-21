@@ -145,7 +145,7 @@ public:
 	{
 		int param_len = 0;
 		if (param) {
-			param_len = strlen(param);
+			param_len = (int)strlen(param);
 		}
 		int new_len = param_len + len + 2;
 		char *new_param = (char *)xmalloc(new_len);
@@ -189,6 +189,32 @@ public:
 		}
 		return ret;
 	}
+	void getPath(KStringBuf &s, bool urlEncode = false) {
+		if (urlEncode) {
+			size_t len = strlen(path);
+			char *newPath = url_encode(path, len, &len);
+			if (newPath) {
+				s.write_all(newPath, (int)len);
+				free(newPath);
+			}
+		} else {
+			s << path;
+		}
+		if (param && *param) {
+			if (urlEncode) {
+				size_t len = strlen(param);
+				char *newParam = url_value_encode(param, len, &len);
+				if (newParam) {
+					s.write_all("?", 1);
+					s.write_all(newParam, (int)len);
+					free(newParam);
+				}
+			}
+			else {
+				s << "?" << param;
+			}
+		}
+	}
 	bool getUrl(KStringBuf &s,bool urlEncode=false) {
 		if (host == NULL || path == NULL) {
 			return false;
@@ -208,29 +234,7 @@ public:
 		if (port != defaultPort) {
 			s << ":" << port;
 		}
-		if (urlEncode) {
-			size_t len = strlen(path);
-			char *newPath = url_encode(path,len,&len);
-			if (newPath) {
-				s.write_all(newPath,len);
-				free(newPath);
-			}
-		} else {
-			s << path;
-		}
-		if (param && *param) {
-			if (urlEncode) {
-				size_t len = strlen(param);
-				char *newParam = url_value_encode(param,len,&len);
-				if (newParam) {
-					s.write_all("?",1);
-					s.write_all(newParam,len);
-					free(newParam);
-				}
-			} else {
-				s << "?" << param;
-			}
-		}
+		getPath(s, urlEncode);
 		return true;
 	}	
 	char *host;

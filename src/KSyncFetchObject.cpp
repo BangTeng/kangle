@@ -1,6 +1,12 @@
 #include "KSyncFetchObject.h"
 #include "http.h"
 #include "KSelector.h"
+void sync_next_request(void *arg, int len)
+{
+	KHttpRequest *rq = (KHttpRequest *)arg;
+	rq->c->remove_sync(rq);
+	stageEndRequest(rq);
+}
 void KSyncFetchObject::open(KHttpRequest *rq)
 {
 	kassert(TEST(rq->flags,RQ_SYNC));
@@ -33,5 +39,5 @@ void KSyncFetchObject::open(KHttpRequest *rq)
 	}
 #endif
 	CLR(rq->flags,RQ_SYNC);
-	stageEndRequest(rq);
+	rq->c->selector->next(sync_next_request, rq);
 }

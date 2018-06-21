@@ -78,7 +78,6 @@ public:
 	int model;
 	bool ext;
 #ifdef KSOCKET_SSL
-	bool sni;
 	bool http2;
 	std::string certificate;
 	std::string certificate_key;
@@ -108,13 +107,12 @@ class KConfigBase
 public:
 	KConfigBase();
 	//unsigned int worker;
-	unsigned int max; //最大线程
-	unsigned int max_per_ip; //每个IP最大连接数
+	unsigned int max;
+	unsigned int max_per_ip;
 	unsigned int per_ip_deny;
 	unsigned min_free_thread;
 	unsigned time_out;
 	unsigned connect_time_out;
-	unsigned keep_alive;
 	unsigned keep_alive_count;
 	char hostname[32];
 	int log_event_id;
@@ -231,7 +229,7 @@ public:
 	void set_time_out(unsigned val)
 	{
 		time_out = val;
-		if(time_out>0 && time_out < 5){
+		if(time_out < 5){
 			//最小超时为5秒
 			time_out = 5;
 		}

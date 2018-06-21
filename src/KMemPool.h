@@ -16,6 +16,9 @@
 #define kgl_align_free		_aligned_free
 #else
 #define kgl_align_free free
+#ifdef MALLOCDEBUG
+extern void *kgl_memalign(size_t alignment, size_t size);
+#else
 inline void *kgl_memalign(size_t alignment, size_t size) {
 	void  *p;
 	int    err;
@@ -25,6 +28,7 @@ inline void *kgl_memalign(size_t alignment, size_t size) {
 	}
 	return p;
 }
+#endif
 #endif
 struct kgl_pool_t;
 typedef void (WINAPI * kgl_pool_cleanup_pt) (void *data);

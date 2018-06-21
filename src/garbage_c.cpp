@@ -53,8 +53,8 @@
 #include "KVirtualHostDatabase.h"
 #include "KCdnContainer.h"
 #include "KWriteBackManager.h"
+#include "KAddr.h"
 #include "md5.h"
-#include "KCname.h"
 #include "KTimer.h"
 void list_all_malloc();
 using namespace std;
@@ -123,9 +123,11 @@ FUNC_TYPE FUNC_CALL time_thread(void* arg) {
 	int sleep_time = GC_SLEEP_TIME;
 #ifdef MALLOCDEBUG
 	void start_hook_alloc();
+	bool test();
 	if (conf.mallocdebug) {
 		start_hook_alloc();
 	}
+	assert(test());
 #endif
 
 	time_t nowTime = time(NULL);
@@ -174,9 +176,7 @@ FUNC_TYPE FUNC_CALL time_thread(void* arg) {
 #ifdef ENABLE_DIGEST_AUTH
 			KHttpDigestAuth::flushSession(kgl_current_sec);
 #endif
-#ifdef ENABLE_CNAME_BIND
-			flush_cname_cache(nowTime);
-#endif
+			flush_addr_cache(nowTime);
 		}
 
 		flush_mem_cache();

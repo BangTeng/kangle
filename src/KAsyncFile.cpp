@@ -19,7 +19,7 @@ void init_aio_align_size()
 		return;
 	}
 	struct mntent *mntent;
-	while(mntent = getmntent(mntfile)) {
+	while (NULL!=(mntent = getmntent(mntfile))) {
 		int fd = open(mntent->mnt_fsname, O_RDONLY);  
 		if (fd<0) {
 			continue;
@@ -55,8 +55,11 @@ void aio_free_buffer(void *buf)
 }
 void resultAsyncFileEvent(void *arg, int got)
 {
-	KAsyncFile *ast = (KAsyncFile *)arg;
-	ast->event(ast->buf,got);
+	KAsyncFile *file = (KAsyncFile *)arg;
+#ifdef BSD_OS
+	got =  aio_return(&file->iocb);
+#endif
+	file->event(file->buf,got);
 }
 void KAsyncFile::event(char *result_buf,int got)
 {
