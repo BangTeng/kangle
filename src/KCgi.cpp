@@ -40,7 +40,7 @@ bool KCgi::run(const char *cmd, char ** arg, KCgiEnv *env) {
 		//fprintf(stderr,"run cmd[%s]\n",cmd);
 		execvp(cmd, arg);
 	} else {
-		execve(cmd, arg, env->getEnv());
+		execve(cmd, arg, env->dump_env());
 	}
 	fprintf(stdout, "Status: 500\r\n\r\ncann't run cmd=%s,errno=%d %s\n", cmd,
 			errno, strerror(errno));

@@ -165,7 +165,7 @@ bool createProcess(Token_t token, char * args[],KCmdEnv *envs,char *curdir,PIPE_
 		} else {		
 			chdir(curdir);
 		}
-		execve(args[0], args, (envs ? envs->getEnv() : NULL));
+		execve(args[0], args, (envs ? envs->dump_env() : NULL));
 		//execv(args[0], args);
 		fprintf(stderr, "run cmd[%s] error=%d %s\n", args[0], errno, strerror(
 			errno));
@@ -261,7 +261,7 @@ bool createProcess(KPipeStream *st, Token_t token, char * args[],KCmdEnv *envs, 
 		}
 		chdir(curdir);
 		free(curdir);
-		execve(args[0], args, (envs ? envs->getEnv() : NULL));
+		execve(args[0], args, (envs ? envs->dump_env() : NULL));
 		//execv(args[0], args);
 		fprintf(stderr, "run cmd[%s] error=%d %s\n", args[0], errno, strerror(
 			errno));

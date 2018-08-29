@@ -16,6 +16,7 @@ extern volatile char cachedDateTime[sizeof("Mon, 28 Sep 1970 06:00:00 GMT")+2];
 extern volatile char cachedLogTime[sizeof("[28/Sep/1970:12:00:00 +0600]")+2];
 extern volatile INT64 kgl_current_msec;
 extern volatile time_t kgl_current_sec; 
+extern volatile bool configReload;
 
 extern KMutex timeLock;
 

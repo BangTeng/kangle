@@ -54,6 +54,7 @@ enum{
 	CALL_LIST_VH,
 	CALL_LIST_TVH,
 	CALL_LIST_GTVH,
+	CALL_LIST_LISTEN,
 	CALL_ADD_VH_INFO,
 	CALL_DEL_VH_INFO,
 	CALL_ADD_INDEX,
@@ -71,6 +72,7 @@ enum{
 	CALL_DEL_SERVER,
 	CALL_RELOAD,
 	CALL_RELOAD_VH,
+	CALL_RELOAD_VH_ACCESS,
 	CALL_CHANGE_ADMIN_PASSWORD,
 	CALL_KILL_PROCESS,
 	CALL_WRITE_FILE,
@@ -269,6 +271,9 @@ static int parseCallName(const char *callName)
 			if (strcmp(callName,"list_index")==0) {
 				return CALL_LIST_INDEX;
 			}
+			if (strcmp(callName, "list_listen") == 0) {
+				return CALL_LIST_LISTEN;
+			}
 #ifdef ENABLE_LOG_DRILL
 			if (strcmp(callName, "log_drill") == 0) {
 				return CALL_LOG_DRILL;
@@ -286,6 +291,9 @@ static int parseCallName(const char *callName)
 		case 'r':
 			if(strcmp(callName,"reload_vh")==0){
 				return CALL_RELOAD_VH;
+			}
+			if (strcmp(callName, "reload_vh_access") == 0) {
+				return CALL_RELOAD_VH_ACCESS;
 			}
 			if (strcmp(callName,"reboot")==0) {
 				return CALL_REBOOT;
@@ -707,6 +715,11 @@ int WINAPI WhmCoreCall(const char *callName, const char *event, WHM_CONTEXT *con
 		}
 		return WHM_OK;
 	}
+	case CALL_LIST_LISTEN:
+	{
+		conf.gvm->get_listen_whm(ctx);
+		return WHM_OK;
+	}
 #ifdef ENABLE_LOG_DRILL
 	case CALL_LOG_DRILL:
 	{
@@ -745,12 +758,12 @@ int WINAPI WhmCoreCall(const char *callName, const char *event, WHM_CONTEXT *con
 				return WHM_PARAM_ERROR;
 			}
 			KAccess *maccess = &kaccess[access_type];
-			if(vh){
+			if (vh) {
 #ifndef HTTP_PROXY
-				if(vh->user_access.size()==0){
-					ctx->setStatus("the vh does not support user_access");
+				if(!vh->loadAccess()) {
+					ctx->setStatus("vh load access error!");
 					return WHM_CALL_FAILED;
-				}
+				}				
 				maccess = &vh->access[access_type];
 #endif
 			}
@@ -985,7 +998,17 @@ int WINAPI WhmCoreCall(const char *callName, const char *event, WHM_CONTEXT *con
 		//conf.gam->killProcess(uv->get("user"));
 	}
 	if (cmd==CALL_RELOAD) {
-		configReload = true;
+		do_config(false);
+		return WHM_OK;
+	}
+	if (cmd == CALL_RELOAD_VH_ACCESS) {
+		KVirtualHost *vh = ctx->getVh();
+		if (vh == NULL) {
+			ctx->setStatus("cann't find vh");
+			return WHM_CALL_FAILED;
+		}
+		vh->access_file_loaded = false;
+		vh->loadAccess(NULL);
 		return WHM_OK;
 	}
 	if(cmd==CALL_RELOAD_VH){
@@ -1019,7 +1042,7 @@ int WINAPI WhmCoreCall(const char *callName, const char *event, WHM_CONTEXT *con
 				}
 				free(buf);
 			} else {
-				configReload = true;
+				do_config(false);
 			}
 		}
 		return WHM_OK;

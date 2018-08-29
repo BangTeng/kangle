@@ -1,5 +1,5 @@
 # Process this file with autoconf to produce a configure script.
-AC_INIT([kangle],[3.5.13.2])
+AC_INIT([kangle],[3.5.14])
 AC_CANONICAL_SYSTEM
 AM_INIT_AUTOMAKE
 AM_CONFIG_HEADER([src/config.h])
@@ -267,7 +267,7 @@ CXXFLAGS="$CXXFLAGS `pcre-config --cflags`"
 case "$host_os" in
 linux*)
 	CXXFLAGS="$CXXFLAGS -D_REENTRANT -DLINUX"
-	LIBS="$LIBS -ldl -laio"
+	LIBS="$LIBS -ldl"
 	# LDFLAGS="$LDFLAGS -Xlinker --hash-style=both"
 	;;
 netbsd*)

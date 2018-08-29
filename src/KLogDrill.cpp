@@ -24,17 +24,23 @@ struct klog_drill {
 	int len;
 	klog_drill *next;
 };
+struct klog_drill_stat {
+	int total_count;
+	int drill_hit;
+	int cache_hit;
+	int cache_saved;
+	int cache_verified;
+};
 static KMutex drill_lock;
 static int drill_count = 0;
-static int total_count = 0;
-static int drill_hit = 0;
-//klog_drill drill_list;
+static klog_drill_stat drill_stat;
 static klog_drill *drill_list_head = NULL;
 static klog_drill *drill_list_end = NULL;
 void init_log_drill()
 {
 	//memset(&drill_list, 0, sizeof(drill_list));
 	//klist_init(&drill_list);
+	memset(&drill_stat, 0, sizeof(drill_stat));
 }
 void free_log_drill(klog_drill *ld)
 {
@@ -126,12 +132,21 @@ void add_log_drill(KHttpRequest *rq,KStringBuf &s)
 #ifndef NDEBUG
 	internal_check_log_drill();
 #endif
-	total_count++;
+	drill_stat.total_count++;
 	if (!TEST(rq->filter_flags, RF_LOG_DRILL)) {
 		drill_lock.Unlock();
 		return;
 	}
-	drill_hit++;
+	drill_stat.drill_hit++;
+	if (rq->ctx->cache_hit) {
+		drill_stat.cache_hit++;
+	}
+	if (TEST(rq->flags, RQ_OBJ_STORED)) {
+		drill_stat.cache_saved++;
+	}
+	if (TEST(rq->flags, RQ_OBJ_VERIFIED)) {
+		drill_stat.cache_verified++;
+	}
 	if (drill_count >= conf.log_drill) {
 		remove_log_drill();
 	}
@@ -205,11 +220,16 @@ void flush_log_drill()
 	klist_init(&drill_list);
 	//*/
 	assert(free_count == drill_count);
-	drill_sign << "*" << drill_count << "*" << drill_hit << "*" << total_count << "*";
+	drill_sign << "*{\"drill_count\":" << drill_count;
+	drill_sign << ",\"drill_hit\":" << drill_stat.drill_hit;
+	drill_sign << ",\"cache_hit\":" << drill_stat.cache_hit;
+	drill_sign << ",\"cache_saved\":" << drill_stat.cache_saved;
+	drill_sign << ",\"cache_verified\":" << drill_stat.cache_verified;
+	drill_sign << ",\"total_count\":" << drill_stat.total_count;
+	drill_sign << "}";
 	fp.write(drill_sign.getString(), drill_sign.getSize());
 	drill_count = 0;
-	drill_hit = 0;
-	total_count = 0;
+	memset(&drill_stat, 0, sizeof(drill_stat));
 #ifndef NDEBUG
 	internal_check_log_drill();
 #endif

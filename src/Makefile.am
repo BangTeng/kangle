@@ -243,4 +243,4 @@ KRandAcl.h KConnectionSelectable.cpp KConnectionSelectable.h KReadWriteBuffer.cp
 KUpstreamSelectable.h KUpstreamSelectable.cpp KRequestList.h KSimulateRequest.cpp  KSimulateRequest.h KMinObjVerifiedMark.h KCloudIpAcl.cpp katom.h KCondWait.h\
 KAddr.h KAddr.cpp KDechunkEngine.h KHttpEnv.h KHuffDecode.cpp KMemPool.cpp KMemPool.h KHttp2.h KHttp2.cpp KHttp2Table.cpp KHttp2WriteBuffer.h KHttp2WriteBuffer.cpp KSendBuffer.h KIpMap.cpp KIpMap.h\
 KGeoMark.cpp KLogDrill.cpp KGeoMark.h KLogDrill.h KQueueMark.h KQueueMark.cpp KAsyncFile.cpp KAsyncFile.h KAioSelectable.cpp KAioSelectable.h KHttpObjectSwaping.cpp KHttpObjectSwaping.h\
-KMapRedirectMark.cpp KMapRedirectMark.h KEpollNoticeSelectable.h KEpollNoticeSelectable.cpp
+KMapRedirectMark.cpp KMapRedirectMark.h KEpollNoticeSelectable.h KEpollNoticeSelectable.cpp KProxy.cpp KProxy.h

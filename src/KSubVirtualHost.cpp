@@ -171,8 +171,6 @@ void KSubVirtualHost::setDocRoot(const char *doc_root, const char *dir) {
 		if (p) {
 			*p = '\0';
 			https_proxy = strdup(p + 1);
-		} else {
-			https_proxy = strdup(http_proxy);
 		}
 		return;
 	}
@@ -275,11 +273,16 @@ bool KSubVirtualHost::bindFile(KHttpRequest *rq, KHttpObject *obj,bool &exsit,KA
 		}
 		if (http_proxy) {
 			KRedirect *rd = NULL;
-			if (TEST(rq->raw_url.flags, KGL_URL_SSL)) {
-				 rd = cdnContainer.refsRedirect(https_proxy);
-			} else {
-				rd = cdnContainer.refsRedirect(http_proxy);
+			KStringBuf tmp_str;
+			const char *proxy = http_proxy;
+			if (TEST(rq->raw_url.flags, KGL_URL_SSL) && https_proxy) {
+				proxy = https_proxy;
 			}
+			if (*proxy == '/') {
+				tmp_str << rq->url->host << proxy;
+				proxy = tmp_str.getString();
+			}
+			rd = cdnContainer.refsRedirect(proxy);
 			if (rd) {
 				KFetchObject *fo = rd->makeFetchObject(rq,rq->file);
 				KBaseRedirect *brd = new KBaseRedirect(rd, false);

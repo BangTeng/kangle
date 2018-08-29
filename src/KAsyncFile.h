@@ -3,7 +3,7 @@
 #include "KSelectable.h"
 #include "KFile.h"
 #ifdef LINUX
-#include <libaio.h>
+#include <linux/aio_abi.h>
 #elif BSD_OS
 #include <aio.h>
 #endif

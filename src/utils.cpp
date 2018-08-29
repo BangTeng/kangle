@@ -522,7 +522,7 @@ pid_t createProcess(Token_t token,const char *cmd,KCmdEnv *envs,const char *curd
 		} else {
 			chdir(curdir);
 		}
-		execve(arg[0], arg, (envs ? envs->getEnv() : NULL));
+		execve(arg[0], arg, (envs ? envs->dump_env() : NULL));
 		//execv(args[0], args);
 		fprintf(stderr, "run cmd[%s] error=%d %s\n", args[0], errno, strerror(
 			errno));

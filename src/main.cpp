@@ -23,7 +23,6 @@
  */
 
 #include "global.h"
-#include "forwin32.h"
 #ifndef _WIN32
 #include <pthread.h>
 #include <pwd.h>
@@ -358,6 +357,8 @@ void sigcatch(int sig) {
 		if(workerProcess.size()>0){
 			killworker(sig);
 		} else {
+			//这里不能直接调用do_config，否则会导致死锁.
+			//比如某锁(KThreadPool)在已经lock情况下，收到信号，直接调用do_config会导致二次lock，从而死锁
 			configReload = true;
 		}
 		break;
@@ -531,6 +532,12 @@ static int Usage(bool only_version = false) {
 #ifdef ENABLE_HTTP2
 			" http2"
 #endif
+#ifdef ENABLE_PROXY_PROTOCOL
+		   " proxy"
+#endif
+#ifdef ENABLE_UPSTREAM_SSL
+		" upstream-ssl"
+#endif
 		
 #ifdef ENABLE_DISK_CACHE
 			" disk-cache"
@@ -568,7 +575,6 @@ static int Usage(bool only_version = false) {
 		"   [-z [disk_dir]]  create disk cache directory\n"
 #endif
 		"   [-v --version]   show program version\n"
-//		"   [-a apache_config_file]  convert apache config\n"
 #ifndef _WIN32
 		"   [-q]             shutdown\n"
 		"   [-n]             start program not in daemon\n"
@@ -966,13 +972,7 @@ void StartAll() {
 		//forcmdextend();
 		fprintf(stderr,"don't support cmd extend model\n");
 	} else {
-		if (worker_index == 0) {
-			conf.gvm->flush_static_listens(conf.service);
-		}
-	}
-	if (dlisten.listens.empty()) {
-		klog(KLOG_ERR, "No any listen , program start failed\n");
-		my_exit(100);
+		conf.gvm->flush_static_listens(conf.service);
 	}
 	for (int i = numberCpu; i > 0; i--) {
 		if (init_resource_limit(i)) {
@@ -987,7 +987,7 @@ void StartAll() {
 	program_start_time = time(NULL);
 	klog(KLOG_NOTICE, "Start success [pid=%d].\n",m_pid);
 
-	conf.gvm->addAllVirtualHost();
+	//conf.gvm->addAllVirtualHost();
 #ifdef ENABLE_VH_RUN_AS	
 	conf.gam->loadAllApi();
 #endif
@@ -996,6 +996,7 @@ void StartAll() {
 		m_thread.start(NULL,clean_tempfile_thread);
 	}
 #endif
+	dlisten.delayStart();
 	selectorManager.start();
 	time_thread(NULL);
 #ifdef MALLOCDEBUG

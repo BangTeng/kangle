@@ -77,8 +77,10 @@ public:
 	std::string port;
 	int model;
 	bool ext;
-#ifdef KSOCKET_SSL
+#ifdef ENABLE_HTTP2
 	bool http2;
+#endif
+#ifdef KSOCKET_SSL
 	std::string certificate;
 	std::string certificate_key;
 	std::string cipher;
@@ -276,7 +278,7 @@ extern bool need_reboot_flag;
 extern KConfig *cconf;
 int merge_apache_config(const char *file);
 void LoadDefaultConfig();
-void do_config(bool firstTime=true);
+void do_config(bool first_time);
 //读取配置文件，可重入
 void load_config(KConfig *cconf,bool firstTime);
 //解析配置文件,调用完load_config之后，对一些项目，解析处理，实施

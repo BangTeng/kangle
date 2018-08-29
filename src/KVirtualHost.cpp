@@ -63,7 +63,7 @@ KVirtualHost::KVirtualHost() {
 	concat = false;
 	db = cur_config_vh_db;
 #ifdef ENABLE_USER_ACCESS
-	lastLoad = lastModified = 0;
+	access_file_loaded = false;
 	access[REQUEST].type = REQUEST;
 	access[REQUEST].qName = "request";
 	access[RESPONSE].type = RESPONSE;
@@ -543,7 +543,7 @@ int KVirtualHost::checkRequest(KHttpRequest *rq) {
 }
 int KVirtualHost::checkResponse(KHttpRequest *rq)
 {
-	if (user_access.size()==0) {
+	if (user_access.empty()) {
 		return JUMP_ALLOW;
 	}
 	return access[RESPONSE].check(rq,rq->ctx->obj);
@@ -558,25 +558,17 @@ int KVirtualHost::checkPostMap(KHttpRequest *rq)
 void KVirtualHost::setAccess(std::string access_file)
 {
 	this->user_access = access_file;
-	//if (access_file=="-") {
-	//	access[0].check_time = 0;
-	//	lastLoad = 1;
-	//}
 }
 bool KVirtualHost::loadAccess(KVirtualHost *vh) {
-	if (user_access.size()==0) {
+	if (user_access.empty()) {
 		return false;
 	}
-	if (access[0].check_time==0 && lastLoad>0) {
+	if (access_file_loaded) {
 		return true;
 	}
-	if (access[0].check_time>0 && kgl_current_sec - lastLoad < access[0].check_time) {
-		return true;
-	}
+	access_file_loaded = true;
 	std::string err_msg;
 	if (user_access=="-") {
-		access[0].check_time = 0;
-		lastLoad = 1;
 		std::stringstream s;
 		access[0].newTable(BEGIN_TABLE, err_msg);
 		access[1].newTable(BEGIN_TABLE, err_msg);
@@ -587,7 +579,7 @@ bool KVirtualHost::loadAccess(KVirtualHost *vh) {
 			}
 			s << "</config>\n";			
 			KAccessParser parser;
-			parser.parseString(s.str().c_str(), &access[0]);			
+			parser.parseString(s.str().c_str(), &this->access[0]);
 		}
 		return true;
 	}
@@ -600,31 +592,24 @@ bool KVirtualHost::loadAccess(KVirtualHost *vh) {
 	}
 	struct _stati64 buf;	
 	if (lstat(accessFile.c_str(), &buf) != 0 || !S_ISREG(buf.st_mode)) {
-		if (lastModified>0) {
-			lastModified = 0;
-			for(int i=0;i<2;i++){
-				access[i].destroy();
-				access[i].newTable(BEGIN_TABLE, err_msg);
-			}
-		}
-		return false;
-	}
-	lastLoad = kgl_current_sec;
-	if (buf.st_mtime == lastModified) {
+		for (int i=0;i<2;i++) {
+				this->access[i].destroy();
+				this->access[i].newTable(BEGIN_TABLE, err_msg);
+		}		
 		return true;
 	}
-	access[0].destroy();
-	access[1].destroy();
+	KAccess access[2];
+	KAccessParser parser;
+	access[REQUEST].type = REQUEST;
+	access[REQUEST].qName = "request";
+	access[RESPONSE].type = RESPONSE;
+	access[RESPONSE].qName = "response";
 	access[0].newTable(BEGIN_TABLE, err_msg);
 	access[1].newTable(BEGIN_TABLE, err_msg);
-	lastModified = buf.st_mtime;
-	KAccessParser parser;
 	parser.parseFile(accessFile, &access[0]);
-	//for (int i = 0; i < 2; i++) {
-	//	access[i].setChainAction();
-	//}
-	//clear the object key_checked flag that belong to this virtualhost.
-	//change_content_filter(USER_KEY_CHECKED, this);
+	for (int i = 0; i < 2; i++) {
+		this->access[i].copy(access[i]);
+	}
 	return true;
 }
 #endif

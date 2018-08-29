@@ -609,53 +609,13 @@ std::string KAcserverManager::acserverList(std::string name) {
 		m_a = NULL;
 	}
 	s << "</table>\n<hr>";
-	s << "<form action=" << (m_a ? "/acserveredit" : "/acserveradd")
-			<< " method=post>\n";
-	s << LANG_NAME << ":<input name=name value='" << (m_a ? m_a->name : "")
-			<< "'";
+	s << "<form action=" << (m_a ? "/acserveredit" : "/acserveradd") << " method=post>\n";
+	s << LANG_NAME << ":<input name=name value='" << (m_a ? m_a->name : "")	<< "'";
 	if (m_a) {
 		s << " readonly";
 	}
 	s << "><br>";
-#ifndef HTTP_PROXY
-	s << klang["protocol"] << ":";
-	s << "<input type='radio' name='proto' value='http' ";
-	if (m_a == NULL || m_a->proto == Proto_http) {
-		s << "checked";
-	}
-
-	s << ">http <input type='radio' name='proto' value='fastcgi' ";
-	if (m_a && m_a->proto == Proto_fcgi) {
-		s << "checked";
-	}
-	s << ">fastcgi ";
-	//ajp
-	s << "<input type='radio' name='proto' value='ajp' ";
-	if (m_a && m_a->proto == Proto_ajp) {
-		s << "checked";
-	}
-	s << ">ajp";
-	//uwsgi
-	s << "<input type='radio' name='proto' value='uwsgi' ";
-	if (m_a && m_a->proto == Proto_uwsgi) {
-		s << "checked";
-	}
-	s << ">uwsgi";
-	//scgi
-	s << "<input type='radio' name='proto' value='scgi' ";
-	if (m_a && m_a->proto == Proto_scgi) {
-		s << "checked";
-	}
-	s << ">scgi";
-	//hmux
-	s << "<input type='radio' name='proto' value='hmux' ";
-	if (m_a && m_a->proto == Proto_hmux) {
-		s << "checked";
-	}
-	s << ">hmux";
-	
-	s << "<br>";
-#endif
+	KPoolableRedirect::build_proto_html(m_a, s);
 	s << klang["lang_host"] << "<input name='host' value='";
 	if(m_a){
 		s << m_a->sockHelper->host;
@@ -663,11 +623,13 @@ std::string KAcserverManager::acserverList(std::string name) {
 	s << "'>" << LANG_PORT << "<input size=5 name=port value='";
 	if (m_a) {
 		s << m_a->sockHelper->port;
-
+#ifdef ENABLE_UPSTREAM_SSL
+		if (m_a->sockHelper->ssl.size()>0) {
+			s << m_a->sockHelper->ssl;
+		}
+#endif
 	}
-	s << "'";
-	s << ">\n";
-
+	s << "'" << ">\n";
 	if (m_a) {
 		s << "<input type=hidden name=namefrom value='" << m_a->name << "'>\n";
 	}
@@ -680,8 +642,7 @@ std::string KAcserverManager::acserverList(std::string name) {
 	s << LANG_PASS << ": <input name='auth_passwd' value='" 
 		<< (m_a?m_a->sockHelper->auth_passwd.c_str():"") << "'><br>";
 #endif
-	s << "<br><input type=submit value=" << (m_a ? LANG_EDIT : LANG_SUBMIT)
-			<< "></form>\n";
+	s << "<br><input type=submit value=" << (m_a ? LANG_EDIT : LANG_SUBMIT) << "></form>\n";
 
 	lock.RUnlock();
 	return s.str();

@@ -31,14 +31,16 @@
 #include "katom.h"
 #include "KCondWait.h"
 #include "KList.h"
-#define MAX_SELECTORS	2
+#include "KProxy.h"
+
 #define ADD_REQUEST_SUCCESS                                     0
 #define ADD_REQUEST_TOO_MANY_CONNECTION 	1
 #define ADD_REQUEST_PER_IP_LIMIT                                2
 #define ADD_REQUEST_UNKNOW_ERROR                        3
 #define MAX_UNUSED_REQUEST                             1024
 #define MAX_UNUSED_REQUEST_HASH                        1023
-void handleMultiListen(KSelectable *st,int got);
+
+
 typedef std::map<ip_addr,unsigned> intmap;
 struct KOnReadyItem
 {
@@ -181,6 +183,23 @@ inline void delRequest(KConnectionSelectable *c) {
 	}
 	ipLock.Unlock();
 }
+inline void handle_start_request(KHttpRequest *rq,bool ssl)
+{
+#ifdef KSOCKET_SSL
+	if (ssl) {
+		rq->c->read(rq, resultSSLAccept, NULL);
+		return;
+	}
+#endif
+#ifdef WORK_MODEL_TCP
+	if (TEST(rq->workModel, WORK_MODEL_TCP)) {
+		rq->meth = METH_CONNECT;
+		handleStartRequest(rq, 0);
+		return;
+	}
+#endif
+	rq->c->read(rq, resultRequestRead, bufferRequestRead);
+}
 class KSelectorManager
 {
 public:
@@ -256,8 +275,13 @@ public:
 			rq->filter_flags = 0;
 			rq->begin_time_msec = kgl_current_msec;
 			SSL_set_ex_data(socket->getSSL(), kangle_ssl_conntion_index, c);
-			//ssl accept
-			c->read(rq, resultSSLAccept, NULL);
+#ifdef ENABLE_PROXY_PROTOCOL
+			if (TEST(rq->workModel, WORK_MODEL_PROXY)) {
+				handl_proxy_request(rq);
+				return true;
+			}
+#endif
+			handle_start_request(rq,true);
 			return true;
 		}
 #endif
@@ -265,14 +289,13 @@ public:
 		c->app_data.rq = rq;
 		rq->workModel = c->ls->model;
 		rq->init(NULL);
-#ifdef WORK_MODEL_TCP
-		if (TEST(rq->workModel,WORK_MODEL_TCP)) {
-			rq->meth = METH_CONNECT;
-			handleStartRequest(rq,0);
+#ifdef ENABLE_PROXY_PROTOCOL
+		if (TEST(rq->workModel, WORK_MODEL_PROXY)) {
+			handl_proxy_request(rq);
 			return true;
 		}
 #endif
-		c->read(rq, resultRequestRead, bufferRequestRead);
+		handle_start_request(rq,false);
 		return true;
 	}
 	void setTimeOut();

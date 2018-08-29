@@ -69,7 +69,6 @@ void proxyConnect(KHttpRequest *rq)
 	KUrl *url = (TEST(rq->filter_flags,RF_PROXY_RAW_URL)?&rq->raw_url:rq->url);
 	const char *host = url->host;
 	u_short port = url->port;
-	bool isIp = false;
 	const char *ssl = NULL;
 	int life_time = 2;
 #ifdef IP_TRANSPARENT
@@ -92,7 +91,6 @@ void proxyConnect(KHttpRequest *rq)
 		} else
 #endif
 		port = ntohs(s_sockaddr.v4.sin_port);
-		isIp = true;
 	}
 #endif
 #endif
@@ -112,7 +110,7 @@ void proxyConnect(KHttpRequest *rq)
 		}
 	}
 #endif
-	KRedirect *sa = cdnContainer.refsRedirect(ip,host,port,ssl,life_time,Proto_http,isIp);
+	KRedirect *sa = cdnContainer.refsRedirect(ip,host,port,ssl,life_time,Proto_http);
 	if (sa==NULL) {
 		fo->connectCallBack(rq,NULL);
 	} else {
@@ -177,9 +175,9 @@ void request_connection_broken(void *arg,int got)
 	if (rq->fetchObj==NULL) {
 		return;
 	}
-	KAsyncFetchObject *fo = static_cast<KAsyncFetchObject *>(rq->fetchObj);
-	if (fo->client) {
-		fo->client->upstream_shutdown();
+	KUpstreamSelectable *st = rq->fetchObj->getSelectable();
+	if (st) {
+		st->upstream_shutdown();
 	}
 }
 void bufferUpstreamSendHead(void *arg,LPWSABUF buf,int &bufCount)
@@ -408,6 +406,10 @@ void KAsyncFetchObject::sendHeadSuccess(KHttpRequest *rq)
 }
 void KAsyncFetchObject::startReadHead(KHttpRequest *rq)
 {
+	if (rq->ctx->connection_upgrade) {
+		readHeadSuccess(rq);
+		return;
+	}
 	
 	client->socket->set_nodelay();
 	client->upstream_read(rq,resultUpstreamReadHead,bufferUpstreamReadHead);

@@ -96,7 +96,6 @@ void KHttpProxyFetchObject::buildHead(KHttpRequest *rq)
 	const char *meth = rq->getMethod();
 	if (meth == NULL)
 		return;
-	char ips[MAXIPLEN];
 	int via_inserted = FALSE;
 	bool x_forwarded_for_inserted = false;
 	int defaultPort = 80;
@@ -161,9 +160,7 @@ void KHttpProxyFetchObject::buildHead(KHttpRequest *rq)
 					goto do_not_insert;
 				}
 				x_forwarded_for_inserted = true;
-				s << "X-Forwarded-For: " << av->val << ",";
-				rq->c->socket->get_remote_ip(ips,sizeof(ips));
-				s << ips << "\r\n";
+				s << "X-Forwarded-For: " << av->val << "," << rq->getClientIp() << "\r\n";
 				goto do_not_insert;
 
 			}
@@ -227,8 +224,7 @@ void KHttpProxyFetchObject::buildHead(KHttpRequest *rq)
 	s << "Connection: " << connectionState << "\r\n";
 
 		if (!TEST(rq->filter_flags,RF_NO_X_FORWARDED_FOR) && !x_forwarded_for_inserted) {
-			rq->c->socket->get_remote_ip(ips,sizeof(ips));
-			s << "X-Forwarded-For: " << ips << "\r\n";
+			s << "X-Forwarded-For: " << rq->getClientIp() << "\r\n";
 		}
 		if (TEST(rq->filter_flags,RF_VIA) && !via_inserted) {
 			insert_via(rq, s, NULL);

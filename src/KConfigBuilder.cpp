@@ -119,8 +119,9 @@ void KConfigBuilder::build(std::stringstream &s) {
 			if (conf.service[i]->protocols.size()>0) {
 				s << "protocols='" << conf.service[i]->protocols << "' ";
 			}
+#ifdef ENABLE_HTTP2
 			s << "http2='" << (conf.service[i]->http2 ?"1":"0") << "' ";
-
+#endif
 		}
 #endif
 		s << "/>\n";

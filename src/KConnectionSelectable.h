@@ -37,6 +37,9 @@ public:
 		sni = NULL;
 #endif
 		pool = NULL;
+#ifdef WORK_MODEL_PROXY
+		proxy_protocol_ip = NULL;
+#endif
 	}
 
 	kgl_pool_t *get_pool()
@@ -50,21 +53,13 @@ public:
 	void resultSSLShutdown(int got);
 	query_vh_result useSniVirtualHost(KHttpRequest *rq);
 #endif
-	bool is_event(KHttpRequest *rq, uint16_t flag);
-
 	bool is_locked(KHttpRequest *rq);
-
 	int read(KHttpRequest *rq,char *buf,int len);
-
 	int write(KHttpRequest *rq,LPWSABUF buf,int bufCount);
 	bool write_all(KHttpRequest *rq, const char *buf, int len);
-
 	void delayRead(KHttpRequest *rq,resultEvent result,bufferEvent buffer,int msec);
-
 	void delayWrite(KHttpRequest *rq,resultEvent result,bufferEvent buffer,int msec);
-
 	void read(KHttpRequest *rq,resultEvent result,bufferEvent buffer);
-
 	void write(KHttpRequest *rq,resultEvent result,bufferEvent buffer);
 	void read_hup(KHttpRequest *rq,resultEvent result);
 	void shutdown(KHttpRequest *rq);
@@ -84,6 +79,9 @@ public:
 	void release(KHttpRequest *rq);
 
 	KClientSocket *socket;
+#ifdef ENABLE_PROXY_PROTOCOL
+	char *proxy_protocol_ip;
+#endif
 #ifdef ENABLE_HTTP2
 	KHttp2 *http2;
 	friend class KHttp2;

@@ -31,30 +31,14 @@ void resultSSLShutdown(void *arg,int got)
 	c->resultSSLShutdown(got);
 }
 #endif
-bool KConnectionSelectable::is_event(KHttpRequest *rq,uint16_t flag)
-{
-#ifdef ENABLE_HTTP2
-	if (rq->http2_ctx) {
-		if (TEST(flag, STF_REVENT) && rq->http2_ctx->read_wait != NULL) {
-			return true;
-		}
-		if (TEST(flag, STF_WEVENT) && rq->http2_ctx->write_wait != NULL) {
-			return true;
-		}
-		return false;
-	}
-#endif
-	flag = (flag&STF_EVENT);
-	return TEST(st_flags, flag) > 0;
-}
 bool KConnectionSelectable::is_locked(KHttpRequest *rq)
 {
 #ifdef ENABLE_HTTP2
 	if (rq->http2_ctx) {
-		if (rq->http2_ctx->read_wait != NULL) {
+		if (rq->http2_ctx->read_wait) {
 			return true;
 		}
-		if (rq->http2_ctx->write_wait != NULL && rq->http2_ctx->write_wait->buffer != NULL) {
+		if (rq->http2_ctx->write_wait && !IS_WRITE_WAIT_FOR_HUP(rq->http2_ctx->write_wait)) {
 			return true;
 		}
 		return false;

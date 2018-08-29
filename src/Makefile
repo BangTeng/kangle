@@ -166,7 +166,7 @@ am_kangle_OBJECTS = cache.$(OBJEXT) KConfig.$(OBJEXT) \
 	KGeoMark.$(OBJEXT) KLogDrill.$(OBJEXT) KQueueMark.$(OBJEXT) \
 	KAsyncFile.$(OBJEXT) KAioSelectable.$(OBJEXT) \
 	KHttpObjectSwaping.$(OBJEXT) KMapRedirectMark.$(OBJEXT) \
-	KEpollNoticeSelectable.$(OBJEXT)
+	KEpollNoticeSelectable.$(OBJEXT) KProxy.$(OBJEXT)
 kangle_OBJECTS = $(am_kangle_OBJECTS)
 kangle_LDADD = $(LDADD)
 kangle_DEPENDENCIES =
@@ -222,7 +222,7 @@ INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
 LDFLAGS = 
 LIBOBJS =  ${LIBOBJDIR}mktime$U.o
-LIBS =   -lsqlite3 -lssl -lcrypto $(EXTLIBS) -lpthread -lpcre -lz -ldl -laio
+LIBS =   -lsqlite3 -lssl -lcrypto $(EXTLIBS) -lpthread -lpcre -lz -ldl
 LTLIBOBJS =  ${LIBOBJDIR}mktime$U.lo
 MAKEINFO = ${SHELL} /home/keengo/kangle/missing --run makeinfo
 MKDIR_P = /bin/mkdir -p
@@ -230,14 +230,14 @@ OBJEXT = o
 PACKAGE = kangle
 PACKAGE_BUGREPORT = 
 PACKAGE_NAME = kangle
-PACKAGE_STRING = kangle 3.5.13.2
+PACKAGE_STRING = kangle 3.5.14
 PACKAGE_TARNAME = kangle
-PACKAGE_VERSION = 3.5.13.2
+PACKAGE_VERSION = 3.5.14
 PATH_SEPARATOR = :
 SET_MAKE = 
 SHELL = /bin/sh
 STRIP = 
-VERSION = 3.5.13.2
+VERSION = 3.5.14
 abs_builddir = /home/keengo/kangle/src
 abs_srcdir = /home/keengo/kangle/src
 abs_top_builddir = /home/keengo/kangle
@@ -538,7 +538,7 @@ KRandAcl.h KConnectionSelectable.cpp KConnectionSelectable.h KReadWriteBuffer.cp
 KUpstreamSelectable.h KUpstreamSelectable.cpp KRequestList.h KSimulateRequest.cpp  KSimulateRequest.h KMinObjVerifiedMark.h KCloudIpAcl.cpp katom.h KCondWait.h\
 KAddr.h KAddr.cpp KDechunkEngine.h KHttpEnv.h KHuffDecode.cpp KMemPool.cpp KMemPool.h KHttp2.h KHttp2.cpp KHttp2Table.cpp KHttp2WriteBuffer.h KHttp2WriteBuffer.cpp KSendBuffer.h KIpMap.cpp KIpMap.h\
 KGeoMark.cpp KLogDrill.cpp KGeoMark.h KLogDrill.h KQueueMark.h KQueueMark.cpp KAsyncFile.cpp KAsyncFile.h KAioSelectable.cpp KAioSelectable.h KHttpObjectSwaping.cpp KHttpObjectSwaping.h\
-KMapRedirectMark.cpp KMapRedirectMark.h KEpollNoticeSelectable.h KEpollNoticeSelectable.cpp
+KMapRedirectMark.cpp KMapRedirectMark.h KEpollNoticeSelectable.h KEpollNoticeSelectable.cpp KProxy.cpp KProxy.h
 
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
@@ -859,6 +859,7 @@ include ./$(DEPDIR)/KPoolableSocketContainer.Po
 include ./$(DEPDIR)/KPortSelector.Po
 include ./$(DEPDIR)/KProcess.Po
 include ./$(DEPDIR)/KProcessManage.Po
+include ./$(DEPDIR)/KProxy.Po
 include ./$(DEPDIR)/KQueueMark.Po
 include ./$(DEPDIR)/KReadWriteBuffer.Po
 include ./$(DEPDIR)/KRedirect.Po

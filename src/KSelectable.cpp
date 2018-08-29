@@ -156,7 +156,12 @@ void KSelectable::eventRead(void *arg,resultEvent result,bufferEvent buffer)
 	KClientSocket *server = static_cast<KClientSocket *>(getSocket());
 	buffer(arg,recvBuf,bufferCount);
 	assert(recvBuf[0].iov_len>0);
-	int got = server->read((char *)recvBuf[0].iov_base,recvBuf[0].iov_len);
+	int got;
+	if (isSSL()) {
+		got = server->read((char *)recvBuf[0].iov_base, recvBuf[0].iov_len);
+	} else {
+		got = server->recv((char *)recvBuf[0].iov_base, recvBuf[0].iov_len);
+	}
 	if (got>=0) {
 		result(arg,got);
 		return;
@@ -200,7 +205,12 @@ void KSelectable::eventWrite(void *arg,resultEvent result,bufferEvent buffer)
 	KClientSocket *server = static_cast<KClientSocket *>(getSocket());
 	buffer(arg,recvBuf,bufferCount);
 	assert(recvBuf[0].iov_len>0);
-	int got = server->writev(recvBuf,bufferCount,isSSL());
+	int got;
+	if (isSSL()) {
+		got = server->writev(recvBuf, bufferCount, true);
+	} else {
+		got = server->sendev(recvBuf, bufferCount);
+	}
 	//printf("write got=[%d]\n",got);
 	if (got>=0) {
 		result(arg,got);

@@ -5,6 +5,7 @@
 #include "KHttpRequest.h"
 #include "KHttpObjectParserHook.h"
 #ifdef ENABLE_HTTP2
+
 http2_buff *get_frame(uint32_t sid, size_t length, uint8_t type, u_char flags)
 {
 	http2_buff *buf = new http2_buff;
@@ -298,11 +299,11 @@ u_char *KHttp2::close(bool read,int status)
 				wait_event = stream->read_wait;
 				stream->read_wait = NULL;
 			}
-			if (stream->write_wait && stream->write_wait->buffer==NULL) {
+			if (stream->write_wait && !IS_WRITE_WAIT_FOR_PROGRESS(stream->write_wait)) {
 				stream->write_wait->next = wait_event;
 				wait_event = stream->write_wait;
 				stream->write_wait = NULL;
-			}			
+			}
 		}
 	}
 	bool destroy_flag = can_destroy();
@@ -964,7 +965,7 @@ void KHttp2::shutdown(KHttp2Context *ctx)
 }
 void KHttp2::remove_read_hup(KHttp2Context *http2_ctx)
 {
-	if (http2_ctx->write_wait && http2_ctx->write_wait->buffer==NULL) {
+	if (http2_ctx->write_wait && IS_WRITE_WAIT_FOR_HUP(http2_ctx->write_wait)) {
 		delete http2_ctx->write_wait;
 		http2_ctx->write_wait = NULL;
 	}
@@ -972,12 +973,12 @@ void KHttp2::remove_read_hup(KHttp2Context *http2_ctx)
 void KHttp2::read_hup(KHttp2Context *http2_ctx, resultEvent result, void *arg)
 {
 	assert(c->selector->is_same_thread());
-	if (http2_ctx->write_wait) {
-		if (http2_ctx->write_wait->buffer != NULL) {
-			return;
-		}
+	if (http2_ctx->write_wait && !IS_WRITE_WAIT_FOR_HUP(http2_ctx->write_wait)) {
+		//write wait is setting not for hup
+		return;
 	}
 	if (http2_ctx->read_wait) {
+		//read wait is setting
 		return;
 	}
 	if (http2_ctx->write_wait == NULL) {
@@ -988,12 +989,13 @@ void KHttp2::read_hup(KHttp2Context *http2_ctx, resultEvent result, void *arg)
 	http2_ctx->write_wait->result = result;
 	http2_ctx->write_wait->arg = arg;
 	http2_ctx->write_wait->len = -1;
+	assert(IS_WRITE_WAIT_FOR_HUP(http2_ctx->write_wait));
 }
 void KHttp2::read(KHttp2Context *http2_ctx,resultEvent result,bufferEvent buffer,void *arg)
 {
 	assert(c->selector->is_same_thread());
 	assert(http2_ctx);
-	if (http2_ctx->write_wait && http2_ctx->write_wait->buffer==NULL) {
+	if (http2_ctx->write_wait && IS_WRITE_WAIT_FOR_HUP(http2_ctx->write_wait)) {
 		//remove read_hup
 		delete http2_ctx->write_wait;
 		http2_ctx->write_wait = NULL;
@@ -1029,7 +1031,7 @@ void KHttp2::read(KHttp2Context *http2_ctx,resultEvent result,bufferEvent buffer
 void KHttp2::write(KHttp2Context *http2_ctx,resultEvent result,bufferEvent buffer,void *arg)
 {
 	if (http2_ctx->write_wait) {
-		assert(http2_ctx->write_wait->buffer == NULL);
+		assert(IS_WRITE_WAIT_FOR_HUP(http2_ctx->write_wait));
 		delete http2_ctx->write_wait;
 		http2_ctx->write_wait = NULL;
 	}
@@ -1045,11 +1047,13 @@ void KHttp2::write(KHttp2Context *http2_ctx,resultEvent result,bufferEvent buffe
 		http2_ctx->write_wait->result = result;
 		http2_ctx->write_wait->buffer = buffer;
 		http2_ctx->write_wait->len = -1;
+		assert(IS_WRITE_WAIT_FOR_WINDOW(http2_ctx->write_wait));
 		return;
 	}
 	int len = MIN((int)frame_size, http2_ctx->send_window);
 	len = MIN(len, (int)send_window);
 	http2_buff *new_buf = http2_ctx->build_write_buffer(result, buffer, arg, len);
+	assert(IS_WRITE_WAIT_FOR_PROGRESS(http2_ctx->write_wait));
 	http2_ctx->send_window -= len;
 	send_window -= len;
 	write_buffer.push(new_buf);
@@ -1105,6 +1109,8 @@ bool KHttp2::add_method(KHttp2Context *ctx, u_char meth)
 bool KHttp2::add_status(KHttp2Context *ctx, uint16_t status_code)
 {
 	u_char  status;
+	u_char buf[8];
+	u_char *hot = buf;
 	switch (status_code) {
 	case STATUS_OK:
 		status = kgl_http_v2_indexed(KGL_HTTP_V2_STATUS_200_INDEX);
@@ -1130,18 +1136,18 @@ bool KHttp2::add_status(KHttp2Context *ctx, uint16_t status_code)
 	default:
 		status = 0;
 	}
+	if (status) {
+		*hot++ = status;
+	} else {
+		*hot++ = kgl_http_v2_inc_indexed(KGL_HTTP_V2_STATUS_INDEX);
+		*hot++ = (KGL_HTTP_V2_ENCODE_RAW | 3);
+		sprintf((char *)hot, "%03u", status_code);
+		hot += 3;
+	}
 	if (ctx->send_header == NULL) {
 		ctx->send_header = new KHttp2HeaderFrame;
 	}
-	if (status) {
-		ctx->send_header->write((char *)&status, 1);
-	} else {
-		ctx->send_header->write(kgl_http_v2_inc_indexed(KGL_HTTP_V2_STATUS_INDEX));
-		ctx->send_header->write(KGL_HTTP_V2_ENCODE_RAW | 3);
-		char buf[4];
-		sprintf(buf, "%03u", status_code);
-		ctx->send_header->write(buf, 3);
-	}
+	ctx->send_header->insert((char *)buf, hot - buf);
 	return true;
 }
 bool KHttp2::add_header(KHttp2Context *ctx, know_http_header name, const char *val, hlen_t val_len)
@@ -1622,8 +1628,9 @@ u_char *KHttp2::state_priority(u_char *pos, u_char *end)
 }
 u_char *KHttp2::state_rst_stream(u_char *pos, u_char *end)
 {
-	uint32_t             status;
+	uint32_t		status;
 	KHttp2Node		*node;
+	KHttp2Context	*stream;
 	if (state.length != KGL_HTTP_V2_RST_STREAM_SIZE) {
 		klog(KLOG_WARNING, "client sent RST_STREAM frame with incorrect length %u\n",state.length);
 		return this->close(true, KGL_HTTP_V2_SIZE_ERROR);
@@ -1649,6 +1656,7 @@ u_char *KHttp2::state_rst_stream(u_char *pos, u_char *end)
 		//klog(KLOG_WARNING,"unknown http2 stream [%d]\n",state.sid);
 		return state_complete(pos, end);
 	}
+	stream = node->stream;
 
 	switch (status) {
 
@@ -1664,19 +1672,19 @@ u_char *KHttp2::state_rst_stream(u_char *pos, u_char *end)
 		klog(KLOG_INFO,	"client terminated stream %ui with status %ui",state.sid, status);
 		break;
 	}
-	kgl_http2_event *re = node->stream->read_wait;
-	node->stream->read_wait = NULL;
+	kgl_http2_event *re = stream->read_wait;
+	stream->read_wait = NULL;
 
 	kgl_http2_event *we = NULL;
-	if (node->stream->write_wait && node->stream->write_wait->buffer == NULL) {
-		we = node->stream->write_wait;
-		node->stream->write_wait = NULL;
+	if (stream->write_wait && !IS_WRITE_WAIT_FOR_PROGRESS(stream->write_wait)) {
+		we = stream->write_wait;
+		stream->write_wait = NULL;
 	}	
-	node->stream->in_closed = 1;
-	node->stream->out_closed = 1;
-	node->stream->rst = 1;
-	if (node->stream->read_buffer) {
-		node->stream->read_buffer->clean();
+	stream->in_closed = 1;
+	stream->out_closed = 1;
+	stream->rst = 1;
+	if (stream->read_buffer) {
+		stream->read_buffer->clean();
 	}
 	if (re) {
 		re->result(re->arg, -1);
@@ -1720,20 +1728,21 @@ void KHttp2::check_write_wait()
 	for (int i = 0; i < size; i++) {
 		for (node = streams_index[i]; node; node = node->index) {
 			if (send_window <= 0) {
+				//connection send_window limit
 				goto done;
 			}
 			stream = node->stream;
-			if (stream == NULL
-				|| stream->write_wait==NULL
-				|| stream->write_wait->buffer==NULL
-				|| stream->send_window <= 0
-				|| stream->write_wait->len>=0) {
+			if (stream == NULL || stream->send_window <= 0) {
+				continue;
+			}
+			if (stream->write_wait == NULL || !IS_WRITE_WAIT_FOR_WINDOW(stream->write_wait)) {
 				continue;
 			}
 			buffer_writed = true;
-			int len = MIN(frame_size, send_window);
+			int len = (int)MIN(frame_size, send_window);
 			len = MIN(len, stream->send_window);
 			http2_buff *buf = stream->build_write_buffer(stream->write_wait, len);
+			assert(IS_WRITE_WAIT_FOR_PROGRESS(stream->write_wait));
 			send_window -= len;
 			stream->send_window -= len;
 			write_buffer.push(buf);
@@ -1901,7 +1910,7 @@ u_char *KHttp2::state_window_update(u_char *pos, u_char *end)
 		}
 		stream->send_window += window;
 		kgl_http2_event *e = NULL;
-		if (stream->write_wait && stream->write_wait->len<0 && stream->write_wait->buffer) {
+		if (stream->write_wait && IS_WRITE_WAIT_FOR_WINDOW(stream->write_wait)) {
 			e = stream->write_wait;
 			stream->write_wait = NULL;
 		}
@@ -1964,9 +1973,11 @@ u_char *KHttp2::state_complete(u_char *pos,u_char *end)
 	}
 	if (state.stream && state.stream->destroy_by_http2) {
 #ifndef NDEBUG
+#ifdef ENABLE_UPSTREAM_HTTP2
 		if (!client_model) {
 			assert(state.stream->request == NULL);
 		}
+#endif
 #endif
 		delete state.stream;
 	}

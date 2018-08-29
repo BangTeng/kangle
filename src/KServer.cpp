@@ -167,8 +167,12 @@ void KServer::close() {
 		s = s->next;
 	}
 #ifdef KSOCKET_UNIX
-	if (server_selectable && *ip == '/') {
-		unlink(ip);
+	if (server_selectable) {
+		char *unix_file = get_unix_file();
+		if (unix_file) {
+			unlink(unix_file);
+			free(unix_file);
+		}
 	}
 #endif
 }
@@ -225,14 +229,12 @@ bool KServer::load_ssl()
 #endif
 void KServer::bindVirtualHost(KVirtualHost *vh,bool high)
 {
-	KVirtualHostContainer **vhc;
 	std::list<KSubVirtualHost *>::iterator it2;
 	for (it2 = vh->hosts.begin(); it2 != vh->hosts.end(); it2++) {
-		vhc = &this->vhc;
-		if (*vhc==NULL) {
-			*vhc = new KVirtualHostContainer;
+		if (vhc==NULL) {
+			vhc = new KVirtualHostContainer;
 		}
-		(*vhc)->bindVirtualHost((*it2),high?kgl_bind_high:kgl_bind_low);
+		vhc->bindVirtualHost((*it2),high?kgl_bind_high:kgl_bind_low);
 	}
 }
 void KServer::remove_static(KVirtualHost *vh)
@@ -256,16 +258,14 @@ void KServer::add_static(KVirtualHost *vh)
 void KServer::removeVirtualHost(KVirtualHost *vh)
 {
 #ifndef HTTP_PROXY
-	KVirtualHostContainer **vhc;
 	std::list<KSubVirtualHost *>::iterator it2;	
 	for (it2 = vh->hosts.begin(); it2 != vh->hosts.end(); it2++) {
-		vhc = &this->vhc;
-		if (*vhc==NULL) {
+		if (vhc==NULL) {
 			continue;
 		}
-		if ((*vhc)->unbindVirtualHost((*it2))==kgl_del_empty) {
-			delete *vhc;
-			*vhc = NULL;
+		if (vhc->unbindVirtualHost((*it2))==kgl_del_empty) {
+			delete vhc;
+			vhc = NULL;
 		}
 	}
 #endif	
@@ -291,61 +291,35 @@ void KServer::unbindAllVirtualHost()
 		vhc = NULL;
 	}
 }
-#if 0
-void KServer::addDefaultVirtualHost(KVirtualHost *vh)
+#ifdef KSOCKET_UNIX
+char *KServer::get_unix_file()
 {
-#ifdef ENABLE_BASED_IP_VH
-	ipVhc.addVirtualHost(vh);
-#endif
-#ifndef HTTP_PROXY
-	std::list<u_short>::iterator it;
-	std::list<KSubVirtualHost *>::iterator it2;
-	if (vh->ports.size()==0 && vh->binds.size()==0) {
-		for (it2 = vh->hosts.begin(); it2 != vh->hosts.end(); it2++) {
-			if(!defaultVhc.bindVirtualHost((*it2)) ) {
-				(*it2)->allSuccess = false;
-			}
+	if (!*ip) {
+		return NULL;
+	}
+	if (*ip=='/') {
+		return strdup(ip);
+	}
+	if (strncasecmp(ip,"unix:",5)==0) {
+		const char *unix_file = ip+5;
+		if (*unix_file=='/') {
+			return strdup(unix_file);
 		}
-		return;
+		return KFileName::concatDir(conf.path.c_str(),unix_file);
 	}
-	for(it=vh->ports.begin();it!=vh->ports.end();it++){
-		if(0 == (*it)){
-			for (it2 = vh->hosts.begin(); it2 != vh->hosts.end(); it2++) {
-				if(!defaultVhc.bindVirtualHost((*it2)) ) {
-					(*it2)->allSuccess = false;
-				}
-			}
-			return;
-		}
-	}
-	return;
-#endif
-}
-query_vh_result KServer::findVirtualHost(KSubVirtualHost **rq_svh,domain_t hostname)
-{
-	return defaultVhc.findVirtualHost(rq_svh,hostname);
-}
-void KServer::removeDefaultVirtualHost(KVirtualHost *vh)
-{
-#ifdef ENABLE_BASED_IP_VH
-	ipVhc.removeVirtualHost(vh);
-#endif
-#ifndef HTTP_PROXY
-	std::list<KSubVirtualHost *>::iterator it2;	
-	for (it2 = vh->hosts.begin(); it2 != vh->hosts.end(); it2++) {
-		defaultVhc.unbindVirtualHost((*it2));
-	}
-	return;
-#endif
+	return NULL;
 }
 #endif
 bool KServer::internal_open(int flag)
 {
 #ifdef KSOCKET_UNIX
-	if (ip && *ip == '/') {
+	char *unix_file = get_unix_file();
+	if (unix_file) {
 		KUnixServerSocket *unix_server = new KUnixServerSocket;
 		SET(model, WORK_MODEL_UNIX_SOCKET);
-		if (unix_server->open(ip)) {
+		bool result = unix_server->open(unix_file);
+		free(unix_file);
+		if (result) {
 			add_server_socket(unix_server);
 			return true;
 		}
@@ -353,7 +327,6 @@ bool KServer::internal_open(int flag)
 		return false;
 	}
 #endif
-
 	CLR(model, WORK_MODEL_UNIX_SOCKET);
 	SET(flag, KSOCKET_REUSEPORT);
 	bool all_result = true;

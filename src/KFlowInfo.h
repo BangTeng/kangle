@@ -68,7 +68,6 @@ public:
 	INT64 flow;
 	//»º´æµÄÁ÷Á¿
 	INT64 cache;
-	INT64 request;
 	INT64 last_flow;
 	INT64 last_time;
 };

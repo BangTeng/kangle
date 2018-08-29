@@ -144,6 +144,9 @@ bool kgl_http_v2_huff_decode(u_char *state, u_char *src, size_t len, u_char **ds
 #define KGL_HTTP_V2_CONNECTION_RECV_WINDOW      KGL_HTTP_V2_MAX_WINDOW
 #define KGL_HTTP_V2_ROOT                         (KHttp2Node *) -1
 #pragma pack(push,1)
+#define IS_WRITE_WAIT_FOR_WINDOW(we)	(we->len<0 && we->buffer!=NULL)
+#define IS_WRITE_WAIT_FOR_HUP(we)		(we->buffer==NULL)
+#define IS_WRITE_WAIT_FOR_PROGRESS(we)	(we->len>=0 && we->buffer!=NULL)
 struct http2_frame_header
 {
 	uint32_t length_type;

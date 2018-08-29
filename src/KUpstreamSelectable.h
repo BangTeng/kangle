@@ -49,7 +49,6 @@ public:
 	void isBad(BadStage stage);
 	void isGood();
 	void connect(KHttpRequest *rq,resultEvent result);
-	bool is_upstream_event(uint16_t flag);
 	bool is_upstream_locked();
 	void upstream_read(KHttpRequest *rq,resultEvent result,bufferEvent buffer);
 	void upstream_write(KHttpRequest *rq,resultEvent result,bufferEvent buffer);

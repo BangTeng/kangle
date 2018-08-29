@@ -7,7 +7,10 @@
 #include "do_config.h"
 #include "KSingleAcserver.h"
 
-
+KSingleAcserver::KSingleAcserver(KSockPoolHelper *nodes)
+{
+	sockHelper = nodes;
+}
 KSingleAcserver::KSingleAcserver() {
 	sockHelper = new KSockPoolHelper;
 }

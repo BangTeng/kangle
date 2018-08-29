@@ -298,17 +298,18 @@ void SetLastError(DWORD errorCode)
 #endif
 char *utf82charset(const char *str, size_t len, const char *charset) {
 	iconv_t cp = iconv_open(charset, "UTF-8");
-	if (cp == (iconv_t) -1)
+	if (cp == (iconv_t) -1) {
 		return NULL;
+	}
 	size_t buf_len = 2 * len + 3;
 	char *buf = (char *) malloc(buf_len);
 	char *buf_str = buf;
 	size_t ret_len;
 	memset(buf, 0, buf_len);
-#if !defined(LINUX) && !defined(OPENBSD)
-	ret_len=iconv(cp,(const char **)&str,&len,&buf_str,&buf_len);
+#ifdef _LIBICONV_VERSION
+	ret_len = iconv(cp, (const char **)&str, &len, &buf_str, &buf_len);
 #else
-	ret_len = iconv(cp, (char **) &str, &len, &buf_str, &buf_len);
+	ret_len = iconv(cp, (char **)&str, &len, &buf_str, &buf_len);
 #endif
 	iconv_close(cp);
 	char *ret_str = strdup(buf);

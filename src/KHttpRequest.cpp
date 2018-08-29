@@ -848,11 +848,11 @@ int KHttpRequest::parseHeader(const char *attr, char *val,int &val_len, bool isF
 	{
 		KHttpFieldValue field(val);
 		do {
-			if (field.is("keep-alive")) {
+			if (field.is2("keep-alive",10)) {
 				if (conf.keep_alive_count>=0) {
 					flags |= RQ_HAS_KEEP_CONNECTION;
 				}
-			} else if (field.is("upgrade")) {
+			} else if (field.is2("upgrade",7)) {
 				flags |= RQ_HAS_CONNECTION_UPGRADE;
 			}
 		} while(field.next());

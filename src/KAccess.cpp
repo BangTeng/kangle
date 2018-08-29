@@ -133,7 +133,6 @@ KAccess::KAccess() {
 	postMap = NULL;
 	string err_msg;
 	newTable(BEGIN_TABLE, err_msg);
-	check_time = 0;
 	globalFlag = false;
 	qName = "";
 	actionParsed = false;
@@ -310,6 +309,7 @@ void KAccess::loadModel() {
 	addMarkModel(REQUEST,new KReplaceIPMark());
 	addMarkModel(REQUEST,new KSelfIPMark());
 	addMarkModel(REQUEST,new KParentMark());
+	addMarkModel(REQUEST, new KAddResponseHeaderMark());
 #ifdef ENABLE_INPUT_FILTER
 	addMarkModel(REQUEST,new KParamMark());
 	addMarkModel(REQUEST,new KParamCountMark());	
@@ -529,7 +529,6 @@ bool KAccess::startElement(KXmlContext *context, std::map<std::string,
 		if (attribute["action"].size()>0) {
 			parseChainAction(attribute["action"], default_jump_type, jump_name);
 		}
-		check_time = atoi(attribute["check_time"].c_str());
 	}
 	if (context->getParentName() == qName && context->qName == "table") {
 		assert(curTable==NULL);
@@ -607,9 +606,6 @@ void KAccess::buildXML(std::stringstream &s, int flag) {
 	}
 	s << "\t<" << qName;
 	buildChainAction(default_jump_type, default_jump, s);
-	if (check_time>0) {
-		s << " check_time='" << check_time << "'";
-	}
 	s << ">\n";
 	std::map<std::string,KTable *>::iterator it;
 	for (it = tables.begin(); it != tables.end(); it++) {

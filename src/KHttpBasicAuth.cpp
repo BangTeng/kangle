@@ -33,14 +33,12 @@ void KHttpBasicAuth::insertHeader(KHttpRequest *rq)
 		s << "Basic realm=\"" << realm  << "\"";
 		const char *auth_header = this->get_auth_header();
 		rq->responseHeader(auth_header, (hlen_t)strlen(auth_header) , s.getBuf(), s.getSize());
-		insertExtraHeader(rq);
 	}
 }
 void KHttpBasicAuth::insertHeader(KWStream &s)
 {
 	if (realm) {
 		s << this->get_auth_header() << ": Basic realm=\"" << realm  << "\"\r\n";
-		insertExtraHeader(s);
 	}
 }
 bool KHttpBasicAuth::parse(KHttpRequest *rq, const char *str) {

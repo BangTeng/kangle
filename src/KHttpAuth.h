@@ -62,7 +62,6 @@ public:
 		this->type = type;
 		user = NULL;
 		realm = NULL;
-		add_header = NULL;
 		auth_header = AUTH_HEADER_AUTO;
 	}
 	virtual ~KHttpAuth();
@@ -79,18 +78,12 @@ public:
 	}
 	virtual void insertHeader(KWStream &s) = 0;
 	virtual void insertHeader(KHttpRequest *rq) = 0;
-	void insertExtraHeader(KWStream &s);
-	void insertExtraHeader(KHttpRequest *rq);
 	virtual bool parse(KHttpRequest *rq, const char *str) = 0;
 	virtual bool verify(KHttpRequest *rq, const char *password,
 			int passwordType) = 0;
 	virtual bool verifySession(KHttpRequest *rq)
 	{
 		return true;
-	}
-	void set_header(KHttpHeader *add_header) {
-		free_header(this->add_header);
-		this->add_header = add_header;
 	}
 	void set_auth_header(uint16_t auth_header)
 	{
@@ -111,7 +104,6 @@ protected:
 	}
 	char *user;
 	char *realm;
-	KHttpHeader *add_header;
 private:
 	uint16_t type;
 	uint16_t auth_header;

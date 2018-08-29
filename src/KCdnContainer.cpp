@@ -25,7 +25,7 @@ KCdnContainer::KCdnContainer()
 KCdnContainer::~KCdnContainer()
 {
 }
-KRedirect *KCdnContainer::refsRedirect(const char *ip, const char *host, int port, const char *ssl, int life_time, Proto_t proto, bool isIp)
+KRedirect *KCdnContainer::refsRedirect(const char *ip, const char *host, int port, const char *ssl, int life_time, Proto_t proto)
 {
 	KStringBuf s;
 	s << "s://";
@@ -93,9 +93,14 @@ KRedirect *KCdnContainer::refsRedirect(const char *name)
 		return rd;
 	}
 	char *buf = strdup(name);
-	KMultiAcserver *server = new KMultiAcserver();
+	KSockPoolHelper *nodes = NULL;
+	Proto_t proto = Proto_http;
+	bool ip_hash = false;
+	bool url_hash = false;
+	bool cookie_stick = false;
 	int max_error_count = 3;
 	int error_try_time = 0;
+	const char *icp = NULL;
 	char *hot = buf;
 	for (;;) {
 		char *p = strchr(hot, '/');
@@ -108,20 +113,22 @@ KRedirect *KCdnContainer::refsRedirect(const char *name)
 			*eq = '\0';
 			char *val = eq + 1;
 			if (strcasecmp(hot, "proto") == 0) {
-				server->proto = KPoolableRedirect::parseProto(val);
+				proto = KPoolableRedirect::parseProto(val);
 			} else if (strcasecmp(hot, "ip_hash") == 0) {
-				server->ip_hash = atoi(val)>0;
+				ip_hash = atoi(val) > 0;
 			} else if(strcasecmp(hot,"url_hash")==0) {
-				server->url_hash = atoi(val)>0;
+				url_hash = atoi(val)>0;
 			} else if (strcasecmp(hot, "cookie_stick") == 0) {
-				server->cookie_stick = atoi(val)>0;
+				cookie_stick = atoi(val)>0;
 			} else if (strcasecmp(hot, "error_try_time") == 0) {
 				error_try_time = atoi(val);
 				
 			} else if (strcasecmp(hot, "error_count") == 0) {
 				max_error_count = atoi(val);
 			} else if (strcasecmp(hot, "nodes") == 0) {
-				server->parseNode(val);
+				if (nodes == NULL) {
+					nodes = KPoolableRedirect::parse_nodes(val);
+				}
 			}
 		}
 		if (p == NULL) {
@@ -129,19 +136,38 @@ KRedirect *KCdnContainer::refsRedirect(const char *name)
 		}
 		hot = p + 1;
 	}
-	server->setErrorTryTime(max_error_count,error_try_time);
+	if (nodes != NULL) {
+		if (nodes->next 
+			
+			) {
+			KMultiAcserver *server = new KMultiAcserver(nodes);
+			
+			server->setErrorTryTime(max_error_count,error_try_time);
+			server->proto = proto;
+			server->ip_hash = ip_hash;
+			server->url_hash = url_hash;
+			server->cookie_stick = cookie_stick;
+			rd = server;
+		} else {
+			KSingleAcserver *server = new KSingleAcserver(nodes);
+			server->proto = proto;
+			rd = server;
+		}
+	}
 	free(buf);
-	KRedirectNode *rn = new KRedirectNode;
-	rn->name = strdup(name);
-	rn->rd = server;
-	addRedirect(rn);
-	server->addRef();
+	if (rd != NULL) {
+		KRedirectNode *rn = new KRedirectNode;
+		rn->name = strdup(name);
+		rn->rd = rd;
+		addRedirect(rn);
+		rd->addRef();
+	}
 	lock.Unlock();
-	return server;
+	return rd;
 }
-KFetchObject *KCdnContainer::get(const char *ip,const char *host,int port,const char *ssl,int life_time,Proto_t proto,bool isIp)
+KFetchObject *KCdnContainer::get(const char *ip,const char *host,int port,const char *ssl,int life_time,Proto_t proto)
 {
-	KRedirect *server = refsRedirect(ip,host,port,ssl,life_time,proto,isIp);
+	KRedirect *server = refsRedirect(ip,host,port,ssl,life_time,proto);
 	KBaseRedirect *brd = new KBaseRedirect(server,false);
 	KFetchObject *fo = new KHttpProxyFetchObject();
 	fo->bindBaseRedirect(brd);

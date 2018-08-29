@@ -28,7 +28,7 @@
 #include "malloc_debug.h"
 #include "KFileName.h"
 class KFetchObject;
-
+class KSockPoolHelper;
 class KPoolableRedirect: public KRedirect {
 public:
 	Proto_t proto;
@@ -42,11 +42,10 @@ public:
 	}
 	virtual bool isChanged(KPoolableRedirect *rd)
 	{
-		if (this->proto != rd->proto) {
-			return true;
-		}
-		return false;
+		return this->proto != rd->proto;
 	}
+	static void build_proto_html(KPoolableRedirect *m_a, std::stringstream &s);
+	static KSockPoolHelper *parse_nodes(const char *node_string);
 	static const char *buildProto(Proto_t proto) {
 		switch (proto) {
 		case Proto_http:
@@ -65,6 +64,10 @@ public:
 			return "spdy";
 		case Proto_tcp:
 			return "tcp";
+#ifdef ENABLE_PROXY_PROTOCOL
+		case Proto_proxy:
+			return "proxy";
+#endif
 		}
 		return "unknow";
 	}
@@ -87,6 +90,11 @@ public:
 		if (strcasecmp(proto, "tcp") == 0) {
 			return Proto_tcp;
 		}
+#ifdef ENABLE_PROXY_PROTOCOL
+		if (strcasecmp(proto, "proxy") == 0) {
+			return Proto_proxy;
+		}
+#endif
 		return Proto_http;
 	}
 };

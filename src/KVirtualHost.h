@@ -403,9 +403,10 @@ private:
 #endif
 public:
 #ifdef ENABLE_USER_ACCESS
+	bool access_file_loaded;
 	bool loadAccess(KVirtualHost *vh=NULL);
-	time_t lastModified;
-	time_t lastLoad;
+	//time_t lastModified;
+	//time_t lastLoad;
 #endif
 };
 

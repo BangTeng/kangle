@@ -38,7 +38,7 @@ bool KCgiEnv::addEnv(const char *env) {
 	m_env.push_back(xstrdup(env));
 	return true;
 }
-char **KCgiEnv::getEnv() {
+char **KCgiEnv::dump_env() {
 	return env;
 }
 bool KCgiEnv::addEnvEnd() 

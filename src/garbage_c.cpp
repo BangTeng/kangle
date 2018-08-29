@@ -58,8 +58,7 @@
 #include "KTimer.h"
 void list_all_malloc();
 using namespace std;
-volatile bool configReload = false;
-volatile bool cur_config_ext = false;
+
 bool dump_memory_object = false;
 volatile int stop_service_sig = 0;
 string get_service_to_name(int port);
@@ -183,10 +182,10 @@ FUNC_TYPE FUNC_CALL time_thread(void* arg) {
 
 		cdnContainer.flush(kgl_current_sec);
 		if(vhd.isLoad() && !vhd.isSuccss()){
-			klog(KLOG_NOTICE,"vh database last status is failed.try again.\n");
+			klog(KLOG_ERR,"vh database last status is failed.try again.\n");
 			std::string errMsg;
 			if(!vhd.loadVirtualHost(conf.gvm,errMsg)){
-				klog(KLOG_ERR,"load virtual host failed. %s\n",errMsg.c_str());
+				klog(KLOG_ERR, "Cann't load VirtualHost[%s]\n", errMsg.c_str());
 			}
 		}
 #ifdef ENABLE_DISK_CACHE

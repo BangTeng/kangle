@@ -21,9 +21,9 @@ class KCdnContainer
 public:
 	KCdnContainer();
 	~KCdnContainer();
-	KFetchObject *get(const char *ip,const char *host,int port,const char *ssl,int life_time,Proto_t proto=Proto_http,bool isIp=false);
+	KFetchObject *get(const char *ip,const char *host,int port,const char *ssl,int life_time,Proto_t proto=Proto_http);
 	KFetchObject *get(const char *name);
-	KRedirect *refsRedirect(const char *ip,const char *host,int port,const char *ssl,int life_time,Proto_t proto,bool isIp=false);
+	KRedirect *refsRedirect(const char *ip,const char *host,int port,const char *ssl,int life_time,Proto_t proto);
 	KRedirect *refsRedirect(const char *val);
 	KMultiAcserver *refsMultiServer(const char *name);
 	void flush(time_t nowTime);

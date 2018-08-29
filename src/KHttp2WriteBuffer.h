@@ -109,9 +109,22 @@ public:
 			int chunk_len = len;
 			char *buf = alloc_buffer(chunk_len);
 			len -= chunk_len;
-			memcpy(buf, str, chunk_len);			
+			memcpy(buf, str, chunk_len);
 			str += chunk_len;
 		}
+	}
+	void insert(const char *str, int len)
+	{
+		if (head == NULL) {
+			write(str, len);
+			return;
+		}
+		http2_buff *buf = new http2_buff;
+		buf->data = (char *)malloc(len);
+		buf->used = len;
+		memcpy(buf->data, str, len);
+		buf->next = head;
+		head = buf;
 	}
 private:
 	char *alloc_buffer(int &len)

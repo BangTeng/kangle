@@ -1538,6 +1538,13 @@ int KVirtualHostManage::getCount()
 	lock.Unlock();
 	return count;
 }
+void KVirtualHostManage::get_listen_whm(WhmContext *ctx)
+{
+	lock.Lock();
+	dlisten.get_listen_whm(ctx);
+	lock.Unlock();
+	return;
+}
 void KVirtualHostManage::getListenHtml(std::stringstream &s)
 {
 	lock.Lock();

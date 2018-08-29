@@ -36,7 +36,7 @@ void KDynamicListen::add_dynamic(const char *listen,KVirtualHost *vh)
 				server->load_ssl();
 			}
 #endif
-			
+			(*it2).set_work_model(server);
 			server->dynamic = true;
 			listens.insert(std::pair<KListenKey,KServer *>((*it2),server));
 			initListen((*it2),server);
@@ -57,7 +57,7 @@ void KDynamicListen::add_dynamic(const char *listen,KVirtualHost *vh)
 				initListen((*it2),server);
 			}
 #endif
-			
+			(*it2).set_work_model(server);
 			server->dynamic = true;
 		}
 		server->bindVirtualHost(vh,true);
@@ -152,14 +152,13 @@ bool KDynamicListen::add_static(KListenHost *listen)
 				server->load_ssl();
 			}
 #endif
+			(*it2).set_work_model(server);
 			listens.insert(std::pair<KListenKey, KServer *>((*it2), server));
 			initListen((*it2), server);
-			if (server->started) {
-				conf.gvm->add_static(server);
-			}
+			conf.gvm->add_static(server);
 		} else {
 			server = (*it).second;
-			if (!server->static_flag && server->started) {
+			if (!server->static_flag) {
 				conf.gvm->add_static(server);
 			}
 			server->static_flag = true;
@@ -179,13 +178,13 @@ bool KDynamicListen::add_static(KListenHost *listen)
 				initListen((*it2), server);
 			}
 #endif
+			(*it2).set_work_model(server);
 		}
 	}
 	return true;
 }
 KServer *KDynamicListen::refsServer(u_short port)
 {
-	//KServer *server = NULL;
 	std::map<KListenKey,KServer *>::iterator it;
 	for (it=listens.begin();it!=listens.end();it++) {
 		if ((*it).first.port==port) {
@@ -228,12 +227,7 @@ void KDynamicListen::parseListen(const char *listen,std::list<KListenKey> &lks)
 		*p = '\0';
 		p++;
 		KListenKey lk;
-		lk.port = atoi(p);
-		lk.ssl = false;
-		if (strchr(p,'s')) {
-			lk.ssl = true;
-		}
-		
+		parse_port(p, &lk);
 		if (strcmp(buf,"*")==0) {
 			lk.ip = DEFAULT_IPV4_IP;
 			lk.ipv4 = true;
@@ -281,9 +275,8 @@ void KDynamicListen::getListenKey(KListenHost *lh,bool ipv4,std::list<KListenKey
 		if (p) {
 			*p++ = '\0';
 		}
-		int port = atoi(hot);
-		if (port>=0) {
-			getListenKey(lh,atoi(hot),ipv4,lk);
+		if (IS_DIGIT(*hot)) {
+			getListenKey(lh, hot, ipv4, lk);
 		}
 		if (p==NULL) {
 			break;
@@ -292,12 +285,12 @@ void KDynamicListen::getListenKey(KListenHost *lh,bool ipv4,std::list<KListenKey
 	}
 	free(buf);
 }
-void KDynamicListen::getListenKey(KListenHost *lh,int port,bool ipv4,std::list<KListenKey> &lk)
+void KDynamicListen::getListenKey(KListenHost *lh,const char *port,bool ipv4,std::list<KListenKey> &lk)
 {
 	KListenKey key;
-	key.port = port;
 	key.ssl = TEST(lh->model,WORK_MODEL_SSL)>0;
 	key.ipv4 = ipv4;
+	parse_port(port, &key);
 	if (lh->ip=="*") {
 		if (ipv4) {
 			key.ip = DEFAULT_IPV4_IP;
@@ -325,17 +318,30 @@ void KDynamicListen::addStaticVirtualHost(KVirtualHost *vh)
 	std::map<KListenKey,KServer *>::iterator it;
 	for (it=listens.begin();it!=listens.end();it++) {
 		KServer *server = (*it).second;
-		if (server->is_opened() && server->static_flag) {
+		if (server->static_flag) {
 			server->add_static(vh);
 		}
 	}
+}
+void KDynamicListen::parse_port(const char *p, KListenKey *lk)
+{
+	lk->port = atoi(p);
+	if (strchr(p, 's')) {
+		lk->ssl = true;
+	}
+	
+#ifdef WORK_MODEL_PROXY
+	if (strchr(p, 'P')) {
+		lk->proxy = true;
+	}
+#endif
 }
 void KDynamicListen::removeStaticVirtualHost(KVirtualHost *vh)
 {
 	std::map<KListenKey,KServer *>::iterator it;
 	for (it=listens.begin();it!=listens.end();it++) {
 		KServer *server = (*it).second;
-		if (server->is_opened() && server->static_flag) {
+		if (server->static_flag) {
 			server->removeVirtualHost(vh);
 		}
 	}
@@ -360,6 +366,43 @@ void KDynamicListen::close()
 		}
 	}
 }
+void KDynamicListen::get_listen_whm(WhmContext *ctx)
+{
+	std::map<KListenKey, KServer *>::iterator it;
+	for (it = listens.begin(); it != listens.end(); it++) {
+		KServer *server = (*it).second;
+		if (server->started) {
+			bool unix_socket = (*server->ip == '/');
+			std::stringstream s;
+			s << "<ip>" << server->ip << "</ip>";
+			s << "<port>" << (unix_socket ? 0 : server->port) << "</port>";
+#ifdef WORK_MODEL_PROXY
+			if (TEST(server->model, WORK_MODEL_PROXY)) {
+				s << "<proxy>1</proxy>";
+			}
+#endif
+#ifdef WORK_MODEL_TPROXY
+			if (TEST(server->model, WORK_MODEL_TPROXY)) {
+				s << "<tproxy>1</tproxy>";
+			}
+#endif
+			s << "<service>" << getWorkModelName(server->model) << "</service>";
+			s << "<tcp_ip>";
+			if (unix_socket) {
+				s << "unix";
+			} else if (server->server_selectable) {
+				s << server->server_selectable->server_socket->getIpVer();
+			}
+			s << "</tcp_ip>";
+			s << "<static>" << (server->static_flag?1:0) << "</static>";
+			s << "<dynamic>" << (server->dynamic?1:0) << "</dynamic>";
+			s << "<empty>" << (server->isEmpty() ? 1 : 0) << "</empty>";
+			s << "<multi_bind>" << (server->is_multi_selectale() ? 1 : 0) << "</multi_bind>";
+			s << "<refs>" << server->getRef() << "</refs>";
+			ctx->add("listen", s.str().c_str(), false);
+		}
+	}
+}
 void KDynamicListen::getListenHtml(std::stringstream &s)
 {
 	std::map<KListenKey,KServer *>::iterator it;
@@ -369,7 +412,18 @@ void KDynamicListen::getListenHtml(std::stringstream &s)
 			bool unix_socket = (*server->ip=='/');
 			s << "<tr>";			
 			s << "<td>" << server->ip << "</td>";
-			s << "<td>" << (unix_socket?0:server->port) << "</td>";
+			s << "<td>" << (unix_socket ? 0 : server->port);
+#ifdef WORK_MODEL_PROXY
+			if (TEST(server->model, WORK_MODEL_PROXY)) {
+				s << "P";
+			}
+#endif
+#ifdef WORK_MODEL_TPROXY
+			if (TEST(server->model, WORK_MODEL_TPROXY)) {
+				s << "p";
+			}
+#endif
+			s << "</td>";
 			s << "<td>" << getWorkModelName(server->model) << "</td>";
 			s << "<td>" ;
 			if (unix_socket) {
@@ -397,3 +451,4 @@ void KDynamicListen::getListenHtml(std::stringstream &s)
 		}
 	}
 }
+

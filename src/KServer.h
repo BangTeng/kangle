@@ -68,8 +68,10 @@ public:
 	bool remove_static_flag;
 	//是否已经开始
 	bool started;
-#ifdef KSOCKET_SSL
+#ifdef ENABLE_HTTP2
 	bool http2;
+#endif
+#ifdef KSOCKET_SSL
 	std::string certificate;
 	std::string certificate_key;
 	std::string cipher;
@@ -100,6 +102,9 @@ public:
 	void bindVirtualHost(KVirtualHost *vh,bool high);
 	void unbindAllVirtualHost();
 private:
+#ifdef KSOCKET_UNIX
+	char *get_unix_file();
+#endif
 	static int failedTries;
 	bool internal_open(int flag);
 	void add_server_socket(KServerSocket *socket);

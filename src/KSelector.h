@@ -52,29 +52,18 @@ enum WriteState {
 #define STATE_RECV     3
 #define STATE_QUEUE    4
 
-FUNC_TYPE FUNC_CALL manageWorkThread(void *param);
-FUNC_TYPE FUNC_CALL httpWorkThread(void *param);
-FUNC_TYPE FUNC_CALL httpsWorkThread(void *param);
-FUNC_TYPE FUNC_CALL oneWorkoneThread(void *param);
+
 
 FUNC_TYPE FUNC_CALL stage_sync(void *param);
-FUNC_TYPE FUNC_CALL stage_rdata(void *param);
-#ifdef _WIN32
-FUNC_TYPE FUNC_CALL stageRequest(void *param) ;
-#endif
 class KSelectable;
 class KServer;
 class KServerSelectable;
 class KHttpRequest;
 class KAsyncFile;
 void stage_prepare(KHttpRequest *rq);
-void handleAccept(KSelectable *st,int got);
-//void handleRequestRead(KSelectable *st,int got);
-void resultRequestRead(void *arg,int got);
-void bufferRequestRead(void *arg,LPWSABUF buf,int &bufCount);
 
-void handleRequestWrite(KSelectable *st,int got);
-void handleRequestTempFileWrite(KSelectable *st,int got);
+void resultRequestRead(void *arg,int got);
+void bufferRequestRead(void *arg, iovec *buf, int &bufCount);
 void handleStartRequest(KHttpRequest *rq,int got);
 
 void log_access(KHttpRequest *rq);
@@ -145,7 +134,6 @@ protected:
 	void remove_list(KSelectable *st);
 	void add_list(KSelectable *rq, int list);
 	int model;
-	void internelAddRequest(KHttpRequest *rq);
 #ifdef MALLOCDEBUG
 	bool can_close()
 	{

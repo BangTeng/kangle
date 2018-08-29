@@ -166,7 +166,7 @@ am_kangle_OBJECTS = cache.$(OBJEXT) KConfig.$(OBJEXT) \
 	KGeoMark.$(OBJEXT) KLogDrill.$(OBJEXT) KQueueMark.$(OBJEXT) \
 	KAsyncFile.$(OBJEXT) KAioSelectable.$(OBJEXT) \
 	KHttpObjectSwaping.$(OBJEXT) KMapRedirectMark.$(OBJEXT) \
-	KEpollNoticeSelectable.$(OBJEXT)
+	KEpollNoticeSelectable.$(OBJEXT) KProxy.$(OBJEXT)
 kangle_OBJECTS = $(am_kangle_OBJECTS)
 kangle_LDADD = $(LDADD)
 kangle_DEPENDENCIES =
@@ -538,7 +538,7 @@ KRandAcl.h KConnectionSelectable.cpp KConnectionSelectable.h KReadWriteBuffer.cp
 KUpstreamSelectable.h KUpstreamSelectable.cpp KRequestList.h KSimulateRequest.cpp  KSimulateRequest.h KMinObjVerifiedMark.h KCloudIpAcl.cpp katom.h KCondWait.h\
 KAddr.h KAddr.cpp KDechunkEngine.h KHttpEnv.h KHuffDecode.cpp KMemPool.cpp KMemPool.h KHttp2.h KHttp2.cpp KHttp2Table.cpp KHttp2WriteBuffer.h KHttp2WriteBuffer.cpp KSendBuffer.h KIpMap.cpp KIpMap.h\
 KGeoMark.cpp KLogDrill.cpp KGeoMark.h KLogDrill.h KQueueMark.h KQueueMark.cpp KAsyncFile.cpp KAsyncFile.h KAioSelectable.cpp KAioSelectable.h KHttpObjectSwaping.cpp KHttpObjectSwaping.h\
-KMapRedirectMark.cpp KMapRedirectMark.h KEpollNoticeSelectable.h KEpollNoticeSelectable.cpp
+KMapRedirectMark.cpp KMapRedirectMark.h KEpollNoticeSelectable.h KEpollNoticeSelectable.cpp KProxy.cpp KProxy.h
 
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
@@ -859,6 +859,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/KPortSelector.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/KProcess.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/KProcessManage.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/KProxy.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/KQueueMark.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/KReadWriteBuffer.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/KRedirect.Po@am__quote@

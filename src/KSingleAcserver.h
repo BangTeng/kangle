@@ -14,6 +14,7 @@
 class KSingleAcserver: public KPoolableRedirect {
 public:
 	KSingleAcserver();
+	KSingleAcserver(KSockPoolHelper *nodes);
 	virtual ~KSingleAcserver();
 	void connect(KHttpRequest *rq);
 	unsigned getPoolSize() {

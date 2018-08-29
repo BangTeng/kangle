@@ -107,9 +107,7 @@ public:
 			std::map<std::string, std::string> &attribute);
 	bool startCharacter(KXmlContext *context, char *character, int len);
 	bool endElement(KXmlContext *context);
-	void buildXML(std::stringstream &s, int flag);
-	//检查access.xml文件更新时间
-	int check_time;
+	void buildXML(std::stringstream &s, int flag);	
 public:
 	const char *qName;
 	u_short type;

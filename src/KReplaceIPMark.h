@@ -15,9 +15,20 @@ public:
 			delete val;
 		}
 	}
-	bool mark(KHttpRequest *rq, KHttpObject *obj,
-					const int chainJumpType, int &jumpType)
+	bool mark(KHttpRequest *rq, KHttpObject *obj,const int chainJumpType, int &jumpType)
 	{
+		if (header.empty()) {
+#ifdef ENABLE_PROXY_PROTOCOL
+			if (rq->c->proxy_protocol_ip) {
+				if (rq->client_ip) {
+					free(rq->client_ip);
+				}
+				rq->client_ip = strdup(rq->c->proxy_protocol_ip);
+				return true;
+			}
+#endif
+			return false;
+		}
 		KHttpHeader *h = rq->parser.headers;
 		KHttpHeader *prev = NULL;
 		while (h) {
@@ -57,7 +68,7 @@ public:
 			prev = h;
 			h = h->next;
 		}
-		return true;
+		return false;
 	}
 	KMark *newInstance()
 	{
@@ -134,8 +145,7 @@ public:
 			}
 		}
 	}
-	bool mark(KHttpRequest *rq, KHttpObject *obj,
-					const int chainJumpType, int &jumpType)
+	bool mark(KHttpRequest *rq, KHttpObject *obj,const int chainJumpType, int &jumpType)
 	{
 		KHttpHeader *h = rq->parser.removeHeader("x-real-ip-sign");
 		if (h == NULL) {

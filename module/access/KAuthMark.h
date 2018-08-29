@@ -34,7 +34,6 @@ public:
 	virtual ~KAuthMark();
 	bool mark(KHttpRequest *rq, KHttpObject *obj,
 				const int chainJumpType, int &jumpType);
-	//bool match(KHttpRequest *rq, KHttpObject *obj);
 	KMark *newInstance();
 	const char *getName();
 	std::string getHtml(KModel *model);
@@ -52,7 +51,6 @@ private:
 	int cryptType;
 	int auth_type;
 	char *realm;
-	char *header;
 	KMutex lock;
 	std::map<std::string,std::string> users;
 	KReg *reg_user;

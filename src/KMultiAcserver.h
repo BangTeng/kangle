@@ -29,6 +29,7 @@
 class KMultiAcserver: public KPoolableRedirect {
 public:
 	KMultiAcserver();
+	KMultiAcserver(KSockPoolHelper *nodes);
 	virtual ~KMultiAcserver();
 public:
 	void connect(KHttpRequest *rq);
@@ -59,6 +60,7 @@ public:
 	int max_error_count;
 private:
 	void removeAllNode();
+	void init();
 	bool addNode(std::map<std::string, std::string> &attr);
 	bool addNode(std::map<std::string, std::string> &attr, char *self_ip);
 	void addNode(KSockPoolHelper *sockHelper);

@@ -221,10 +221,6 @@ bool KVirtualHostDatabase::parseAttribute(std::map<std::string,std::string> &att
 	}
 	result = true;
 	lock.Unlock();
-	std::string errMsg;
-	if(!vhd.loadVirtualHost(conf.gvm,errMsg)){
-		klog(KLOG_ERR,"load virtual host failed. %s\n",errMsg.c_str());
-	}
 	return result;
 }
 KVirtualHost *KVirtualHostDatabase::newVirtualHost(void *cn,std::map<std::string,std::string> &attribute,KVirtualHostManage *vm,KVirtualHost *ov)

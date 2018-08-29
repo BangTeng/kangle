@@ -11,6 +11,8 @@
 </call>
 <call name='list_gtvh' extend='core'>
 </call>
+<call name='list_listen' extend='core'>
+</call>
 <call name='info_vh' extend='core'>
 </call>
 <call name='info_domain' extend='core'>
@@ -18,6 +20,8 @@
 <call name='reload' extend='core'>
 </call>
 <call name='reload_vh' extend='core'>
+</call>
+<call name='reload_vh_access' extend='core'>
 </call>
 <call name='add_index' extend='core'>
 </call>

@@ -144,30 +144,14 @@ void KUpstreamSelectable::upstream_write(KHttpRequest *rq,resultEvent result,buf
 	
 	async_write(rq,result,buffer);
 }
-bool KUpstreamSelectable::is_upstream_event(uint16_t flag)
-{
-#ifdef ENABLE_UPSTREAM_HTTP2
-	if (http2_ctx) {
-		if (TEST(flag, STF_REVENT) && http2_ctx->read_wait != NULL) {
-			return true;
-		}
-		if (TEST(flag, STF_WEVENT) && http2_ctx->write_wait != NULL) {
-			return true;
-		}
-		return false;
-	}
-#endif
-	flag = (flag & STF_EVENT);
-	return TEST(st_flags, flag) > 0;
-}
 bool KUpstreamSelectable::is_upstream_locked()
 {
 #ifdef ENABLE_UPSTREAM_HTTP2
 	if (http2_ctx) {
-		if (http2_ctx->read_wait != NULL) {
+		if (http2_ctx->read_wait) {
 			return true;
-}
-		if (http2_ctx->write_wait != NULL && http2_ctx->write_wait->buffer != NULL) {
+		}
+		if (http2_ctx->write_wait && !IS_WRITE_WAIT_FOR_HUP(http2_ctx->write_wait)) {
 			return true;
 		}
 		return false;

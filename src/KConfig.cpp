@@ -51,12 +51,17 @@
 #include "KHtAccess.h"
 #include "KLogHandle.h"
 #include "cache.h"
+#include "katom.h"
+#include "KThreadPool.h"
 #ifdef _WIN32
 #include <direct.h>
 #else
 #include <sys/mman.h>
 #endif
 bool need_reboot_flag = false;
+volatile bool cur_config_ext = false;
+static volatile int32_t load_config_progress = 0;
+volatile bool configReload = false;
 using namespace std;
 KConfig *cconf = NULL;
 KGlobalConfig conf;
@@ -523,27 +528,6 @@ void load_main_config(KConfig *cconf,KXml &xmlParser,bool firstload)
 	} catch (KXmlException &e) {
 		fprintf(stderr, "%s\n", e.what());
 	}
-#ifndef HTTP_PROXY
-	//·ÏÆú
-	configFile = conf.path;
-	configFile += VH_CONFIG_FILE;
-	cur_config_vh_db = false;
-	try {
-		xmlParser.parseFile(configFile);
-	} catch (...) {
-	}
-	if (vhd.isLoad()) {
-		string errMsg;
-		if (!vhd.loadVirtualHost(cconf->vm,errMsg)) {
-			klog(KLOG_ERR, "Cann't load VirtualHost[%s]\n", errMsg.c_str());
-			//db server failed.then skip delete exsit vh
-			//lock.Unlock();
-			cur_config_vh_db = false;
-			return;
-		}
-	}
-	cur_config_vh_db = false;
-#endif
 }
 void clean_config() {
 	kaccess[REQUEST].destroy();
@@ -558,13 +542,14 @@ void clean_config() {
 #endif
 	contentType.destroy();
 }
-void do_config(bool firstTime) {
+FUNC_TYPE FUNC_CALL do_config_thread(void *first_time)
+{
 	cur_config_ext = false;
-	if (firstTime) {
+	if (first_time!=NULL) {
 #ifdef _WIN32
 		_setmaxstdio(2048);
-#endif	
-		for (int i=0;i<2;i++) {
+#endif
+		for (int i = 0; i<2; i++) {
 			kaccess[i].setType(i);
 			kaccess[i].setGlobal(true);
 		}
@@ -572,28 +557,32 @@ void do_config(bool firstTime) {
 	} else {
 		vhd.clear();
 	}
-	assert(cconf==NULL);
+	assert(cconf == NULL);
 	cconf = new KConfig;
 	init_config(cconf);
-	load_config(cconf,firstTime);
+	load_config(cconf, first_time!=NULL);
 	conf.copy(cconf);
-	if (!firstTime) {
+	if (first_time==NULL) {
 		parse_config(false);
 	}
 	delete cconf;
 	cconf = NULL;
-#ifdef MCL_FUTURE
-	if (firstTime && conf.mlock) {
-		if (0 != mlockall(MCL_CURRENT | MCL_FUTURE)) {
-			klog(KLOG_ERR, "Unable to mlockall\n");
-		} else {
-			klog(KLOG_NOTICE, "mlockall success\n");
-		}
-	}
-#endif
+	katom_set((void *)&load_config_progress, 0);
+	KTHREAD_RETURN;
 }
-void do_config_clean() {
-
+void do_config(bool first_time) {
+	if (!katom_cas((void *)&load_config_progress, 0, 1)) {
+		assert(!first_time);
+		return;
+	}
+	if (first_time) {
+		//first time load must not use thread
+		do_config_thread((void *)&first_time);
+		return;
+	}
+	if (!m_thread.start(NULL, do_config_thread, true)) {
+		katom_set((void *)&load_config_progress, 0);
+	}
 }
 int merge_apache_config(const char *filename)
 {
@@ -681,6 +670,15 @@ void load_config(KConfig *cconf,bool firstTime)
 		load_main_config(cconf,xmlParser,firstTime);
 	}
 	
+#ifndef HTTP_PROXY
+	cur_config_vh_db = false;
+	if (vhd.isLoad()) {
+		string errMsg;
+		if (!vhd.loadVirtualHost(cconf->vm, errMsg)) {
+			klog(KLOG_ERR, "Cann't load VirtualHost[%s]\n", errMsg.c_str());
+		}
+	}
+#endif
 	if (!firstTime) {
 		conf.gam->copy(am);
 		writeBackManager.copy(wm);
@@ -689,10 +687,6 @@ void load_config(KConfig *cconf,bool firstTime)
 			//access[i].setChainAction();
 			kaccess[i].copy(access[i]);
 		}
-	} else {
-		//for (int i = 0; i < 2; i++) {
-		//	kaccess[i].setChainAction();
-		//}
 	}
 	// load serial
 	string serial_file = conf.path;

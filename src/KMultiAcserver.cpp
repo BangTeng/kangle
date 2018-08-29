@@ -29,7 +29,8 @@
 #include "KConfig.h"
 using namespace std;
 #ifdef ENABLE_MULTI_SERVER
-KMultiAcserver::KMultiAcserver() {
+void KMultiAcserver::init()
+{
 	nodes = NULL;
 	nodesCount = 0;
 	ip_hash = false;
@@ -39,7 +40,22 @@ KMultiAcserver::KMultiAcserver() {
 	max_error_count = 5;
 	
 }
-KMultiAcserver::~KMultiAcserver() {
+KMultiAcserver::KMultiAcserver()
+{
+	init();
+}
+KMultiAcserver::KMultiAcserver(KSockPoolHelper *nodes)
+{
+	init();
+	while (nodes) {
+		KSockPoolHelper *next = nodes->next;
+		addNode(nodes);
+		nodes = next;
+	}
+	buildVNode();
+}
+KMultiAcserver::~KMultiAcserver()
+{
 	removeAllNode();
 	
 }
@@ -463,40 +479,7 @@ void KMultiAcserver::getHtml(std::stringstream &s) {
 }
 void KMultiAcserver::baseHtml(KMultiAcserver *mserver,std::stringstream &s)
 {
-#ifndef HTTP_PROXY
-	s << klang["protocol"] << ":";
-	s << "<input type='radio' name='proto' value='http' ";
-	if (mserver==NULL || mserver->proto==Proto_http) {
-		s << "checked";
-	}
-	s << ">http <input type='radio' name='proto' value='fastcgi' ";
-	if(mserver && mserver->proto==Proto_fcgi){
-		s << "checked";
-	}
-	s << ">fastcgi ";
-	s << "<input type='radio' value='ajp' name='proto' ";
-	if(mserver && mserver->proto==Proto_ajp){
-		s << "checked";
-	}
-	s << ">ajp";
-	s << "<input type='radio' value='uwsgi' name='proto' ";
-	if(mserver && mserver->proto==Proto_uwsgi){
-		s << "checked";
-	}
-	s << ">uwsgi";
-	s << "<input type='radio' value='scgi' name='proto' ";
-		if(mserver && mserver->proto==Proto_scgi){
-		s << "checked";
-	}
-	s << ">scgi";
-	s << "<input type='radio' value='hmux' name='proto' ";
-	if(mserver && mserver->proto==Proto_hmux){
-		s << "checked";
-	}
-	s << ">hmux";
-	
-	s << "<br>";
-#endif
+	KPoolableRedirect::build_proto_html(mserver, s);
 	s << "<input type='checkbox' name='ip_hash' value='1' ";
 	if (mserver && mserver->ip_hash) {
 		s << "checked";
@@ -535,60 +518,17 @@ std::string KMultiAcserver::form(KMultiAcserver *mserver)
 }
 void KMultiAcserver::parseNode(const char *nodeString)
 {
-	char *buf = strdup(nodeString);
+	KSockPoolHelper *nodes = KPoolableRedirect::parse_nodes(nodeString);
 	lock.Lock();
 	removeAllNode();
-	char *hot = buf;
-	while (*hot) {
-		char *p = strchr(hot,',');
-		if (p) {
-			*p = '\0';
-		}
-		char *port = NULL;
-		if (*hot=='[') {
-			hot ++;
-			port = strchr(hot,']');
-			if (port) {
-				*port = '\0';
-				port++;
-				port = strchr(port,':');
-			}
-		} else {
-			port = strchr(hot,':');
-		}
-		if (port) {
-			*port = '\0';
-			port ++;
-			KSockPoolHelper *sockHelper = new KSockPoolHelper;
-			sockHelper->setHostPort(hot, port);
-			char *lifeTime = strchr(port,':');
-			if (lifeTime) {
-				*lifeTime='\0';
-				lifeTime++;
-				sockHelper->setLifeTime(atoi(lifeTime));
-				char *weight = strchr(lifeTime,':');
-				if (weight) {
-					*weight = '\0';
-					weight ++;
-					sockHelper->weight = atoi(weight);
-					char *ip = strchr(weight, ':');
-					if (ip) {
-						*ip = '\0';
-						ip++;
-						sockHelper->setIp(ip);
-					}
-				}
-			}
-			addNode(sockHelper);
-		}
-		if (p==NULL) {
-			break;
-		}
-		hot = p+1;
+	while (nodes) {
+		KSockPoolHelper *next = nodes->next;
+		addNode(nodes);
+		nodes = next;
 	}
 	buildVNode();
 	lock.Unlock();
-	free(buf);
+
 }
 void KMultiAcserver::setErrorTryTime(int max_error_count,int errorTryTime)
 {

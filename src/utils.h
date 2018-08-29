@@ -194,19 +194,15 @@ inline void string2lower2(char *str) {
 	}
 }
 inline const char *getWorkModelName(int model) {
+#ifdef WORK_MODEL_PROXY
+	CLR(model, WORK_MODEL_PROXY);
+#endif
+#ifdef WORK_MODEL_TPROXY
+	CLR(model, WORK_MODEL_TPROXY);
+#endif
 	if (model == 0) {
 		return "http";
 	}
-#ifdef IP_TRANSPARENT
-#ifdef ENABLE_TPROXY
-	if (TEST(model,WORK_MODEL_TPROXY|WORK_MODEL_TCP)== (WORK_MODEL_TPROXY | WORK_MODEL_TCP)) {
-		return "tcp-tproxy";
-	}
-	if (TEST(model,WORK_MODEL_TPROXY)) {
-		return "http-tproxy";
-	}
-#endif
-#endif
 	if (model == (WORK_MODEL_SSL | WORK_MODEL_MANAGE)) {
 		return "manages";
 	}
@@ -220,21 +216,8 @@ inline const char *getWorkModelName(int model) {
 #endif
 	return "manage";
 }
-inline bool parseWorkModel(const char * type, int &model) {
+inline bool parseWorkModel(const char *type, int &model) {
 	model = 0;
-#ifdef IP_TRANSPARENT
-#ifdef ENABLE_TPROXY
-	if (strcasecmp(type,"http-tproxy") == 0) {
-		SET(model,WORK_MODEL_TPROXY);
-		return true;
-	}
-	if (strcasecmp(type,"tcp-tproxy") == 0) {
-		SET(model,WORK_MODEL_TPROXY|WORK_MODEL_TCP);
-		return true;
-	}
-
-#endif
-#endif
 	if (strcasecmp(type, "https") == 0) {
 		SET(model,WORK_MODEL_SSL);
 	} else if (strcasecmp(type, "manage") == 0) {

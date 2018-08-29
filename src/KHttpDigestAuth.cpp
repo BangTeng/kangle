@@ -306,7 +306,6 @@ void KHttpDigestAuth::insertHeader(KHttpRequest *rq)
 	s << ", nonce=\"" << nonce << "\"";
 	const char *auth_header = this->get_auth_header();
 	rq->responseHeader(auth_header, (hlen_t)strlen(auth_header), s.getBuf(), s.getSize());
-	insertExtraHeader(rq);
 }
 void KHttpDigestAuth::insertHeader(KWStream &s) {
 	if (realm == NULL || nonce == NULL) {
@@ -317,7 +316,6 @@ void KHttpDigestAuth::insertHeader(KWStream &s) {
 	s << ", qop=\"auth\"";
 	s << ", nonce=\"" << nonce << "\"";
 	s << "\r\n";
-	insertExtraHeader(s);
 }
 void KHttpDigestAuth::flushSession(time_t nowTime) {
 	map<char *, KHttpDigestSession *,lessp>::iterator it, it2;

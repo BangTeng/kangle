@@ -220,14 +220,17 @@ int KHttpObjectParserHook::parseHeader(const char *attr, char *val,int &val_len,
 		return PARSE_HEADER_NO_INSERT;
 	}
 	if (!strcasecmp(attr, "Connection")) {
-		if (!strncasecmp(val, "keep-alive", 10)) {
-			rq->ctx->upstream_connection_keep_alive = true;
-		} else if (!strncasecmp(val, "close", 5)) {
-			rq->ctx->upstream_connection_keep_alive = false;
-		} else if (TEST(rq->flags,RQ_HAS_CONNECTION_UPGRADE) && !strncasecmp(val,"upgrade",7)) {
-			rq->ctx->connection_upgrade = true;
-			rq->ctx->upstream_connection_keep_alive = false;
-		}
+		KHttpFieldValue field(val);
+		do {
+			if (field.is2("keep-alive", 10)) {
+				rq->ctx->upstream_connection_keep_alive = true;
+			} else if (field.is2("close", 5)) {
+				rq->ctx->upstream_connection_keep_alive = false;
+			} else if (TEST(rq->flags, RQ_HAS_CONNECTION_UPGRADE) && field.is2("upgrade",7)) {
+				rq->ctx->connection_upgrade = true;
+				rq->ctx->upstream_connection_keep_alive = false;
+			}
+		} while (field.next());
 		return PARSE_HEADER_NO_INSERT;
 	}
 	if (*attr=='x' || *attr=='X') {

@@ -25,6 +25,7 @@ public:
 	void getMenuHtml(std::stringstream &s,KVirtualHost *vh,std::stringstream &url,int t);
 	void getHtml(std::stringstream &s,std::string vh_name,int id, KUrlValue &attribute);
 	void getListenHtml(std::stringstream &s);
+	void get_listen_whm(WhmContext *ctx);
 	void build(std::stringstream &s);
 	bool saveConfig(std::string &errMsg);
 	bool vhAction(KVirtualHost *ov,KTempleteVirtualHost *tm,KUrlValue &attribute, std::string &errMsg);

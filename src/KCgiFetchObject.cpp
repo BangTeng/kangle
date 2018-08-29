@@ -216,7 +216,7 @@ void KCgiFetchObject::process(KHttpRequest *rq)
 	if(!cmdModel) {
 		make_http_env(rq,brd, rq->ctx->lastModified, rq->file, &env);
 	}
-	if(!StartInteractiveClientProcess (token,rd->cmd,arg.getString(),&stream,RDSTD_ALL,env.getEnv())) {
+	if(!StartInteractiveClientProcess (token,rd->cmd,arg.getString(),&stream,RDSTD_ALL,env.dump_env())) {
 #ifdef ENABLE_VH_RUN_AS		
 		rq->svh->vh->closeToken(token);
 #endif

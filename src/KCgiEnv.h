@@ -41,7 +41,7 @@ public:
 	bool addEnv(const char *attr, const char *val);
 	bool addEnv(const char *env);
 	bool addEnvEnd();
-	char **getEnv();
+	char **dump_env();
 private:
 	std::list<char *> m_env;
 	char **env;

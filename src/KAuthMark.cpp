@@ -128,7 +128,6 @@ KAuthMark::KAuthMark() {
 	failed_deny = true;
 	file_sign = false;
 	lastLoad = 0;
-	header = NULL;
 }
 
 KAuthMark::~KAuthMark() {
@@ -177,18 +176,6 @@ bool KAuthMark::mark(KHttpRequest *rq, KHttpObject *obj,
 	}
 	jumpType = JUMP_DENY;
 	SET(rq->filter_flags,RQ_SEND_AUTH);
-	KStringBuf header_msg;
-	lock.Lock();
-	if (header) {
-		header_msg << header << "\r\n\r\n";
-	}
-	lock.Unlock();
-	if (header_msg.getSize()>0) {
-		KHttpProtocolParser parser;
-		parser.parse(header_msg.getBuf(),header_msg.getSize(),NULL);
-		KHttpHeader *add_header = parser.stealHeaders(NULL);
-		rq->auth->set_header(add_header);
-	}
 	return true;
 
 }
@@ -320,16 +307,6 @@ std::string KAuthMark::getHtml(KModel *model) {
 		s << "checked";
 	}
 	s << ">file_sign";
-	s << "<br>header:<textarea name='header'>";
-	if (header!=NULL) {
-		int len = strlen(header);
-		char *encode_header = KXml::htmlEncode(header,len,NULL);
-		if (encode_header) {
-			s << encode_header;
-			free(encode_header);
-		}
-	}
-	s << "</textarea>";
 	return s.str();
 }
 std::string KAuthMark::getRequireUsers()
@@ -387,13 +364,6 @@ void KAuthMark::editHtml(std::map<std::string, std::string> &attribute)
 	auth_type = KHttpAuth::parseType(attribute["auth_type"].c_str());
 	failed_deny = (attribute["failed_deny"]=="1");
 	file_sign = (attribute["file_sign"]=="1");
-	if (header) {
-		free(header);
-		header = NULL;
-	}
-	if (attribute["header"].size()>0) {
-		header = strdup(attribute["header"].c_str());
-	}
 	if(realm){
 		xfree(realm);
 		realm = NULL;
@@ -449,14 +419,6 @@ void KAuthMark::buildXML(std::stringstream &s) {
 	s << " failed_deny='" << (failed_deny?1:0) << "'";
 	if (file_sign) {
 		s << " file_sign='1'";
-	}
-	if (header!=NULL) {
-		int len = strlen(header);
-		char *encode_header = KXml::htmlEncode(header,len,NULL);
-		if (encode_header) {
-			s << " header='" << encode_header << "'";
-			free(encode_header);
-		}
 	}
 	s << ">";
 

@@ -35,4 +35,4 @@ default user is admin, password is kangle.
 
 Kangle is released under the terms of the GPL license.
 
-See COPYING for more information or see http://de.wikipedia.org/wiki/GNU_General_Public_License
+See COPYING for more information or see https://en.wikipedia.org/wiki/GNU_General_Public_License

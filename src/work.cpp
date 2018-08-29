@@ -144,6 +144,20 @@ void stageUnlockedEndRequest(void *arg,int got)
 	}
 	rq->c->read(rq, resultRequestRead, bufferRequestRead);
 }
+bool is_request_locked(KHttpRequest *rq)
+{
+	//client/upstream must be non-lock
+	if (rq->c->is_locked(rq)) {
+		return true;
+	}
+	if (rq->fetchObj) {
+		KUpstreamSelectable *st = rq->fetchObj->getSelectable();
+		if (st) {
+			return st->is_upstream_locked();
+		}
+	}
+	return false;
+}
 void stageEndRequest(KHttpRequest *rq)
 {
 #ifndef _WIN32	
@@ -153,18 +167,18 @@ void stageEndRequest(KHttpRequest *rq)
 #endif
 	if (rq->fetchObj && rq->ctx->connection_upgrade) {
 		if (rq->c->is_locked(rq)) {
-			static_cast<KAsyncFetchObject *>(rq->fetchObj)->shutdown(rq);
+			rq->c->shutdown(rq);
 			return;
 		}
 		KUpstreamSelectable *st = rq->fetchObj->getSelectable();
 		if (st && st->is_upstream_locked()) {
-			static_cast<KAsyncFetchObject *>(rq->fetchObj)->shutdown(rq);
+			st->upstream_shutdown();
 			return;
 		}
 	}
+	assert(!is_request_locked(rq));
 
 	if (!TEST(rq->flags,RQ_CONNECTION_CLOSE) && rq->sr) {
-		//
 		rq->c->selector->next(resultEndSubRequest,rq);
 		return;
 	}
@@ -181,7 +195,6 @@ void stageEndRequest(KHttpRequest *rq)
 	}
 #endif
 	rq->c->remove_read_hup(rq);
-	assert(!rq->c->is_event(rq, STF_EVENT));
 	stageUnlockedEndRequest(rq, 0);
 }
 

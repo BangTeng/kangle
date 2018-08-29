@@ -3,12 +3,35 @@
 #include <sys/eventfd.h>
 #include <sys/epoll.h>
 #include <assert.h>
+#include <sys/syscall.h>
 #include "KAioSelectable.h"
 #include "KAsyncFile.h"
 #include "KMemPool.h"
 #include "KHttpRequest.h"
 #include "KEpollSelector.h"
 #define NUM_EVENTS 128
+int io_setup(u_int nr_reqs, aio_context_t *ctx)
+{
+    return syscall(SYS_io_setup, nr_reqs, ctx);
+}
+
+
+int io_destroy(aio_context_t ctx)
+{
+    return syscall(SYS_io_destroy, ctx);
+}
+
+
+int io_getevents(aio_context_t ctx, long min_nr, long nr, struct io_event *events,
+    struct timespec *tmo)
+{
+    return syscall(SYS_io_getevents, ctx, min_nr, nr, events, tmo);
+}
+int io_submit(aio_context_t ctx, long n, struct iocb **paiocb)
+{
+    return syscall(SYS_io_submit, ctx, n, paiocb);
+}
+
 void resultAioEvent(void *arg,int got)
 {
 	KAioSelectable *ast = (KAioSelectable *)arg;
@@ -82,7 +105,7 @@ void KAioSelectable::event()
 		if (r > 0) {
 			for (j = 0; j < r; ++j) {
 				KAsyncFile *ctx = (KAsyncFile *)events[j].data;
-				aio_result(ctx,events[j].obj, events[j].res, events[j].res2);
+				aio_result(ctx,(iocb *)events[j].obj, events[j].res, events[j].res2);
 				//((io_callback_t)(events[j].data))(aio_ctx, events[j].obj, events[j].res, events[j].res2);
 			}
 			i += r;
@@ -120,13 +143,22 @@ bool KAioSelectable::read(KAsyncFile *ctx,char *buf,INT64 offset,int length,aio_
 	 }
 	 //*/
 	 struct iocb *iocb = &ctx->iocb;
-	 io_prep_pread(iocb, ctx->fp->getHandle(), buf, length2,offset2);
-	 io_set_eventfd(iocb, fd);
-	 iocb->data = ctx;
+
+	memset(iocb, 0, sizeof(*iocb));
+	iocb->aio_fildes = ctx->fp->getHandle();
+	iocb->aio_lio_opcode = IOCB_CMD_PREAD;
+	iocb->aio_reqprio = 0;
+	iocb->aio_buf = (__u64)(uintptr_t)buf;
+	iocb->aio_nbytes = length2;
+	iocb->aio_offset = offset2;
+	iocb->aio_flags = IOCB_FLAG_RESFD;
+	iocb->aio_resfd = fd;
+	 iocb->aio_data = (__u64)(uintptr_t)ctx;
 	 //printf("read set iocb=[%p]\n",iocb);
 	 if (io_submit(aio_ctx, 1, &iocb)==1) {
 		 return true;
 	 }
+	 perror("io_submit read");
 	 katom_dec((void *)&kgl_aio_count);
 	 return false;
 }
@@ -144,12 +176,25 @@ bool KAioSelectable::write(KAsyncFile *ctx,char *buf,INT64 offset,int length,aio
 	assert(offset == kgl_align(offset,kgl_aio_align_size));
 	assert(buf == (char *)kgl_align_ptr(buf,kgl_aio_align_size));
 	 struct iocb *iocb = &ctx->iocb;
-	 io_prep_pwrite(iocb, ctx->fp->getHandle(), buf, length2,offset);
-	 io_set_eventfd(iocb, fd);
-	 iocb->data = ctx;
+
+	 memset(iocb, 0, sizeof(*iocb));
+        iocb->aio_fildes = ctx->fp->getHandle();
+        iocb->aio_lio_opcode = IOCB_CMD_PWRITE;
+        iocb->aio_reqprio = 0;
+        iocb->aio_buf = (__u64)(uintptr_t)buf;
+        iocb->aio_nbytes = length2;
+        iocb->aio_offset = offset;
+        iocb->aio_flags = IOCB_FLAG_RESFD;
+        iocb->aio_resfd = fd;
+         iocb->aio_data = (__u64)(uintptr_t)ctx;
+
+	 //io_prep_pwrite(iocb, ctx->fp->getHandle(), buf, length2,offset);
+	// io_set_eventfd(iocb, fd);
+	 //iocb->data = ctx;
 	 if (io_submit(aio_ctx, 1, &iocb)==1) {
 		 return true;
 	 }
+	 perror("io_submit write");
 	 katom_dec((void *)&kgl_aio_count);
 	 return false;
 }

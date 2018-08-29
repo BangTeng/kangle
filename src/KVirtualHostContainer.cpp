@@ -275,9 +275,13 @@ bool KVirtualHostContainer::add(domain_t name,bool wide,kgl_bind_level level,voi
 			}
 			KBindVirtualHost *last = *l;
 			while (last && last->next) {
+				//assert no double bind
+				assert(last->svh != svh);
 				last = last->next;
 			}
 			if (last) {
+				//assert no double bind
+				assert(last->svh != svh);
 				last->next = bl;
 			} else {
 				*l = bl;

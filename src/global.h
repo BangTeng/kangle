@@ -41,7 +41,7 @@
 #endif
 #endif
 #ifndef VERSION
-#define VERSION         "3.5.13.2"
+#define VERSION         "3.5.14"
 #endif
 #define VER_ID   VERSION
 #ifndef MAX
@@ -82,6 +82,9 @@
 #define WORK_MODEL_SSL       (1<<2)
 #define WORK_MODEL_INTERNAL  (1<<3)
 #define WORK_MODEL_REPLACE   (1<<5)
+#ifdef ENABLE_PROXY_PROTOCOL
+#define WORK_MODEL_PROXY     (1<<6)
+#endif
 #define WORK_MODEL_TPROXY    (1<<7)
 
 #define WORK_MODEL_SIMULATE  (1<<9)
@@ -337,7 +340,7 @@
 #define X_REAL_IP_SIGN             "x-real-ip-sign"
 #define VARY_URL_KEY               1
 enum Proto_t {
-	Proto_http, Proto_fcgi, Proto_ajp,Proto_uwsgi,Proto_scgi,Proto_hmux,Proto_spdy,Proto_tcp
+	Proto_http, Proto_fcgi, Proto_ajp,Proto_uwsgi,Proto_scgi,Proto_hmux,Proto_spdy,Proto_tcp,Proto_proxy
 };
 /**
 * 

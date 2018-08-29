@@ -8,7 +8,6 @@
 #include "google/heap-checker.h"
 #endif
 #ifdef KSOCKET_SSL
-
 static KMutex *ssl_lock = NULL;
 int kangle_ssl_conntion_index;
 int kangle_ssl_ctx_index;
@@ -21,12 +20,14 @@ typedef struct {
 #define KGL_SSL_TLSv1    0x0008
 #define KGL_SSL_TLSv1_1  0x0010
 #define KGL_SSL_TLSv1_2  0x0020
+#define KGL_SSL_TLSv1_3  0x0040
 static kgl_string_bitmask_t  kgl_ssl_protocols[] = {
 	{ kgl_string("SSLv2"), KGL_SSL_SSLv2 },
 	{ kgl_string("SSLv3"), KGL_SSL_SSLv3 },
 	{ kgl_string("TLSv1"), KGL_SSL_TLSv1 },
 	{ kgl_string("TLSv1.1"), KGL_SSL_TLSv1_1 },
 	{ kgl_string("TLSv1.2"), KGL_SSL_TLSv1_2 },
+	{ kgl_string("TLSv1.3"), KGL_SSL_TLSv1_3 },
 	{ kgl_null_string, 0 }
 };
 #ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
@@ -109,9 +110,7 @@ RSA * kgl_ssl_rsa512_key_callback(SSL *ssl_conn, int is_export,int key_length)
 	if (key_length != 512) {
 		return NULL;
 	}
-
-#ifndef OPENSSL_NO_DEPRECATED
-
+#if (OPENSSL_VERSION_NUMBER < 0x10100003L && !defined OPENSSL_NO_DEPRECATED)
 	if (key == NULL) {
 		key = RSA_generate_key(512, RSA_F4, NULL, NULL);
 	}
@@ -120,59 +119,6 @@ RSA * kgl_ssl_rsa512_key_callback(SSL *ssl_conn, int is_export,int key_length)
 
 	return key;
 }
-
-
-bool kgl_ssl_dhparam(SSL_CTX *ctx)
-{
-	DH   *dh;
-	//BIO  *bio;
-
-	/*
-	* -----BEGIN DH PARAMETERS-----
-	* MIGHAoGBALu8LcrYRnSQfEP89YDpz9vZWKP1aLQtSwju1OsPs1BMbAMCducQgAxc
-	* y7qokiYUxb7spWWl/fHSh6K8BJvmd4Bg6RqSp1fjBI9osHb302zI8pul34HcLKcl
-	* 7OZicMyaUDXYzs7vnqAnSmOrHlj6/UmI0PZdFGdX2gcd8EXP4WubAgEC
-	* -----END DH PARAMETERS-----
-	*/
-
-	static unsigned char dh1024_p[] = {
-		0xBB, 0xBC, 0x2D, 0xCA, 0xD8, 0x46, 0x74, 0x90, 0x7C, 0x43, 0xFC, 0xF5,
-		0x80, 0xE9, 0xCF, 0xDB, 0xD9, 0x58, 0xA3, 0xF5, 0x68, 0xB4, 0x2D, 0x4B,
-		0x08, 0xEE, 0xD4, 0xEB, 0x0F, 0xB3, 0x50, 0x4C, 0x6C, 0x03, 0x02, 0x76,
-		0xE7, 0x10, 0x80, 0x0C, 0x5C, 0xCB, 0xBA, 0xA8, 0x92, 0x26, 0x14, 0xC5,
-		0xBE, 0xEC, 0xA5, 0x65, 0xA5, 0xFD, 0xF1, 0xD2, 0x87, 0xA2, 0xBC, 0x04,
-		0x9B, 0xE6, 0x77, 0x80, 0x60, 0xE9, 0x1A, 0x92, 0xA7, 0x57, 0xE3, 0x04,
-		0x8F, 0x68, 0xB0, 0x76, 0xF7, 0xD3, 0x6C, 0xC8, 0xF2, 0x9B, 0xA5, 0xDF,
-		0x81, 0xDC, 0x2C, 0xA7, 0x25, 0xEC, 0xE6, 0x62, 0x70, 0xCC, 0x9A, 0x50,
-		0x35, 0xD8, 0xCE, 0xCE, 0xEF, 0x9E, 0xA0, 0x27, 0x4A, 0x63, 0xAB, 0x1E,
-		0x58, 0xFA, 0xFD, 0x49, 0x88, 0xD0, 0xF6, 0x5D, 0x14, 0x67, 0x57, 0xDA,
-		0x07, 0x1D, 0xF0, 0x45, 0xCF, 0xE1, 0x6B, 0x9B
-	};
-
-	static unsigned char dh1024_g[] = { 0x02 };
-
-
-
-
-		dh = DH_new();
-		if (dh == NULL) {
-		
-			return false;
-		}
-
-		dh->p = BN_bin2bn(dh1024_p, sizeof(dh1024_p), NULL);
-		dh->g = BN_bin2bn(dh1024_g, sizeof(dh1024_g), NULL);
-
-		if (dh->p == NULL || dh->g == NULL) {
-			
-			DH_free(dh);
-			return false;
-		}
-		SSL_CTX_set_tmp_dh(ctx, dh);
-		DH_free(dh);
-		return true;
-}
-
 
 bool kgl_ssl_ecdh_curve(SSL_CTX *ctx,const char *name)
 {
@@ -271,28 +217,23 @@ bool kgl_ssl_session_id_context(SSL_CTX *ssl_ctx, const char *cert_file)
 	int                   n, i;
 //	X509                 *cert;
 	X509_NAME            *name;
-	EVP_MD_CTX            md;
+	EVP_MD_CTX            *md;
 	unsigned int          len;
 	STACK_OF(X509_NAME)  *list;
 	u_char                buf[EVP_MAX_MD_SIZE];
 	KFile fp;
-	/*
-	* Session ID context is set based on the string provided,
-	* the server certificate, and the client CA list.
-	*/
-
-	EVP_MD_CTX_init(&md);
-
-	if (EVP_DigestInit_ex(&md, EVP_sha1(), NULL) == 0) {
+	md = EVP_MD_CTX_create();
+	if (md == NULL) {
+		return false;
+	}
+	if (EVP_DigestInit_ex(md, EVP_sha1(), NULL) == 0) {
 		klog(KLOG_ERR,"EVP_DigestInit_ex() failed");
 		goto failed;
 	}
-
-	if (EVP_DigestUpdate(&md, cert_file, strlen(cert_file)) == 0) {
+	if (EVP_DigestUpdate(md, cert_file, strlen(cert_file)) == 0) {
 		klog(KLOG_ERR,"EVP_DigestUpdate() failed");
 		goto failed;
 	}
-	
 	if (fp.open(cert_file, fileRead)) {
 		char buffer[512];
 		int total_read = 0;
@@ -302,7 +243,7 @@ bool kgl_ssl_session_id_context(SSL_CTX *ssl_ctx, const char *cert_file)
 				break;
 			}
 			total_read += read_len;
-			if (EVP_DigestUpdate(&md, buffer, read_len) == 0) {
+			if (EVP_DigestUpdate(md, buffer, read_len) == 0) {
 				klog(KLOG_ERR,"EVP_DigestUpdate() failed");
 				break;
 			}
@@ -322,30 +263,25 @@ bool kgl_ssl_session_id_context(SSL_CTX *ssl_ctx, const char *cert_file)
 				goto failed;
 			}
 
-			if (EVP_DigestUpdate(&md, buf, len) == 0) {
+			if (EVP_DigestUpdate(md, buf, len) == 0) {
 				klog(KLOG_ERR,"EVP_DigestUpdate() failed");
 				goto failed;
 			}
 		}
 	}
 
-	if (EVP_DigestFinal_ex(&md, buf, &len) == 0) {
+	if (EVP_DigestFinal_ex(md, buf, &len) == 0) {
 		klog(KLOG_ERR,"EVP_DigestUpdate() failed");
 		goto failed;
 	}
-
-	EVP_MD_CTX_cleanup(&md);
-
+	EVP_MD_CTX_destroy(md);
 	if (SSL_CTX_set_session_id_context(ssl_ctx, buf, len) == 0) {
 		klog(KLOG_ERR,"SSL_CTX_set_session_id_context() failed");
 		return false;
 	}
 	return true;
-
 failed:
-
-	EVP_MD_CTX_cleanup(&md);
-
+	EVP_MD_CTX_destroy(md);
 	return false;
 }
 
@@ -566,7 +502,7 @@ SSL_CTX * KSSLSocket::init_ctx(bool server) {
 #endif
 	SSL_CTX_set_read_ahead(ctx, 0);
 	//SSL_CTX_set_mode(ctx,SSL_MODE_ENABLE_PARTIAL_WRITE);
-#ifndef LIBRESSL_VERSION_NUMBER
+#if (OPENSSL_VERSION_NUMBER < 0x10100001L && !defined LIBRESSL_VERSION_NUMBER)
 	SSL_CTX_set_tmp_rsa_callback(ctx, kgl_ssl_rsa512_key_callback);
 #endif
 	//disable SSLV2
@@ -666,27 +602,33 @@ void KSSLSocket::set_ssl_protocols(SSL_CTX *ctx, const char *protocols)
 		hot = p;
 	}
 	xfree(buf);
-	if (mask > 0) {
-		if (!(mask & KGL_SSL_SSLv2)) {
-			SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv2);
-		}
-		if (!(mask & KGL_SSL_SSLv3)) {
-			SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv3);
-		}
-		if (!(mask & KGL_SSL_TLSv1)) {
-			SSL_CTX_set_options(ctx, SSL_OP_NO_TLSv1);
-		}
+	if (!(mask & KGL_SSL_SSLv2)) {
+		SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv2);
+	}
+	if (!(mask & KGL_SSL_SSLv3)) {
+		SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv3);
+	}
+	if (!(mask & KGL_SSL_TLSv1)) {
+		SSL_CTX_set_options(ctx, SSL_OP_NO_TLSv1);
+	}
 #ifdef SSL_OP_NO_TLSv1_1
-		if (!(mask & KGL_SSL_TLSv1_1)) {
-			SSL_CTX_set_options(ctx, SSL_OP_NO_TLSv1_1);
-		}
+	SSL_CTX_clear_options(ctx, SSL_OP_NO_TLSv1_1);
+	if (!(mask & KGL_SSL_TLSv1_1)) {
+		SSL_CTX_set_options(ctx, SSL_OP_NO_TLSv1_1);
+	}
 #endif
 #ifdef SSL_OP_NO_TLSv1_2
-		if (!(mask & KGL_SSL_TLSv1_2)) {
-			SSL_CTX_set_options(ctx, SSL_OP_NO_TLSv1_2);
-		}
+	SSL_CTX_clear_options(ctx, SSL_OP_NO_TLSv1_2);
+	if (!(mask & KGL_SSL_TLSv1_2)) {
+		SSL_CTX_set_options(ctx, SSL_OP_NO_TLSv1_2);
+	}
 #endif
-	}	
+#ifdef SSL_OP_NO_TLSv1_3
+	SSL_CTX_clear_options(ctx, SSL_OP_NO_TLSv1_3);
+	if (!(mask & KGL_SSL_TLSv1_3)) {
+		SSL_CTX_set_options(ctx, SSL_OP_NO_TLSv1_3);
+	}
+#endif
 }
 ssl_status KSSLSocket::ssl_shutdown()
 {
@@ -740,9 +682,13 @@ ssl_status KSSLSocket::handshake() {
 			return ret_error;
 		}
 	}
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#ifdef SSL3_FLAGS_NO_RENEGOTIATE_CIPHERS
 	if (ssl->s3) {
 		ssl->s3->flags |= SSL3_FLAGS_NO_RENEGOTIATE_CIPHERS;
 	}
+#endif
+#endif
 	return ret_ok;
 }
 bool KSSLSocket::ssl_connect() {

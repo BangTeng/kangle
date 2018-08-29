@@ -303,17 +303,13 @@ bool KHttpServerParser::endElement(KXmlContext *context) {
 			result = vm->updateTempleteVirtualHost(cur_tvh);
 		} else {
 			if (virtualHost->user_access=="-") {
-				//如果是内置的访问控制，则要设置一下lastLoad,否则还会从老的复制一份访问控制。
-				virtualHost->lastLoad = 1;
-				//for (int i=0;i<2;i++) {
-				//	virtualHost->access[i].setChainAction();
-				//}
+				//如果是内置的访问控制，则要设置一下已经加载,否则还会从老的复制一份访问控制。
+				virtualHost->access_file_loaded = true;
 			}
 			result = vm->updateVirtualHost(virtualHost);
 		}
 		if (!result) {
-			fprintf(stderr, "vh name=[%s] add failed\n",
-					virtualHost->name.c_str());
+			fprintf(stderr, "vh name=[%s] add failed\n",virtualHost->name.c_str());
 			delete virtualHost;
 		}
 		virtualHost = NULL;
@@ -321,9 +317,7 @@ bool KHttpServerParser::endElement(KXmlContext *context) {
 	}
 	return true;
 }
-bool KHttpServerParser::buildBaseVirtualHost(
-		std::map<std::string, std::string> *attribute, KBaseVirtualHost *bv) {
-
+bool KHttpServerParser::buildBaseVirtualHost(std::map<std::string, std::string> *attribute, KBaseVirtualHost *bv) {
 	if (attribute == NULL) {
 		return false;
 	}

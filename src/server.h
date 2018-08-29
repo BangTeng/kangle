@@ -26,7 +26,6 @@ void clean_process(int pid);
 void init_safe_process();
 extern int m_pid;
 extern int m_ppid;
-extern volatile bool configReload;
 extern bool dump_memory_object;
 extern volatile bool cur_config_ext;
 extern volatile bool cur_config_vh_db;

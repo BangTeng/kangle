@@ -1400,7 +1400,9 @@ bool KHttpManage::start_listen(bool &hit) {
 			host->certificate_key = getUrlValue("certificate_key");
 			host->cipher = getUrlValue("cipher");
 			host->protocols = getUrlValue("protocols");
+#ifdef ENABLE_HTTP2
 			host->http2 = getUrlValue("http2")=="1";
+#endif
 		}
 #endif
 		host->ip = ip;
@@ -1842,7 +1844,7 @@ bool KHttpManage::start_vhs(bool &hit) {
 		return sendHttp(s.str());
 	}
 	if(strcmp(rq->url->path,"/reload_vh")==0){
-		configReload = true;
+		do_config(false);
 		hit = true;
 		s << klang["reload_vh_msg"] << "<br>";
 		conf.gvm->getHtml(s, getUrlValue("name"), atoi(getUrlValue(
@@ -2092,7 +2094,7 @@ bool KHttpManage::start(bool &hit) {
 		return sendErrPage(err_msg.c_str());
 	}
 	if (strcmp(rq->url->path,"/reload_config")==0) {
-		configReload = true;
+		do_config(false);
 		return sendMainFrame();
 	}
 	if (strcmp(rq->url->path, "/connect_per_ip") == 0) {
