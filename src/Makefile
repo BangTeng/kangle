@@ -51,48 +51,40 @@ am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
 am_kangle_OBJECTS = cache.$(OBJEXT) KConfig.$(OBJEXT) \
-	forwin32.$(OBJEXT) garbage_c.$(OBJEXT) HttpCore.$(OBJEXT) \
-	KAccess.$(OBJEXT) KAcserver.$(OBJEXT) \
-	KAcserverManager.$(OBJEXT) KBuffer.$(OBJEXT) KChain.$(OBJEXT) \
-	KConfigBuilder.$(OBJEXT) KConfigParser.$(OBJEXT) \
-	KContentType.$(OBJEXT) KDiskCache.$(OBJEXT) \
-	KPortSelector.$(OBJEXT) KKqueueSelector.$(OBJEXT) \
-	KEpollSelector.$(OBJEXT) KFastcgiFetchObject.$(OBJEXT) \
+	garbage_c.$(OBJEXT) HttpCore.$(OBJEXT) KAccess.$(OBJEXT) \
+	KAcserver.$(OBJEXT) KAcserverManager.$(OBJEXT) \
+	KBuffer.$(OBJEXT) KChain.$(OBJEXT) KConfigBuilder.$(OBJEXT) \
+	KConfigParser.$(OBJEXT) KContentType.$(OBJEXT) \
+	KDiskCache.$(OBJEXT) KFastcgiFetchObject.$(OBJEXT) \
 	KFastcgiUtils.$(OBJEXT) KFetchObject.$(OBJEXT) \
 	KFileMsg.$(OBJEXT) KFileName.$(OBJEXT) KHtmlSupport.$(OBJEXT) \
 	KHtmlSupportException.$(OBJEXT) KHttpKeyValue.$(OBJEXT) \
 	KHttpManage.$(OBJEXT) KHttpObject.$(OBJEXT) \
-	KHttpObjectHash.$(OBJEXT) KHttpObjectParserHook.$(OBJEXT) \
-	KHttpProtocolParser.$(OBJEXT) \
-	KHttpProtocolParserHook.$(OBJEXT) \
-	KHttpProxyFetchObject.$(OBJEXT) KHttpRequest.$(OBJEXT) \
-	KHttpServerParser.$(OBJEXT) KLang.$(OBJEXT) \
-	KLangParser.$(OBJEXT) KLogElement.$(OBJEXT) KReg.$(OBJEXT) \
-	KSelector.$(OBJEXT) KSelectorManager.$(OBJEXT) \
-	KSequence.$(OBJEXT) KServerListen.$(OBJEXT) KSocket.$(OBJEXT) \
+	KHttpObjectHash.$(OBJEXT) KHttpProxyFetchObject.$(OBJEXT) \
+	KHttpRequest.$(OBJEXT) KHttpServerParser.$(OBJEXT) \
+	KLang.$(OBJEXT) KLangParser.$(OBJEXT) KLogElement.$(OBJEXT) \
+	KReg.$(OBJEXT) KSequence.$(OBJEXT) \
 	KSocketFetchObject.$(OBJEXT) KTable.$(OBJEXT) \
-	KThreadPool.$(OBJEXT) KTimeMatch.$(OBJEXT) KUrlValue.$(OBJEXT) \
+	KTimeMatch.$(OBJEXT) KUrlValue.$(OBJEXT) \
 	KVirtualHost.$(OBJEXT) KVirtualHostManage.$(OBJEXT) \
 	KWriteBack.$(OBJEXT) KWriteBackManager.$(OBJEXT) \
 	KXmlContext.$(OBJEXT) KXml.$(OBJEXT) KXmlException.$(OBJEXT) \
 	KXmlSupport.$(OBJEXT) lib.$(OBJEXT) log.$(OBJEXT) \
-	main.$(OBJEXT) malloc_debug.$(OBJEXT) md5.$(OBJEXT) \
-	work.$(OBJEXT) utils.$(OBJEXT) KAccessParser.$(OBJEXT) \
-	KString.$(OBJEXT) KRewriteMark.$(OBJEXT) \
-	KSingleProgram.$(OBJEXT) KHttpTransfer.$(OBJEXT) \
-	KDeChunked.$(OBJEXT) KGzip.$(OBJEXT) KServer.$(OBJEXT) \
-	KSelectable.$(OBJEXT) KStream.$(OBJEXT) \
-	KNsVirtualHost.$(OBJEXT) KContentMark.$(OBJEXT) \
-	KRedirectMark.$(OBJEXT) KLineFile.$(OBJEXT) \
-	KMultiHostAcl.$(OBJEXT) test.$(OBJEXT) \
+	main.$(OBJEXT) work.$(OBJEXT) utils.$(OBJEXT) \
+	KAccessParser.$(OBJEXT) KStringBuf.$(OBJEXT) \
+	KRewriteMark.$(OBJEXT) KSingleProgram.$(OBJEXT) \
+	KHttpTransfer.$(OBJEXT) KDeChunked.$(OBJEXT) KGzip.$(OBJEXT) \
+	KStream.$(OBJEXT) KNsVirtualHost.$(OBJEXT) \
+	KContentMark.$(OBJEXT) KRedirectMark.$(OBJEXT) \
+	KLineFile.$(OBJEXT) KMultiHostAcl.$(OBJEXT) test.$(OBJEXT) \
+	ssl_utils.$(OBJEXT) KApacheVirtualHost.$(OBJEXT) \
 	KHttpFieldValue.$(OBJEXT) KSingleAcserver.$(OBJEXT) \
 	KMultiAcserver.$(OBJEXT) KSockPoolHelper.$(OBJEXT) \
 	KEnvInterface.$(OBJEXT) KRedirect.$(OBJEXT) \
 	KCgiRedirect.$(OBJEXT) KCgiFetchObject.$(OBJEXT) \
 	KPipeStream.$(OBJEXT) KCgi.$(OBJEXT) KCgiEnv.$(OBJEXT) \
-	KApiRedirect.$(OBJEXT) KApiEnv.$(OBJEXT) HttpExt.$(OBJEXT) \
-	KApiFetchObject.$(OBJEXT) KHttpHeadPull.$(OBJEXT) \
-	KSockFastcgiFetchObject.$(OBJEXT) \
+	KApiRedirect.$(OBJEXT) KApiEnv.$(OBJEXT) KHttpExt.$(OBJEXT) \
+	KApiFetchObject.$(OBJEXT) KSockFastcgiFetchObject.$(OBJEXT) \
 	KApiFastcgiFetchObject.$(OBJEXT) KPathRedirect.$(OBJEXT) \
 	KLogManage.$(OBJEXT) KBaseVirtualHost.$(OBJEXT) \
 	process.$(OBJEXT) KContentTransfer.$(OBJEXT) \
@@ -100,15 +92,8 @@ am_kangle_OBJECTS = cache.$(OBJEXT) KConfig.$(OBJEXT) \
 	KHttpDigestAuth.$(OBJEXT) KHttpAuth.$(OBJEXT) \
 	KHttpBasicAuth.$(OBJEXT) KAuthMark.$(OBJEXT) \
 	KObjectList.$(OBJEXT) KAjpMessage.$(OBJEXT) \
-	KAjpFetchObject.$(OBJEXT) KExpressionParseTree.$(OBJEXT) \
-	KSSICommandCondition.$(OBJEXT) KSSICommandEcho.$(OBJEXT) \
-	KSSICommandInclude.$(OBJEXT) KSSIContext.$(OBJEXT) \
-	KSSIRedirect.$(OBJEXT) KSSICommandSet.$(OBJEXT) \
-	KSSIProcess.$(OBJEXT) KSSICommand.$(OBJEXT) \
-	KSSICommandPrintEnv.$(OBJEXT) KSSIFetchObject.$(OBJEXT) \
-	KServiceProvider.$(OBJEXT) KISAPIServiceProvider.$(OBJEXT) \
-	directory.$(OBJEXT) KSSICommandExec.$(OBJEXT) \
-	KSSICommandConfig.$(OBJEXT) ssl_utils.$(OBJEXT) \
+	KAjpFetchObject.$(OBJEXT) KServiceProvider.$(OBJEXT) \
+	KISAPIServiceProvider.$(OBJEXT) directory.$(OBJEXT) \
 	KApiPipeStream.$(OBJEXT) KPoolableSocketContainer.$(OBJEXT) \
 	KProcessManage.$(OBJEXT) KCmdPoolableRedirect.$(OBJEXT) \
 	KSubVirtualHost.$(OBJEXT) KIpVirtualHost.$(OBJEXT) \
@@ -117,25 +102,21 @@ am_kangle_OBJECTS = cache.$(OBJEXT) KConfig.$(OBJEXT) \
 	EdcodeUtils.$(OBJEXT) KProcess.$(OBJEXT) KApiProcess.$(OBJEXT) \
 	KCmdProcess.$(OBJEXT) KVirtualHostProcess.$(OBJEXT) \
 	KExtendProgram.$(OBJEXT) KDynamicString.$(OBJEXT) \
-	kmysql.$(OBJEXT) KCdnMysqlMark.$(OBJEXT) \
 	KCdnRewriteMark.$(OBJEXT) KCdnContainer.$(OBJEXT) \
 	KTempleteVirtualHost.$(OBJEXT) KVirtualHostDatabase.$(OBJEXT) \
-	KDsoModule.$(OBJEXT) KList.$(OBJEXT) KListNode.$(OBJEXT) \
-	KLogHandle.$(OBJEXT) KRequestQueue.$(OBJEXT) \
-	KContext.$(OBJEXT) KCdnRedirect.$(OBJEXT) time_utils.$(OBJEXT) \
-	rbtree.$(OBJEXT) KVirtualHostContainer.$(OBJEXT) \
-	KSocketBuffer.$(OBJEXT) KAsyncFetchObject.$(OBJEXT) \
-	KSyncFetchObject.$(OBJEXT) KStaticFetchObject.$(OBJEXT) \
-	KDirectoryFetchObject.$(OBJEXT) KApiDso.$(OBJEXT) \
-	KUwsgiFetchObject.$(OBJEXT) KScgiFetchObject.$(OBJEXT) \
-	KHmuxFetchObject.$(OBJEXT) KTempFile.$(OBJEXT) \
-	KListenConfigParser.$(OBJEXT) KApacheVirtualHost.$(OBJEXT) \
-	KSSLSocket.$(OBJEXT) KAsyncWorker.$(OBJEXT) \
+	KDsoModule.$(OBJEXT) KLogHandle.$(OBJEXT) \
+	KRequestQueue.$(OBJEXT) KContext.$(OBJEXT) \
+	KCdnRedirect.$(OBJEXT) time_utils.$(OBJEXT) \
+	KVirtualHostContainer.$(OBJEXT) KSocketBuffer.$(OBJEXT) \
+	KAsyncFetchObject.$(OBJEXT) KSyncFetchObject.$(OBJEXT) \
+	KStaticFetchObject.$(OBJEXT) KDirectoryFetchObject.$(OBJEXT) \
+	KApiDso.$(OBJEXT) KTempFile.$(OBJEXT) \
+	KListenConfigParser.$(OBJEXT) KAsyncWorker.$(OBJEXT) \
 	KInputFilter.$(OBJEXT) KMultiPartInputFilter.$(OBJEXT) \
 	KReplaceContentMark.$(OBJEXT) KReplaceContentFilter.$(OBJEXT) \
-	KConcatFetchObject.$(OBJEXT) KIpSpeedLimitMark.$(OBJEXT) \
-	KDynamicListen.$(OBJEXT) KCache.$(OBJEXT) KPerIpAcl.$(OBJEXT) \
-	KDiskCacheIndex.$(OBJEXT) KSqliteDiskCacheIndex.$(OBJEXT) \
+	KIpSpeedLimitMark.$(OBJEXT) KDynamicListen.$(OBJEXT) \
+	KCache.$(OBJEXT) KPerIpAcl.$(OBJEXT) KDiskCacheIndex.$(OBJEXT) \
+	KSqliteDiskCacheIndex.$(OBJEXT) \
 	../module/whm/dllmain.$(OBJEXT) \
 	../module/whm/WhmCallMap.$(OBJEXT) \
 	../module/whm/WhmCommand.$(OBJEXT) \
@@ -155,18 +136,38 @@ am_kangle_OBJECTS = cache.$(OBJEXT) KConfig.$(OBJEXT) \
 	KHttpFilterDso.$(OBJEXT) KHttpFilterDsoManage.$(OBJEXT) \
 	KHttpFilterHookCollectRequest.$(OBJEXT) \
 	KHttpFilterHook.$(OBJEXT) KHttpFilterManage.$(OBJEXT) \
-	KTempFileStream.$(OBJEXT) KHttpFilterStream.$(OBJEXT) \
+	KHttpFilterStream.$(OBJEXT) \
 	KHttpFilterHookCollectResponse.$(OBJEXT) KAccessDso.$(OBJEXT) \
 	KConnectionSelectable.$(OBJEXT) KReadWriteBuffer.$(OBJEXT) \
-	KResponseContext.$(OBJEXT) KUpstreamSelectable.$(OBJEXT) \
+	KResponseContext.$(OBJEXT) KUpstream.$(OBJEXT) \
 	KSimulateRequest.$(OBJEXT) KCloudIpAcl.$(OBJEXT) \
-	KAddr.$(OBJEXT) KHuffDecode.$(OBJEXT) KMemPool.$(OBJEXT) \
-	KHttp2.$(OBJEXT) KHttp2Table.$(OBJEXT) \
+	KHuffDecode.$(OBJEXT) KHttp2.$(OBJEXT) KHttp2Table.$(OBJEXT) \
 	KHttp2WriteBuffer.$(OBJEXT) KIpMap.$(OBJEXT) \
 	KGeoMark.$(OBJEXT) KLogDrill.$(OBJEXT) KQueueMark.$(OBJEXT) \
-	KAsyncFile.$(OBJEXT) KAioSelectable.$(OBJEXT) \
 	KHttpObjectSwaping.$(OBJEXT) KMapRedirectMark.$(OBJEXT) \
-	KEpollNoticeSelectable.$(OBJEXT) KProxy.$(OBJEXT)
+	KProxy.$(OBJEXT) KConnectionLimit.$(OBJEXT) \
+	KAutoBuffer.$(OBJEXT) KHttpResponseParser.$(OBJEXT) \
+	KHttpParser.$(OBJEXT) KTcpUpstream.$(OBJEXT) KSink.$(OBJEXT) \
+	KPreRequest.$(OBJEXT) KBufferFetchObject.$(OBJEXT) \
+	KSSLSniContext.$(OBJEXT) KHttpSink.$(OBJEXT) \
+	KAccessDsoSupport.$(OBJEXT) KDsoExtendManage.$(OBJEXT) \
+	KDsoExtend.$(OBJEXT) KDsoRedirect.$(OBJEXT) \
+	KDsoAsyncFetchObject.$(OBJEXT) KTsUpstream.$(OBJEXT) \
+	KDechunkContext.$(OBJEXT) KDechunkEngine.$(OBJEXT) \
+	../kasync/kaddr.$(OBJEXT) ../kasync/kfile.$(OBJEXT) \
+	../kasync/kmalloc_debug.$(OBJEXT) ../kasync/kserver.$(OBJEXT) \
+	../kasync/kasync_file.$(OBJEXT) ../kasync/kgl_ssl.$(OBJEXT) \
+	../kasync/kmalloc_debug_win32.$(OBJEXT) \
+	../kasync/ksocket.$(OBJEXT) ../kasync/kasync_worker.$(OBJEXT) \
+	../kasync/krbtree.$(OBJEXT) ../kasync/kssl_bio.$(OBJEXT) \
+	../kasync/kbuf.$(OBJEXT) ../kasync/klib.$(OBJEXT) \
+	../kasync/kselectable.$(OBJEXT) ../kasync/kthread.$(OBJEXT) \
+	../kasync/kconnection.$(OBJEXT) ../kasync/klog.$(OBJEXT) \
+	../kasync/kselector.$(OBJEXT) ../kasync/kmd5.$(OBJEXT) \
+	../kasync/kepoll_selector.$(OBJEXT) \
+	../kasync/kmalloc.$(OBJEXT) \
+	../kasync/kselector_manager.$(OBJEXT) \
+	../kasync/kkqueue_selector.$(OBJEXT)
 kangle_OBJECTS = $(am_kangle_OBJECTS)
 kangle_LDADD = $(LDADD)
 kangle_DEPENDENCIES =
@@ -174,15 +175,15 @@ DEFAULT_INCLUDES = -I.
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
 am__mv = mv -f
+COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
+	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
+CCLD = $(CC)
+LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
 CXXLD = $(CXX)
 CXXLINK = $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
-COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
-	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
-CCLD = $(CC)
-LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
 SOURCES = $(kangle_SOURCES)
 DIST_SOURCES = $(kangle_SOURCES)
 ETAGS = etags
@@ -194,19 +195,19 @@ AUTOCONF = ${SHELL} /home/keengo/kangle/missing --run autoconf
 AUTOHEADER = ${SHELL} /home/keengo/kangle/missing --run autoheader
 AUTOMAKE = ${SHELL} /home/keengo/kangle/missing --run automake-1.11
 AWK = gawk
-CC = gcc
+CC = g++
 CCDEPMODE = depmode=gcc3
-CFLAGS = -g -O2
+CFLAGS = -O0 -ggdb3 -Wall  -D_REENTRANT -DLINUX -D_LARGE_FILE -D_FILE_OFFSET_BITS=64 -D__USE_FILE_OFFSET64
 CPPFLAGS = 
 CXX = g++
 CXXCPP = g++ -E
 CXXDEPMODE = depmode=gcc3
-CXXFLAGS = -O0 -g -Wall  -D_REENTRANT -DLINUX -D_LARGE_FILE -D_FILE_OFFSET_BITS=64 -D__USE_FILE_OFFSET64
+CXXFLAGS = -O0 -ggdb3 -Wall  -D_REENTRANT -DLINUX -D_LARGE_FILE -D_FILE_OFFSET_BITS=64 -D__USE_FILE_OFFSET64
 CYGPATH_W = echo
-DEFAULT_EXT_DIR = /home/keengo/kangle/output/kangle/ext
-DEFAULT_TMP_DIR = /home/keengo/kangle/output/kangle/tmp
-DEFAULT_VAR_DIR = /home/keengo/kangle/output/kangle/var
-DEFAULT_WEBADMIN_DIR = /home/keengo/kangle/output/kangle/webadmin
+DEFAULT_EXT_DIR = /home/keengo/build/kangle/output/kangle/ext
+DEFAULT_TMP_DIR = /home/keengo/build/kangle/output/kangle/tmp
+DEFAULT_VAR_DIR = /home/keengo/build/kangle/output/kangle/var
+DEFAULT_WEBADMIN_DIR = /home/keengo/build/kangle/output/kangle/webadmin
 DEFS = -DHAVE_CONFIG_H
 DEPDIR = .deps
 ECHO_C = 
@@ -230,14 +231,14 @@ OBJEXT = o
 PACKAGE = kangle
 PACKAGE_BUGREPORT = 
 PACKAGE_NAME = kangle
-PACKAGE_STRING = kangle 3.5.14
+PACKAGE_STRING = kangle 3.5.16
 PACKAGE_TARNAME = kangle
-PACKAGE_VERSION = 3.5.14
+PACKAGE_VERSION = 3.5.16
 PATH_SEPARATOR = :
 SET_MAKE = 
 SHELL = /bin/sh
 STRIP = 
-VERSION = 3.5.14
+VERSION = 3.5.16
 abs_builddir = /home/keengo/kangle/src
 abs_srcdir = /home/keengo/kangle/src
 abs_top_builddir = /home/keengo/kangle
@@ -278,7 +279,7 @@ mandir = ${datarootdir}/man
 mkdir_p = /bin/mkdir -p
 oldincludedir = /usr/include
 pdfdir = ${docdir}
-prefix = /home/keengo/kangle/output/kangle
+prefix = /home/keengo/build/kangle/output/kangle
 program_transform_name = s,x,x,
 psdir = ${docdir}
 sbindir = ${exec_prefix}/sbin
@@ -296,7 +297,8 @@ top_srcdir = ..
 
 #AM_CXXFLAGS=-I../module/access -DKSOCKET_SSL
 #AM_LDFLAGS=-rdynamic -lssl -lcrypto
-AM_CXXFLAGS = -I../module/access -I../module/whm
+AM_CXXFLAGS = -I../module/access -I../module/whm -I../kasync
+AM_CFLAGS = $(AM_CXXFLAGS)
 AM_LDFLAGS = -L../lib
 LDADD = 
 AUTOMAKE_OPTIONS = subdir-objects
@@ -309,8 +311,6 @@ KConfig.h\
 do_config.h\
 environment.h\
 extern.h\
-forwin32.cpp\
-forwin32.h\
 garbage_c.cpp\
 http.h\
 HttpCore.cpp\
@@ -334,12 +334,6 @@ KContentType.h\
 KCountable.h\
 KDiskCache.cpp\
 KDiskCache.h\
-KPortSelector.cpp\
-KPortSelector.h\
-KKqueueSelector.cpp\
-KKqueueSelector.h\
-KEpollSelector.cpp\
-KEpollSelector.h\
 KFastcgiFetchObject.cpp\
 KFastcgiFetchObject.h\
 KFastcgiUtils.cpp\
@@ -364,12 +358,6 @@ KHttpObject.h\
 KHttpObjectHash.cpp\
 KHttpObjectHash.h\
 KHttpObjectNode.h\
-KHttpObjectParserHook.cpp\
-KHttpObjectParserHook.h\
-KHttpProtocolParser.cpp\
-KHttpProtocolParser.h\
-KHttpProtocolParserHook.cpp\
-KHttpProtocolParserHook.h\
 KHttpProxyFetchObject.cpp\
 KHttpProxyFetchObject.h\
 KHttpRequest.cpp\
@@ -391,22 +379,12 @@ KMutex.h\
 KReg.cpp\
 KReg.h\
 KRWLock.h\
-KSelector.cpp\
-KSelector.h\
-KSelectorManager.cpp\
-KSelectorManager.h\
 KSequence.cpp\
 KSequence.h\
-KServerListen.cpp\
-KServerListen.h\
-KSocket.cpp\
 KSocketFetchObject.cpp\
 KSocketFetchObject.h\
-KSocket.h\
 KTable.cpp\
 KTable.h\
-KThreadPool.cpp\
-KThreadPool.h\
 KTimeMatch.cpp\
 KTimeMatch.h\
 KUrlValue.cpp\
@@ -438,82 +416,69 @@ main.cpp\
 Makefile\
 Makefile.am\
 Makefile.in\
-malloc_debug.cpp\
-malloc_debug.h\
-md5.cpp\
-md5.h\
 global.h\
 work.cpp\
-server.h\
 utils.cpp\
 utils.h\
 KAccessParser.h\
 KAccessParser.cpp\
-KString.cpp\
-KString.h\
+KStringBuf.cpp\
+KStringBuf.h\
 KRewriteMark.cpp\
 KSingleProgram.cpp KSingleProgram.h\
 KHttpTransfer.cpp KHttpTransfer.h\
 KDeChunked.cpp KDeChunked.h\
 KGzip.cpp KGzip.h\
-KServer.cpp KServer.h\
-KSendable.h KSelectable.h KSelectable.cpp\
 KStream.h KStream.cpp\
 KNsVirtualHost.cpp KNsVirtualHost.h KDomainUser.h KUserManageInterface.h\
 KContentMark.cpp KContentMark.h KFilterHelper.h\
 KRedirectMark.cpp KRedirectMark.h\
 trace.h KSpeedLimit.h \
 KLineFile.h KLineFile.cpp KMultiHostAcl.h KMultiHostAcl.cpp\
-test.cpp \
+test.cpp\
+ssl_utils.h  ssl_utils.cpp KTcpFetchObject.h KDsoExtendManage.h KHttpPushParser.h KDechunkContext.h KApacheVirtualHost.h KApacheVirtualHost.cpp\
+KListNode.h KHttpParser.h KSendable.h KSSLSniContext.h KServerListen.h KAccessDsoSupport.h\
 KHttpFieldValue.cpp KHttpFieldValue.h\
 KSingleAcserver.h KSingleAcserver.cpp\
 KMultiAcserver.h KMultiAcserver.cpp\
 KSockPoolHelper.h KSockPoolHelper.cpp\
 KEnvInterface.h KEnvInterface.cpp\
 KRedirect.h KRedirect.cpp KCgiRedirect.h KCgiRedirect.cpp KCgiFetchObject.cpp KCgiFetchObject.h KPipeStream.cpp KPipeStream.h KCgi.cpp KCgi.h KStream.h\
-KCgiEnv.cpp KCgiEnv.h KApiRedirect.cpp KApiRedirect.h KApiEnv.cpp KApiEnv.h HttpExt.cpp KApiFetchObject.cpp KApiFetchObject.h KHttpHeadPull.cpp KHttpHeadPull.h\
+KCgiEnv.cpp KCgiEnv.h KApiRedirect.cpp KApiRedirect.h KApiEnv.cpp KApiEnv.h KHttpExt.cpp KApiFetchObject.cpp KApiFetchObject.h\
 KSockFastcgiFetchObject.cpp KSockFastcgiFetchObject.h KApiFastcgiFetchObject.cpp KApiFastcgiFetchObject.h\
-KPathRedirect.cpp KPathRedirect.h KWinCgiEnv.h httpext.h ksapi.h fastcgi.h export.h KLogManage.h KLogManage.cpp KBaseVirtualHost.h KBaseVirtualHost.cpp\
+KPathRedirect.cpp KPathRedirect.h KWinCgiEnv.h khttpext.h ksapi.h fastcgi.h export.h KLogManage.h KLogManage.cpp KBaseVirtualHost.h KBaseVirtualHost.cpp\
 process.cpp \
 KContentTransfer.h KContentTransfer.cpp KChunked.h KChunked.cpp KCacheStream.h KCacheStream.cpp KHttpField.h KHttpField.cpp KHttpDigestAuth.h KHttpDigestAuth.cpp KHttpAuth.h KHttpAuth.cpp KHttpBasicAuth.h KHttpBasicAuth.cpp KAuthMark.cpp\
 KObjectList.h KObjectList.cpp\
 KAjpMessage.cpp KAjpMessage.h KAjpFetchObject.h KAjpFetchObject.cpp\
-KExpressionParseTree.cpp  KExpressionParseTree.h    \
-KSSICommandCondition.cpp  KSSICommandEcho.cpp  KSSICommandInclude.cpp   KSSICommandPrintEnv.h  KSSIContext.cpp      KSSIFetchObject.h  KSSIRedirect.cpp\
-KSSICommandCondition.h    KSSICommandEcho.h    KSSICommandInclude.h     KSSICommandSet.cpp     KSSIContext.h        KSSIProcess.cpp    KSSIRedirect.h\
-KSSICommand.cpp           KSSICommand.h        KSSICommandPrintEnv.cpp  KSSICommandSet.h       KSSIFetchObject.cpp  KSSIProcess.h\
 KServiceProvider.h KServiceProvider.cpp KISAPIServiceProvider.h KISAPIServiceProvider.cpp directory.cpp directory.h\
-KSSICommandExec.h KSSICommandExec.cpp KSSICommandConfig.h KSSICommandConfig.cpp ssl_utils.h ssl_utils.cpp\
- KApiPipeStream.cpp KApiPipeStream.h KPoolableSocketContainer.cpp  KPoolableSocketContainer.h KProcessManage.cpp KProcessManage.h\
+KApiPipeStream.cpp KApiPipeStream.h KPoolableSocketContainer.cpp  KPoolableSocketContainer.h KProcessManage.cpp KProcessManage.h\
 KCmdPoolableRedirect.cpp  KCmdPoolableRedirect.h\
 KSubVirtualHost.h KSubVirtualHost.cpp KIpVirtualHost.cpp KIpVirtualHost.h\
 KHttpPost.cpp KHttpPost.h KHtAccess.cpp KHtAccess.h KHtModule.cpp KHtModule.h KHtRewriteModule.h KHtRewriteModule.cpp KRewriteMarkEx.cpp KRewriteMarkEx.h\
 api_child.h EdcodeUtils.cpp KProcess.h KProcess.cpp KApiProcess.h KApiProcess.cpp KCmdProcess.h KCmdProcess.cpp KVirtualHostProcess.h KVirtualHostProcess.cpp\
 KExtendProgram.cpp KExtendProgram.h KDynamicString.h KDynamicString.cpp\
-kmysql.h kmysql.cpp KCdnMysqlMark.h KCdnMysqlMark.cpp KCdnRewriteMark.h KCdnRewriteMark.cpp KCdnContainer.h KCdnContainer.cpp\
+KCdnRewriteMark.h KCdnRewriteMark.cpp KCdnContainer.h KCdnContainer.cpp\
 KTempleteVirtualHost.cpp  KTempleteVirtualHost.h \
 KVirtualHostDatabase.cpp     KVirtualHostDatabase.h       KVirtualHostDataInterface.h  KDsoModule.cpp KDsoModule.h \
-KList.cpp KList.h KListNode.cpp KListNode.h\
 KLogHandle.h KLogHandle.cpp\
 KListenPipeStream.h\
 KRequestQueue.h KRequestQueue.cpp KContext.cpp\
 KUrl.h KContext.h vh_module.h\
 KCdnRedirect.h KCdnRedirect.cpp\
-time_utils.h time_utils.cpp rbtree.h rbtree.cpp\
+time_utils.h time_utils.cpp\
 KVirtualHostContainer.h KVirtualHostContainer.cpp\
 KSocketBuffer.h KSocketBuffer.cpp KAsyncFetchObject.h KAsyncFetchObject.cpp\
 KSyncFetchObject.h KSyncFetchObject.cpp KStaticFetchObject.h KStaticFetchObject.cpp KDirectoryFetchObject.h KDirectoryFetchObject.cpp\
 KApiDso.h KApiDso.cpp\
 KFilterContext.h KApiService.h\
-KUwsgiFetchObject.cpp KUwsgiFetchObject.h KScgiFetchObject.cpp KScgiFetchObject.h KHmuxFetchObject.h  KHmuxFetchObject.cpp\
-KTempFile.h KTempFile.cpp KSubRequest.h KListenConfigParser.cpp  KListenConfigParser.h\
-KApacheVirtualHost.cpp  KApacheVirtualHost.h KSSLSocket.cpp  KSSLSocket.h\
+KTempFile.h KTempFile.cpp KListenConfigParser.cpp  KListenConfigParser.h\
 KAsyncWorker.h KAsyncWorker.cpp\
 KInputFilter.h KInputFilter.cpp KMultiPartInputFilter.h KMultiPartInputFilter.cpp KParamMark.h KPostFileMark.h KHttpOnlyCookieMark.h\
 KReplaceContentMark.h KReplaceContentMark.cpp KReplaceContentFilter.h KReplaceContentFilter.cpp\
-KCacheFetchObject.h KConcatFetchObject.h KConcatFetchObject.cpp\
+KCacheFetchObject.h\
 KFooterMark.h KReplaceIPMark.h KSrcsAcl.h  KFooterFilter.h\
-KRemoveHeaderMark.h KFile.h KIpSpeedLimitMark.h KIpSpeedLimitMark.cpp\
+KRemoveHeaderMark.h KIpSpeedLimitMark.h KIpSpeedLimitMark.cpp\
 KReplaceHeaderMark.h KSelfsAcl.h KSelfPortsAcl.h KMultiIntAcl.h\
 KDynamicListen.h KDynamicListen.cpp\
 KUploadProgressMark.h KTempFileMark.h\
@@ -532,19 +497,32 @@ KCounterMark.h KConnectionCloseMark.h\
 KTimer.cpp      KTimer.h KUrlParser.cpp  KUrlParser.h\
 KHttpFilterContext.cpp  KHttpFilterDso.cpp  KHttpFilterDsoManage.cpp  KHttpFilterHookCollectRequest.cpp  KHttpFilterHook.cpp  KHttpFilterManage.cpp\
 KHttpFilterContext.h    KHttpFilterDso.h    KHttpFilterDsoManage.h    KHttpFilterHookCollectRequest.h    KHttpFilterHook.h    KHttpFilterManage.h\
-KTempFileStream.cpp KHttpFilterStream.cpp KHttpFilterHookCollectResponse.cpp\
-KAccessDso.h KAccessDso.cpp KHttpStream.h KHttpFilterHookCollectResponse.h KHttpFilterStream.h KTempFileStream.h\
+KHttpFilterStream.cpp KHttpFilterHookCollectResponse.cpp\
+KAccessDso.h KAccessDso.cpp KHttpStream.h KHttpFilterHookCollectResponse.h KHttpFilterStream.h \
 KRandAcl.h KConnectionSelectable.cpp KConnectionSelectable.h KReadWriteBuffer.cpp KReadWriteBuffer.h KResponseContext.h KResponseContext.cpp\
-KUpstreamSelectable.h KUpstreamSelectable.cpp KRequestList.h KSimulateRequest.cpp  KSimulateRequest.h KMinObjVerifiedMark.h KCloudIpAcl.cpp katom.h KCondWait.h\
-KAddr.h KAddr.cpp KDechunkEngine.h KHttpEnv.h KHuffDecode.cpp KMemPool.cpp KMemPool.h KHttp2.h KHttp2.cpp KHttp2Table.cpp KHttp2WriteBuffer.h KHttp2WriteBuffer.cpp KSendBuffer.h KIpMap.cpp KIpMap.h\
-KGeoMark.cpp KLogDrill.cpp KGeoMark.h KLogDrill.h KQueueMark.h KQueueMark.cpp KAsyncFile.cpp KAsyncFile.h KAioSelectable.cpp KAioSelectable.h KHttpObjectSwaping.cpp KHttpObjectSwaping.h\
-KMapRedirectMark.cpp KMapRedirectMark.h KEpollNoticeSelectable.h KEpollNoticeSelectable.cpp KProxy.cpp KProxy.h
+KUpstream.h KUpstream.cpp KRequestList.h KSimulateRequest.cpp  KSimulateRequest.h KMinObjVerifiedMark.h KCloudIpAcl.cpp KCondWait.h\
+KDechunkEngine.h KHttpEnv.h KHuffDecode.cpp KHttp2.h KHttp2.cpp KHttp2Table.cpp KHttp2WriteBuffer.h KHttp2WriteBuffer.cpp KSendBuffer.h KIpMap.cpp KIpMap.h\
+KGeoMark.cpp KLogDrill.cpp KGeoMark.h KLogDrill.h KQueueMark.h KQueueMark.cpp KHttpObjectSwaping.cpp KHttpObjectSwaping.h\
+KMapRedirectMark.cpp KMapRedirectMark.h KProxy.cpp KProxy.h KConnectionLimit.h KConnectionLimit.cpp\
+KAutoBuffer.cpp KAutoBuffer.h KHttpResponseParser.cpp KHttpResponseParser.h KHttpParser.cpp KTcpUpstream.cpp KTcpUpstream.h KSink.cpp KSink.h KPreRequest.cpp KPreRequest.h \
+KBufferFetchObject.cpp KBufferFetchObject.h KSSLSniContext.cpp KHttpSink.cpp KHttpSink.h KHttp2Sink.h\
+KAccessDsoSupport.cpp KDsoExtendManage.cpp KDsoExtend.cpp KDsoExtend.h KDsoRedirect.cpp KDsoRedirect.h KDsoAsyncFetchObject.cpp KDsoAsyncFetchObject.h KTsUpstream.cpp KTsUpstream.h KDechunkContext.cpp KDechunkEngine.cpp\
+../kasync/kaddr.c            ../kasync/kfile.c           ../kasync/kmalloc_debug.c        ../kasync/kserver.c\
+../kasync/kasync_file.c      ../kasync/kgl_ssl.c         ../kasync/kmalloc_debug_win32.c  ../kasync/ksocket.c\
+../kasync/kasync_worker.c    ../kasync/krbtree.c              ../kasync/kssl_bio.c\
+../kasync/kbuf.c             ../kasync/klib.c            ../kasync/kselectable.c          ../kasync/kthread.c\
+../kasync/kconnection.c      ../kasync/klog.c            ../kasync/kselector.c  	  ../kasync/kmd5.c\
+../kasync/kepoll_selector.c  ../kasync/kmalloc.c         ../kasync/kselector_manager.c ../kasync/kkqueue_selector.c\
+../kasync/kaddr.h          ../kasync/kbuf.h             ../kasync/kfeature.h   ../kasync/klog.h     ../kasync/kselectable.h        ../kasync/ksocket.h   ../kasync/kthread.h\
+../kasync/kasync_file.h    ../kasync/kconnection.h      ../kasync/kfile.h      ../kasync/kkqueue_selector.h  ../kasync/kmalloc.h  ../kasync/kselector.h          ../kasync/kssl_bio.h  ../kasync/kudp.h\
+../kasync/kasync_worker.h  ../kasync/kcountable.h       ../kasync/kforwin32.h  ../kasync/klib.h              ../kasync/kmd5.h     ../kasync/kselector_manager.h  ../kasync/kstring.h\
+../kasync/katom.h          ../kasync/kepoll_selector.h  ../kasync/kgl_ssl.h    ../kasync/klist.h             ../kasync/krbtree.h  ../kasync/kserver.h            ../kasync/ksync.h
 
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
 .SUFFIXES:
-.SUFFIXES: .cpp .o .obj
+.SUFFIXES: .c .cpp .o .obj
 $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
@@ -679,12 +657,87 @@ clean-binPROGRAMS:
 ../module/whm/whmdso/core/core.$(OBJEXT):  \
 	../module/whm/whmdso/core/$(am__dirstamp) \
 	../module/whm/whmdso/core/$(DEPDIR)/$(am__dirstamp)
+../kasync/$(am__dirstamp):
+	@$(MKDIR_P) ../kasync
+	@: > ../kasync/$(am__dirstamp)
+../kasync/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) ../kasync/$(DEPDIR)
+	@: > ../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kaddr.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kfile.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kmalloc_debug.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kserver.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kasync_file.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kgl_ssl.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kmalloc_debug_win32.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/ksocket.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kasync_worker.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/krbtree.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kssl_bio.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kbuf.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/klib.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kselectable.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kthread.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kconnection.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/klog.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kselector.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kmd5.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kepoll_selector.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kmalloc.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kselector_manager.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kkqueue_selector.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
 kangle$(EXEEXT): $(kangle_OBJECTS) $(kangle_DEPENDENCIES) 
 	@rm -f kangle$(EXEEXT)
 	$(CXXLINK) $(kangle_OBJECTS) $(kangle_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
+	-rm -f ../kasync/kaddr.$(OBJEXT)
+	-rm -f ../kasync/kasync_file.$(OBJEXT)
+	-rm -f ../kasync/kasync_worker.$(OBJEXT)
+	-rm -f ../kasync/kbuf.$(OBJEXT)
+	-rm -f ../kasync/kconnection.$(OBJEXT)
+	-rm -f ../kasync/kepoll_selector.$(OBJEXT)
+	-rm -f ../kasync/kfile.$(OBJEXT)
+	-rm -f ../kasync/kgl_ssl.$(OBJEXT)
+	-rm -f ../kasync/kkqueue_selector.$(OBJEXT)
+	-rm -f ../kasync/klib.$(OBJEXT)
+	-rm -f ../kasync/klog.$(OBJEXT)
+	-rm -f ../kasync/kmalloc.$(OBJEXT)
+	-rm -f ../kasync/kmalloc_debug.$(OBJEXT)
+	-rm -f ../kasync/kmalloc_debug_win32.$(OBJEXT)
+	-rm -f ../kasync/kmd5.$(OBJEXT)
+	-rm -f ../kasync/krbtree.$(OBJEXT)
+	-rm -f ../kasync/kselectable.$(OBJEXT)
+	-rm -f ../kasync/kselector.$(OBJEXT)
+	-rm -f ../kasync/kselector_manager.$(OBJEXT)
+	-rm -f ../kasync/kserver.$(OBJEXT)
+	-rm -f ../kasync/ksocket.$(OBJEXT)
+	-rm -f ../kasync/kssl_bio.$(OBJEXT)
+	-rm -f ../kasync/kthread.$(OBJEXT)
 	-rm -f ../module/whm/KWhmService.$(OBJEXT)
 	-rm -f ../module/whm/WhmCallMap.$(OBJEXT)
 	-rm -f ../module/whm/WhmCommand.$(OBJEXT)
@@ -706,6 +759,29 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+include ../kasync/$(DEPDIR)/kaddr.Po
+include ../kasync/$(DEPDIR)/kasync_file.Po
+include ../kasync/$(DEPDIR)/kasync_worker.Po
+include ../kasync/$(DEPDIR)/kbuf.Po
+include ../kasync/$(DEPDIR)/kconnection.Po
+include ../kasync/$(DEPDIR)/kepoll_selector.Po
+include ../kasync/$(DEPDIR)/kfile.Po
+include ../kasync/$(DEPDIR)/kgl_ssl.Po
+include ../kasync/$(DEPDIR)/kkqueue_selector.Po
+include ../kasync/$(DEPDIR)/klib.Po
+include ../kasync/$(DEPDIR)/klog.Po
+include ../kasync/$(DEPDIR)/kmalloc.Po
+include ../kasync/$(DEPDIR)/kmalloc_debug.Po
+include ../kasync/$(DEPDIR)/kmalloc_debug_win32.Po
+include ../kasync/$(DEPDIR)/kmd5.Po
+include ../kasync/$(DEPDIR)/krbtree.Po
+include ../kasync/$(DEPDIR)/kselectable.Po
+include ../kasync/$(DEPDIR)/kselector.Po
+include ../kasync/$(DEPDIR)/kselector_manager.Po
+include ../kasync/$(DEPDIR)/kserver.Po
+include ../kasync/$(DEPDIR)/ksocket.Po
+include ../kasync/$(DEPDIR)/kssl_bio.Po
+include ../kasync/$(DEPDIR)/kthread.Po
 include ../module/whm/$(DEPDIR)/KWhmService.Po
 include ../module/whm/$(DEPDIR)/WhmCallMap.Po
 include ../module/whm/$(DEPDIR)/WhmCommand.Po
@@ -725,14 +801,12 @@ include ../module/whm/$(DEPDIR)/whm.Po
 include ../module/whm/whmdso/core/$(DEPDIR)/core.Po
 include ./$(DEPDIR)/EdcodeUtils.Po
 include ./$(DEPDIR)/HttpCore.Po
-include ./$(DEPDIR)/HttpExt.Po
 include ./$(DEPDIR)/KAccess.Po
 include ./$(DEPDIR)/KAccessDso.Po
+include ./$(DEPDIR)/KAccessDsoSupport.Po
 include ./$(DEPDIR)/KAccessParser.Po
 include ./$(DEPDIR)/KAcserver.Po
 include ./$(DEPDIR)/KAcserverManager.Po
-include ./$(DEPDIR)/KAddr.Po
-include ./$(DEPDIR)/KAioSelectable.Po
 include ./$(DEPDIR)/KAjpFetchObject.Po
 include ./$(DEPDIR)/KAjpMessage.Po
 include ./$(DEPDIR)/KApacheVirtualHost.Po
@@ -744,15 +818,15 @@ include ./$(DEPDIR)/KApiPipeStream.Po
 include ./$(DEPDIR)/KApiProcess.Po
 include ./$(DEPDIR)/KApiRedirect.Po
 include ./$(DEPDIR)/KAsyncFetchObject.Po
-include ./$(DEPDIR)/KAsyncFile.Po
 include ./$(DEPDIR)/KAsyncWorker.Po
 include ./$(DEPDIR)/KAuthMark.Po
+include ./$(DEPDIR)/KAutoBuffer.Po
 include ./$(DEPDIR)/KBaseVirtualHost.Po
 include ./$(DEPDIR)/KBuffer.Po
+include ./$(DEPDIR)/KBufferFetchObject.Po
 include ./$(DEPDIR)/KCache.Po
 include ./$(DEPDIR)/KCacheStream.Po
 include ./$(DEPDIR)/KCdnContainer.Po
-include ./$(DEPDIR)/KCdnMysqlMark.Po
 include ./$(DEPDIR)/KCdnRedirect.Po
 include ./$(DEPDIR)/KCdnRewriteMark.Po
 include ./$(DEPDIR)/KCgi.Po
@@ -764,26 +838,29 @@ include ./$(DEPDIR)/KChunked.Po
 include ./$(DEPDIR)/KCloudIpAcl.Po
 include ./$(DEPDIR)/KCmdPoolableRedirect.Po
 include ./$(DEPDIR)/KCmdProcess.Po
-include ./$(DEPDIR)/KConcatFetchObject.Po
 include ./$(DEPDIR)/KConfig.Po
 include ./$(DEPDIR)/KConfigBuilder.Po
 include ./$(DEPDIR)/KConfigParser.Po
+include ./$(DEPDIR)/KConnectionLimit.Po
 include ./$(DEPDIR)/KConnectionSelectable.Po
 include ./$(DEPDIR)/KContentMark.Po
 include ./$(DEPDIR)/KContentTransfer.Po
 include ./$(DEPDIR)/KContentType.Po
 include ./$(DEPDIR)/KContext.Po
 include ./$(DEPDIR)/KDeChunked.Po
+include ./$(DEPDIR)/KDechunkContext.Po
+include ./$(DEPDIR)/KDechunkEngine.Po
 include ./$(DEPDIR)/KDirectoryFetchObject.Po
 include ./$(DEPDIR)/KDiskCache.Po
 include ./$(DEPDIR)/KDiskCacheIndex.Po
+include ./$(DEPDIR)/KDsoAsyncFetchObject.Po
+include ./$(DEPDIR)/KDsoExtend.Po
+include ./$(DEPDIR)/KDsoExtendManage.Po
 include ./$(DEPDIR)/KDsoModule.Po
+include ./$(DEPDIR)/KDsoRedirect.Po
 include ./$(DEPDIR)/KDynamicListen.Po
 include ./$(DEPDIR)/KDynamicString.Po
 include ./$(DEPDIR)/KEnvInterface.Po
-include ./$(DEPDIR)/KEpollNoticeSelectable.Po
-include ./$(DEPDIR)/KEpollSelector.Po
-include ./$(DEPDIR)/KExpressionParseTree.Po
 include ./$(DEPDIR)/KExtendProgram.Po
 include ./$(DEPDIR)/KFastcgiFetchObject.Po
 include ./$(DEPDIR)/KFastcgiUtils.Po
@@ -792,7 +869,6 @@ include ./$(DEPDIR)/KFileMsg.Po
 include ./$(DEPDIR)/KFileName.Po
 include ./$(DEPDIR)/KGeoMark.Po
 include ./$(DEPDIR)/KGzip.Po
-include ./$(DEPDIR)/KHmuxFetchObject.Po
 include ./$(DEPDIR)/KHtAccess.Po
 include ./$(DEPDIR)/KHtModule.Po
 include ./$(DEPDIR)/KHtRewriteModule.Po
@@ -804,6 +880,7 @@ include ./$(DEPDIR)/KHttp2WriteBuffer.Po
 include ./$(DEPDIR)/KHttpAuth.Po
 include ./$(DEPDIR)/KHttpBasicAuth.Po
 include ./$(DEPDIR)/KHttpDigestAuth.Po
+include ./$(DEPDIR)/KHttpExt.Po
 include ./$(DEPDIR)/KHttpField.Po
 include ./$(DEPDIR)/KHttpFieldValue.Po
 include ./$(DEPDIR)/KHttpFilterContext.Po
@@ -814,19 +891,18 @@ include ./$(DEPDIR)/KHttpFilterHookCollectRequest.Po
 include ./$(DEPDIR)/KHttpFilterHookCollectResponse.Po
 include ./$(DEPDIR)/KHttpFilterManage.Po
 include ./$(DEPDIR)/KHttpFilterStream.Po
-include ./$(DEPDIR)/KHttpHeadPull.Po
 include ./$(DEPDIR)/KHttpKeyValue.Po
 include ./$(DEPDIR)/KHttpManage.Po
 include ./$(DEPDIR)/KHttpObject.Po
 include ./$(DEPDIR)/KHttpObjectHash.Po
-include ./$(DEPDIR)/KHttpObjectParserHook.Po
 include ./$(DEPDIR)/KHttpObjectSwaping.Po
+include ./$(DEPDIR)/KHttpParser.Po
 include ./$(DEPDIR)/KHttpPost.Po
-include ./$(DEPDIR)/KHttpProtocolParser.Po
-include ./$(DEPDIR)/KHttpProtocolParserHook.Po
 include ./$(DEPDIR)/KHttpProxyFetchObject.Po
 include ./$(DEPDIR)/KHttpRequest.Po
+include ./$(DEPDIR)/KHttpResponseParser.Po
 include ./$(DEPDIR)/KHttpServerParser.Po
+include ./$(DEPDIR)/KHttpSink.Po
 include ./$(DEPDIR)/KHttpTransfer.Po
 include ./$(DEPDIR)/KHuffDecode.Po
 include ./$(DEPDIR)/KISAPIServiceProvider.Po
@@ -834,19 +910,15 @@ include ./$(DEPDIR)/KInputFilter.Po
 include ./$(DEPDIR)/KIpMap.Po
 include ./$(DEPDIR)/KIpSpeedLimitMark.Po
 include ./$(DEPDIR)/KIpVirtualHost.Po
-include ./$(DEPDIR)/KKqueueSelector.Po
 include ./$(DEPDIR)/KLang.Po
 include ./$(DEPDIR)/KLangParser.Po
 include ./$(DEPDIR)/KLineFile.Po
-include ./$(DEPDIR)/KList.Po
-include ./$(DEPDIR)/KListNode.Po
 include ./$(DEPDIR)/KListenConfigParser.Po
 include ./$(DEPDIR)/KLogDrill.Po
 include ./$(DEPDIR)/KLogElement.Po
 include ./$(DEPDIR)/KLogHandle.Po
 include ./$(DEPDIR)/KLogManage.Po
 include ./$(DEPDIR)/KMapRedirectMark.Po
-include ./$(DEPDIR)/KMemPool.Po
 include ./$(DEPDIR)/KMultiAcserver.Po
 include ./$(DEPDIR)/KMultiHostAcl.Po
 include ./$(DEPDIR)/KMultiPartInputFilter.Po
@@ -856,7 +928,7 @@ include ./$(DEPDIR)/KPathRedirect.Po
 include ./$(DEPDIR)/KPerIpAcl.Po
 include ./$(DEPDIR)/KPipeStream.Po
 include ./$(DEPDIR)/KPoolableSocketContainer.Po
-include ./$(DEPDIR)/KPortSelector.Po
+include ./$(DEPDIR)/KPreRequest.Po
 include ./$(DEPDIR)/KProcess.Po
 include ./$(DEPDIR)/KProcessManage.Po
 include ./$(DEPDIR)/KProxy.Po
@@ -871,52 +943,33 @@ include ./$(DEPDIR)/KRequestQueue.Po
 include ./$(DEPDIR)/KResponseContext.Po
 include ./$(DEPDIR)/KRewriteMark.Po
 include ./$(DEPDIR)/KRewriteMarkEx.Po
-include ./$(DEPDIR)/KSSICommand.Po
-include ./$(DEPDIR)/KSSICommandCondition.Po
-include ./$(DEPDIR)/KSSICommandConfig.Po
-include ./$(DEPDIR)/KSSICommandEcho.Po
-include ./$(DEPDIR)/KSSICommandExec.Po
-include ./$(DEPDIR)/KSSICommandInclude.Po
-include ./$(DEPDIR)/KSSICommandPrintEnv.Po
-include ./$(DEPDIR)/KSSICommandSet.Po
-include ./$(DEPDIR)/KSSIContext.Po
-include ./$(DEPDIR)/KSSIFetchObject.Po
-include ./$(DEPDIR)/KSSIProcess.Po
-include ./$(DEPDIR)/KSSIRedirect.Po
-include ./$(DEPDIR)/KSSLSocket.Po
-include ./$(DEPDIR)/KScgiFetchObject.Po
-include ./$(DEPDIR)/KSelectable.Po
-include ./$(DEPDIR)/KSelector.Po
-include ./$(DEPDIR)/KSelectorManager.Po
+include ./$(DEPDIR)/KSSLSniContext.Po
 include ./$(DEPDIR)/KSequence.Po
-include ./$(DEPDIR)/KServer.Po
-include ./$(DEPDIR)/KServerListen.Po
 include ./$(DEPDIR)/KServiceProvider.Po
 include ./$(DEPDIR)/KSimulateRequest.Po
 include ./$(DEPDIR)/KSingleAcserver.Po
 include ./$(DEPDIR)/KSingleProgram.Po
+include ./$(DEPDIR)/KSink.Po
 include ./$(DEPDIR)/KSockFastcgiFetchObject.Po
 include ./$(DEPDIR)/KSockPoolHelper.Po
-include ./$(DEPDIR)/KSocket.Po
 include ./$(DEPDIR)/KSocketBuffer.Po
 include ./$(DEPDIR)/KSocketFetchObject.Po
 include ./$(DEPDIR)/KSqliteDiskCacheIndex.Po
 include ./$(DEPDIR)/KStaticFetchObject.Po
 include ./$(DEPDIR)/KStream.Po
-include ./$(DEPDIR)/KString.Po
+include ./$(DEPDIR)/KStringBuf.Po
 include ./$(DEPDIR)/KSubVirtualHost.Po
 include ./$(DEPDIR)/KSyncFetchObject.Po
 include ./$(DEPDIR)/KTable.Po
+include ./$(DEPDIR)/KTcpUpstream.Po
 include ./$(DEPDIR)/KTempFile.Po
-include ./$(DEPDIR)/KTempFileStream.Po
 include ./$(DEPDIR)/KTempleteVirtualHost.Po
-include ./$(DEPDIR)/KThreadPool.Po
 include ./$(DEPDIR)/KTimeMatch.Po
 include ./$(DEPDIR)/KTimer.Po
-include ./$(DEPDIR)/KUpstreamSelectable.Po
+include ./$(DEPDIR)/KTsUpstream.Po
+include ./$(DEPDIR)/KUpstream.Po
 include ./$(DEPDIR)/KUrlParser.Po
 include ./$(DEPDIR)/KUrlValue.Po
-include ./$(DEPDIR)/KUwsgiFetchObject.Po
 include ./$(DEPDIR)/KVirtualHost.Po
 include ./$(DEPDIR)/KVirtualHostContainer.Po
 include ./$(DEPDIR)/KVirtualHostDatabase.Po
@@ -930,21 +983,32 @@ include ./$(DEPDIR)/KXmlException.Po
 include ./$(DEPDIR)/KXmlSupport.Po
 include ./$(DEPDIR)/cache.Po
 include ./$(DEPDIR)/directory.Po
-include ./$(DEPDIR)/forwin32.Po
 include ./$(DEPDIR)/garbage_c.Po
-include ./$(DEPDIR)/kmysql.Po
 include ./$(DEPDIR)/lib.Po
 include ./$(DEPDIR)/log.Po
 include ./$(DEPDIR)/main.Po
-include ./$(DEPDIR)/malloc_debug.Po
-include ./$(DEPDIR)/md5.Po
 include ./$(DEPDIR)/process.Po
-include ./$(DEPDIR)/rbtree.Po
 include ./$(DEPDIR)/ssl_utils.Po
 include ./$(DEPDIR)/test.Po
 include ./$(DEPDIR)/time_utils.Po
 include ./$(DEPDIR)/utils.Po
 include ./$(DEPDIR)/work.Po
+
+.c.o:
+	depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
+	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+	$(am__mv) $$depbase.Tpo $$depbase.Po
+#	source='$<' object='$@' libtool=no \
+#	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) \
+#	$(COMPILE) -c -o $@ $<
+
+.c.obj:
+	depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
+	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
+	$(am__mv) $$depbase.Tpo $$depbase.Po
+#	source='$<' object='$@' libtool=no \
+#	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) \
+#	$(COMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
 .cpp.o:
 	depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
@@ -1072,6 +1136,8 @@ clean-generic:
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
+	-rm -f ../kasync/$(DEPDIR)/$(am__dirstamp)
+	-rm -f ../kasync/$(am__dirstamp)
 	-rm -f ../module/whm/$(DEPDIR)/$(am__dirstamp)
 	-rm -f ../module/whm/$(am__dirstamp)
 	-rm -f ../module/whm/whmdso/core/$(DEPDIR)/$(am__dirstamp)
@@ -1085,7 +1151,7 @@ clean: clean-am
 clean-am: clean-binPROGRAMS clean-generic mostlyclean-am
 
 distclean: distclean-am
-	-rm -rf ../module/whm/$(DEPDIR) ../module/whm/whmdso/core/$(DEPDIR) ./$(DEPDIR)
+	-rm -rf ../kasync/$(DEPDIR) ../module/whm/$(DEPDIR) ../module/whm/whmdso/core/$(DEPDIR) ./$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-hdr distclean-tags
@@ -1131,7 +1197,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-	-rm -rf ../module/whm/$(DEPDIR) ../module/whm/whmdso/core/$(DEPDIR) ./$(DEPDIR)
+	-rm -rf ../kasync/$(DEPDIR) ../module/whm/$(DEPDIR) ../module/whm/whmdso/core/$(DEPDIR) ./$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

@@ -4,6 +4,7 @@
 #include "KCondWait.h"
 #include "KCountable.h"
 #include "ksapi.h"
+#if 0
 //异步工作
 /**
 * 异步回调函数
@@ -109,4 +110,5 @@ private:
 	int worker;
 	int queue;
 };
+#endif
 #endif

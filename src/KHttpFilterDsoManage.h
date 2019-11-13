@@ -3,6 +3,7 @@
 #include "utils.h"
 #include <map>
 #ifdef ENABLE_KSAPI_FILTER
+#if 0
 class KHttpFilterDso;
 class KHttpFilterDsoManage
 {
@@ -21,5 +22,6 @@ private:
 	std::map<const char *,KHttpFilterDso *,lessp> dsos;
 	KMutex lock;
 };
+#endif
 #endif
 #endif

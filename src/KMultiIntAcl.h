@@ -4,7 +4,7 @@
 #include "KReg.h"
 #include "KXml.h"
 #include "utils.h"
-#include "rbtree.h"
+#include "krbtree.h"
 
 class KMultiIntAcl: public KAcl {
 public:
@@ -34,7 +34,7 @@ public:
 	}
 	std::string getValList() {
 		std::stringstream s;
-		rb_node *node;
+		krb_node *node;
 		bool isFirst = true;
 		for (node=rb_first(&root); node!=NULL; node=rb_next(node)) {
 			if (!isFirst) {
@@ -75,7 +75,7 @@ public:
 	}
 protected:
 	bool match(int item) {
-		struct rb_node **n = &(root.rb_node);
+		struct krb_node **n = &(root.rb_node);
 		int *data;
 		while (*n) {
 			data = (int *)((*n)->data);
@@ -92,7 +92,7 @@ protected:
 private:
 	void insert(int *item)
 	{
-		struct rb_node **n = &(root.rb_node), *parent = NULL;
+		struct krb_node **n = &(root.rb_node), *parent = NULL;
 		int *data;
 		while (*n) {
 			data = (int *)((*n)->data);
@@ -107,7 +107,7 @@ private:
 				return;
 			}
 		}
-		rb_node *node = new rb_node;
+		krb_node *node = new krb_node;
 		node->data = item;
 		rb_link_node(node, parent, n);
 		rb_insert_color(node, &root);
@@ -136,7 +136,7 @@ private:
 	}	
 	void freeMap() {
 		for(;;){
-			rb_node *node = rb_first(&root);
+			krb_node *node = rb_first(&root);
 			if(node==NULL){
 				break;
 			}
@@ -149,6 +149,6 @@ private:
 	}
 	char split;
 protected:
-	rb_root root;
+	krb_root root;
 };
 #endif

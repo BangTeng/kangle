@@ -7,8 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "KHttpKeyValue.h"
-#include "forwin32.h"
-#include "malloc_debug.h"
+#include "kforwin32.h"
+#include "kmalloc.h"
 static const char *http_methods[MAX_METHOD] = {
 		"UNSET",
 		"OPTIONS",

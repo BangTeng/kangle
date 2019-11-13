@@ -7,7 +7,7 @@
 #ifdef ENABLE_DB_DISK_INDEX
 #include "KDiskCacheIndex.h"
 #endif
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KCache.h"
 #define CLEAN_CACHE		0
 #define DROP_DEAD		1
@@ -59,11 +59,12 @@ int KObjectList::save_disk_index(KFile *fp)
 #endif
 void KObjectList::swap_all_obj()
 {
+	KBufferFile bf;
 	cache.lock();
 	KHttpObject *obj = l_head;
 	while (obj) {
 		if (!TEST(obj->index.flags, FLAG_DEAD)) {
-			obj->swapout(true);
+			obj->swapout(&bf,true);
 		}
 		obj = obj->lnext;
 	}
@@ -165,18 +166,16 @@ void KObjectList::dead_count(int &count)
 		count--;
 	}
 }
-void KObjectList::move(INT64 m_size,bool swapout_flag)
+void KObjectList::move(KBufferFile *bf, int64_t begin_msec,INT64 m_size,bool swapout_flag)
 {
 	bool is_dead = true;
 	int dead_obj_count = 0;
 	cache.lock();
-	cache.clean_blocked = false;
 	if (m_size<=0 && cache_model==CLEAN_CACHE) {
 		cache.unlock();
 		return;
 	}
 	KTempHttpObject *thead = NULL;
-	INT64 gc_start_time = kgl_current_msec;
 	KHttpObject * obj = l_head;
 	while (obj) {	
 		if (obj->getRefs() > 1) {
@@ -214,19 +213,22 @@ void KObjectList::move(INT64 m_size,bool swapout_flag)
 	//实际发生磁盘IO
 	while (thead) {
 		KTempHttpObject *tnext = thead->next;
-		int gc_used_msec = (int)(kgl_current_msec - gc_start_time);
+		int gc_used_msec = (int)(kgl_current_msec - begin_msec);
 		if (swapout_flag && !cache.is_disk_shutdown() && !thead->is_dead) {
-			swapout(thead, gc_used_msec);
+			swapout(thead, bf,gc_used_msec);
 		} else {
 			swapout_result(thead, gc_used_msec, false);
 		}
 		thead = tnext;
 	}
 }
-void KObjectList::swapout(KTempHttpObject *thead,int gc_used_msec)
+void KObjectList::swapout(KTempHttpObject *thead, KBufferFile *bf,int gc_used_msec)
 {
 #ifdef ENABLE_DISK_CACHE
-	bool result = thead->obj->swapout(gc_used_msec > GC_SLEEP_TIME * 1000);
+	if (bf == NULL) {
+		bf = new KBufferFile;
+	}
+	bool result = thead->obj->swapout(bf,gc_used_msec > GC_SLEEP_MSEC);
 #else
 	bool result = false;
 #endif
@@ -236,10 +238,10 @@ void KObjectList::swapout_result(KTempHttpObject *thead,int gc_used_msec,bool re
 {
 	KMutex * lock = NULL;
 	KHttpObject *obj = thead->obj;
+	cache.lock();
+	cache.clean_blocked = (gc_used_msec > (GC_SLEEP_MSEC + 5000));
 #ifdef ENABLE_DISK_CACHE
 	if (result) {
-		cache.lock();
-		cache.clean_blocked = (gc_used_msec > (GC_SLEEP_TIME * 1000 + 2000));
 		lock = obj->getLock();
 		lock->Lock();
 		SET(obj->index.flags, FLAG_IN_DISK);
@@ -258,8 +260,6 @@ void KObjectList::swapout_result(KTempHttpObject *thead,int gc_used_msec,bool re
 	}
 #endif
 	bool removed_result = false;
-	cache.lock();
-	cache.clean_blocked = (gc_used_msec > (GC_SLEEP_TIME * 1000 + 2000));
 	lock = &cache.objHash[obj->h].lock;
 	lock->Lock();
 	//这里为什么要判断一下list_state呢？因为有可能在中间，obj被其它请求使用，如调用swap_in而改变了list_state.

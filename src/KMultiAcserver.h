@@ -32,7 +32,7 @@ public:
 	KMultiAcserver(KSockPoolHelper *nodes);
 	virtual ~KMultiAcserver();
 public:
-	void connect(KHttpRequest *rq);
+	kev_result connect(KHttpRequest *rq);
 	unsigned getPoolSize();
 	bool editNode(std::map<std::string,std::string> &attr);
 	void buildXML(std::stringstream &s);

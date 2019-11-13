@@ -1,38 +1,117 @@
-#include "KConnectionSelectable.h"
-#include "KSelector.h"
+#include "kconnection.h"
+#include "kselector.h"
 #include "KHttp2.h"
-#include "KServer.h"
+#include "kserver.h"
 #include "KSubVirtualHost.h"
-#include "KSelectorManager.h"
-
+#include "kselector_manager.h"
+#if 0
 struct kgl_delay_io
 {
-	KConnectionSelectable *c;
+	kconnection *c;
 	KHttpRequest *rq;
-	bufferEvent buffer;
-	resultEvent result;
+	buffer_callback buffer;
+	result_callback result;
 };
 void delay_read(void *arg,int got)
 {
 	kgl_delay_io *io = (kgl_delay_io *)arg;
+	CLR(io->rq->flags, RQ_RTIMER);
 	io->c->read(io->rq,io->result,io->buffer);
 	delete io;
 }
 void delay_write(void *arg,int got)
 {
 	kgl_delay_io *io = (kgl_delay_io *)arg;
+	CLR(io->rq->flags, RQ_WTIMER);
 	io->c->write(io->rq,io->result,io->buffer);
 	delete io;
 }
 #ifdef KSOCKET_SSL
 void resultSSLShutdown(void *arg,int got)
 {
-	KConnectionSelectable *c = (KConnectionSelectable *)arg;
+	kconnection *c = (kconnection *)arg;
 	c->resultSSLShutdown(got);
 }
 #endif
-bool KConnectionSelectable::is_locked(KHttpRequest *rq)
+#ifdef _WIN32
+static int kconnection_buffer_addr(void *arg, LPWSABUF buffer, int bc)
 {
+	sockaddr_i *addr = (sockaddr_i *)arg;
+	buffer[0].iov_base = (char *)addr;
+	buffer[0].iov_len = addr->get_addr_len();
+	return 1;
+}
+#endif
+bool kconnection::get_remote_ip(char *ips, int ips_len)
+{
+	return ksocket_sockaddr_ip((struct sockaddr *)&addr, addr.get_addr_len(), ips, ips_len);
+}
+uint16_t kconnection::get_self_port()
+{
+	sockaddr_i addr;
+	if (0 != get_self_addr(&addr)) {
+		return 0;
+	}
+	return addr.get_port();
+}
+bool kconnection::get_self_ip(char *ips, int ips_len)
+{
+	sockaddr_i addr;
+	if (0 != get_self_addr(&addr)) {
+		return false;
+	}
+	return ksocket_sockaddr_ip((struct sockaddr *)&addr, addr.get_addr_len(), ips, ips_len);
+}
+uint16_t kconnection::get_remote_port()
+{
+	return addr.get_port();
+}
+int kconnection::get_self_addr(sockaddr_i *addr)
+{
+	int name_len = sizeof(sockaddr_i);
+	return getsockname(fd,(struct sockaddr *)addr, &name_len);
+}
+void kconnection::update_remote_addr()
+{
+	int addr_len = sizeof(sockaddr_i);
+	if (0 == getpeername(fd, (struct sockaddr *) &addr, &addr_len)) {
+		kassert(addr_len == addr.get_addr_len());
+	}
+}
+bool kconnection::HalfConnect(sockaddr_i *addr, sockaddr_i *bind_addr,int tproxy_mask)
+{
+	memcpy(&this->addr, addr, sizeof(sockaddr_i));
+	fd = ksocket_half_connect((struct sockaddr *)addr, addr->get_addr_len(), (struct sockaddr *)bind_addr, bind_addr? bind_addr->get_addr_len():0, tproxy_mask);
+	return ksocket_opened(fd);
+}
+bool kconnection::HalfConnect(const char *unix_path)
+{
+	return false;
+}
+bool kconnection::HalfConnect(struct sockaddr *addr, socklen_t addr_size, struct sockaddr *bind_addr, socklen_t bind_addr_size, int tproxy_mask)
+{
+	kassert(addr_size <= sizeof(sockaddr_i));
+	memcpy(&this->addr, addr, addr_size);
+	fd = ksocket_half_connect(addr, addr_size, bind_addr, bind_addr_size, tproxy_mask);
+	return ksocket_opened(fd);
+}
+void kconnection::Connect(result_callback result,void *arg)
+{
+	
+	//selector->addList(this, KGL_LIST_CONNECT);
+#ifdef _WIN32
+	e[OP_READ].buffer = kconnection_buffer_addr;
+	e[OP_READ].arg = &this->addr;
+#endif
+	if (!this->selector->connect(this, result, arg)) {
+		result(arg, -1);
+	}
+}
+bool kconnection::is_locked(KHttpRequest *rq)
+{
+	if (TEST(rq->flags, RQ_RTIMER | RQ_WTIMER)) {
+		return true;
+	}
 #ifdef ENABLE_HTTP2
 	if (rq->http2_ctx) {
 		if (rq->http2_ctx->read_wait) {
@@ -46,27 +125,9 @@ bool KConnectionSelectable::is_locked(KHttpRequest *rq)
 #endif
 	return TEST(st_flags, STF_LOCK) > 0;
 }
-KConnectionSelectable::~KConnectionSelectable()
+kconnection::~kconnection()
 {
 	//printf("st=[%p] deleted\n", static_cast<KSelectable *>(this));
-	assert(TEST(st_flags, STF_LOCK)==0);
-	assert(queue.next == NULL);
-	assert(queue.prev == NULL);
-	if (socket) {
-		/**
-		* 这里为什么要调用一次removeSocket呢？
-		* 一般来讲，在linux下面,一个socket close了,epoll自动会删除相关事件。
-		* 但如果此时fork了，此socket在一瞬间被其它子进程共享，即使设置了close_on_exec,但此fd在fork之后，exec之前还是处于未关闭状态。
-		* 此时虽close此socket,epoll还是会返回相关事件。
-		* 除非确保当前进程不会fork.
-		*/
-		if (selector) {
-			selector->removeSocket(this);
-		}
-		delRequest(this);
-		socket->shutdown(SHUT_RDWR);
-		delete socket;
-	}
 #ifdef ENABLE_HTTP2
 	if (http2) {
 		delete http2;
@@ -84,7 +145,7 @@ KConnectionSelectable::~KConnectionSelectable()
 		kgl_destroy_pool(pool);
 	}
 }
-void KConnectionSelectable::release(KHttpRequest *rq)
+void kconnection::release(KHttpRequest *rq)
 {
 #ifdef ENABLE_HTTP2
 	if (http2) {
@@ -95,7 +156,15 @@ void KConnectionSelectable::release(KHttpRequest *rq)
 #endif
 	real_destroy();
 }
-void KConnectionSelectable::read(KHttpRequest *rq,resultEvent result,bufferEvent buffer)
+void kconnection::Read(void *arg, result_callback result, buffer_callback buffer)
+{
+	async_read(arg, result, buffer);
+}
+void kconnection::Write(void *arg, result_callback result, buffer_callback buffer)
+{
+	async_write(arg, result, buffer);
+}
+void kconnection::read(KHttpRequest *rq,result_callback result,buffer_callback buffer)
 {
 #ifdef ENABLE_HTTP2
 	if (http2) {
@@ -105,13 +174,13 @@ void KConnectionSelectable::read(KHttpRequest *rq,resultEvent result,bufferEvent
 #endif
 	async_read(rq,result,buffer);
 }
-bool KConnectionSelectable::write_all(KHttpRequest *rq, const char *buf, int len)
+bool kconnection::write_all(const char *buf, int len)
 {
 	WSABUF b;
 	while (len > 0) {
 		b.iov_len = len;
 		b.iov_base = (char *)buf;
-		int got = write(rq, &b, 1);
+		int got = Write(&b, 1);
 		if (got <= 0) {
 			return false;
 		}
@@ -120,16 +189,21 @@ bool KConnectionSelectable::write_all(KHttpRequest *rq, const char *buf, int len
 	}
 	return true;
 }
-int KConnectionSelectable::write(KHttpRequest *rq,LPWSABUF buf,int bufCount)
+int kconnection::Write(LPWSABUF buf,int bufCount)
 {
 #ifdef ENABLE_HTTP2
 	if (http2) {
 		return http2->write(rq->http2_ctx,buf,bufCount);
 	}
 #endif
-	return socket->writev(buf,bufCount,isSSL());
+#ifdef KSOCKET_SSL
+	if (isSSL()) {
+		return static_cast<KSSLSocket *>(socket)->ssl_writev(buf, bufCount);
+	}
+#endif
+	return kgl_writev(fd,buf,bufCount);
 }
-void KConnectionSelectable::write(KHttpRequest *rq,resultEvent result,bufferEvent buffer)
+void kconnection::write(KHttpRequest *rq,result_callback result,buffer_callback buffer)
 {
 	assert(selector->is_same_thread());
 #ifdef ENABLE_HTTP2
@@ -140,7 +214,7 @@ void KConnectionSelectable::write(KHttpRequest *rq,resultEvent result,bufferEven
 #endif
 	async_write(rq,result,buffer);
 }
-void KConnectionSelectable::read_hup(KHttpRequest *rq,resultEvent result)
+void kconnection::read_hup(KHttpRequest *rq,result_callback result)
 {
 #ifdef ENABLE_HTTP2
 	if (http2) {
@@ -155,29 +229,16 @@ void KConnectionSelectable::read_hup(KHttpRequest *rq,resultEvent result)
 #endif
 	selector->read_hup(this,result,NULL,rq);
 }
-void KConnectionSelectable::add_sync(KHttpRequest *rq)
+void kconnection::AddSync()
 {
-	assert(rq->c->selector->is_same_thread());
-#ifdef ENABLE_HTTP2
-	if (http2) {
-		assert(rq->http2_ctx->read_wait == NULL);
-		return;
-	}
-#endif
 	selector->removeSocket(this);
 	selector->add_list(this, KGL_LIST_SYNC);	
 }
-void KConnectionSelectable::remove_sync(KHttpRequest *rq)
+void kconnection::RemoveSync()
 {
-	assert(rq->c->selector->is_same_thread());
-#ifdef ENABLE_HTTP2
-	if (http2) {
-		return;
-	}
-#endif
 	selector->remove_list(this);
 }
-void KConnectionSelectable::remove_read_hup(KHttpRequest *rq)
+void kconnection::remove_read_hup(KHttpRequest *rq)
 {
 #ifdef ENABLE_HTTP2
 	if (http2) {
@@ -188,7 +249,7 @@ void KConnectionSelectable::remove_read_hup(KHttpRequest *rq)
 	selector->remove_read_hup(this);
 	return;
 }
-void KConnectionSelectable::shutdown(KHttpRequest *rq)
+void kconnection::Shutdown(KHttpRequest *rq)
 {
 #ifdef ENABLE_HTTP2
 	if (http2) {
@@ -198,36 +259,50 @@ void KConnectionSelectable::shutdown(KHttpRequest *rq)
 #endif
 	shutdown_socket();
 }
-int KConnectionSelectable::read(KHttpRequest *rq,char *buf,int len)
+int kconnection::Read(char *buf,int len)
 {
 #ifdef ENABLE_HTTP2
 	if (http2) {
 		return http2->read(rq->http2_ctx,buf,len);
 	}
 #endif
-	return socket->read(buf,len);
+#ifdef KSOCKET_SSL
+	if (isSSL()) {
+		return static_cast<KSSLSocket *>(socket)->ssl_read(buf, len);
+	}
+#endif
+	return recv(fd,buf,len,0);
 }
-void KConnectionSelectable::delayRead(KHttpRequest *rq,resultEvent result,bufferEvent buffer,int msec)
+void kconnection::delayRead(KHttpRequest *rq,result_callback result,buffer_callback buffer,int msec)
 {
+	/**
+	* delay_read/delay_write在timer之前设置标识，并在timer结束实际运行时，清除相应的标识。
+	* 以便在双通道中，检测selectable是否lock时，要同时检测此timer标识。
+	* 否则会导致检测了selectable没有lock，并清除相应的selectable，但timer锁定了，结果就出错。
+	*/
+	kassert(!TEST(rq->flags, RQ_RTIMER));
+	SET(rq->flags, RQ_RTIMER);
 	assert(selector->is_same_thread());
 	kgl_delay_io *io = new kgl_delay_io;
 	io->c = this;
 	io->rq = rq;
 	io->result = result;
 	io->buffer = buffer;
-	selector->add_timer(delay_read,io,msec, rq->c);
+	selector->add_timer(delay_read,io,msec, this);
 }
-void KConnectionSelectable::delayWrite(KHttpRequest *rq,resultEvent result,bufferEvent buffer,int msec)
+void kconnection::delayWrite(KHttpRequest *rq,result_callback result,buffer_callback buffer,int msec)
 {
+	kassert(!TEST(rq->flags, RQ_WTIMER));
+	SET(rq->flags, RQ_WTIMER);
 	assert(selector->is_same_thread());
 	kgl_delay_io *io = new kgl_delay_io;
 	io->c = this;
 	io->rq = rq;
 	io->result = result;
 	io->buffer = buffer;
-	selector->add_timer(delay_write,io,msec,rq->c);
+	selector->add_timer(delay_write,io,msec,this);
 }
-int KConnectionSelectable::start_response(KHttpRequest *rq,INT64 body_len)
+int kconnection::start_response(KHttpRequest *rq,INT64 body_len)
 {
 #ifdef ENABLE_HTTP2
 	if (http2) {
@@ -238,10 +313,10 @@ int KConnectionSelectable::start_response(KHttpRequest *rq,INT64 body_len)
 		return http2->send_header(rq->http2_ctx, body_len);
 	}
 #endif
-	socket->set_delay();
+	set_delay();
 	return 0;
 }
-void KConnectionSelectable::end_response(KHttpRequest *rq,bool keep_alive)
+void kconnection::end_response(KHttpRequest *rq,bool keep_alive)
 {
 #ifdef ENABLE_HTTP2
 	if (http2) {
@@ -260,12 +335,12 @@ void KConnectionSelectable::end_response(KHttpRequest *rq,bool keep_alive)
 	}
 #endif
 	if (keep_alive) {
-		socket->set_nodelay();
+		set_nodelay();
 		SET(rq->workModel,WORK_MODEL_KA);
 	}
 }
 #ifdef KSOCKET_SSL
-query_vh_result KConnectionSelectable::useSniVirtualHost(KHttpRequest *rq)
+query_vh_result kconnection::useSniVirtualHost(KHttpRequest *rq)
 {
 	assert(rq->svh==NULL);
 	rq->svh = sni->svh;
@@ -275,7 +350,7 @@ query_vh_result KConnectionSelectable::useSniVirtualHost(KHttpRequest *rq)
 	sni = NULL;
 	return ret;
 }
-void KConnectionSelectable::resultSSLShutdown(int got)
+void kconnection::resultSSLShutdown(int got)
 {
 	if (got<0) {
 		delete this;
@@ -309,7 +384,7 @@ void KConnectionSelectable::resultSSLShutdown(int got)
 	}
 }
 #endif
-void KConnectionSelectable::real_destroy()
+void kconnection::real_destroy()
 {
 	if (selector) {
 #ifdef KSOCKET_SSL
@@ -329,4 +404,5 @@ KSSLSniContext::~KSSLSniContext()
 		svh->release();
 	}
 }
+#endif
 #endif

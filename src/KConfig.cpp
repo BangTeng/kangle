@@ -25,11 +25,10 @@
 #include <assert.h>
 #include <string>
 #include <sstream>
-
 #include "do_config.h"
 #include "utils.h"
 #include "log.h"
-#include "md5.h"
+#include "kmd5.h"
 #include "lib.h"
 #include "lang.h"
 #include "KConfigBuilder.h"
@@ -39,20 +38,20 @@
 #include "KLang.h"
 #include "KHttpServerParser.h"
 #include "KContentType.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KVirtualHostManage.h"
 #include "KVirtualHostDatabase.h"
 #include "KAcserverManager.h"
 #include "KWriteBackManager.h"
-#include "KSelectorManager.h"
+#include "kselector_manager.h"
 #include "KListenConfigParser.h"
 #include "directory.h"
-#include "server.h"
+#include "kserver.h"
 #include "KHtAccess.h"
 #include "KLogHandle.h"
 #include "cache.h"
 #include "katom.h"
-#include "KThreadPool.h"
+#include "kthread.h"
 #ifdef _WIN32
 #include <direct.h>
 #else
@@ -86,6 +85,7 @@ void KConfig::copy(KConfig *c)
 	this->run_user = c->run_user;
 	this->run_group = c->run_group;
 	
+#if 0
 	ipLock.Lock();
 	//swap per_ip_head
 	KPerIpConnect *tp = per_ip_head;
@@ -96,6 +96,7 @@ void KConfig::copy(KConfig *c)
 	per_ip_last = c->per_ip_last;
 	c->per_ip_last = tp;
 	ipLock.Unlock();
+#endif
 	return;
 }
 KConfig::~KConfig()
@@ -105,19 +106,21 @@ KConfig::~KConfig()
 	for(it=service.begin();it!=service.end();it++){
 		delete (*it);
 	}
+#if 0
 	while (per_ip_head) {
 		per_ip_last = per_ip_head->next;
 		delete per_ip_head;
 		per_ip_head = per_ip_last;
 	}
-
+#endif
 }
 KGlobalConfig::KGlobalConfig()
 {
 	gam = new KAcserverManager;
 	gvm = new KVirtualHostManage;
 	sysHost = new KVirtualHost;
-	hfdm = NULL;
+	dem = NULL;
+	select_count = 0;
 }
 class KExtConfigDynamicString : public KDynamicString
 {
@@ -276,7 +279,6 @@ void init_config(KConfig *conf)
 	conf->max_post_size = 8388608;
 #endif	
 	conf->read_hup = true;
-	conf->mlock = false;
 	conf->io_timeout = 4;
 	conf->max_io = 0;
 	conf->worker_io = 16;
@@ -486,14 +488,9 @@ void loadExtConfigFile()
 bool saveConfig() {
 	return KConfigBuilder::saveConfig();
 }
-void load_main_config(KConfig *cconf,KXml &xmlParser,bool firstload)
+void load_main_config(KConfig *cconf,std::string & configFile,KXml &xmlParser,bool firstload)
 {
-#ifdef KANGLE_ETC_DIR
-	string configFile = KANGLE_ETC_DIR;
-#else
-	string configFile = conf.path + "/etc";
-#endif
-	configFile += CONFIG_FILE;
+
 	printf(klang["LANG_READ_CONFIG_FILE"], configFile.c_str());
 	
 	for (int i=0;i<2;i++) {
@@ -537,12 +534,13 @@ void clean_config() {
 		delete conf.service[i];
 	}
 	conf.service.clear();
+	conf.gvm->flush_static_listens(conf.service);
 #ifdef ENABLE_WRITE_BACK
 	writeBackManager.destroy();
 #endif
 	contentType.destroy();
 }
-FUNC_TYPE FUNC_CALL do_config_thread(void *first_time)
+KTHREAD_FUNCTION do_config_thread(void *first_time)
 {
 	cur_config_ext = false;
 	if (first_time!=NULL) {
@@ -579,8 +577,8 @@ void do_config(bool first_time) {
 		//first time load must not use thread
 		do_config_thread((void *)&first_time);
 		return;
-	}
-	if (!m_thread.start(NULL, do_config_thread, true)) {
+	}	
+	if (!kthread_pool_start(do_config_thread, NULL)) {
 		katom_set((void *)&load_config_progress, 0);
 	}
 }
@@ -615,6 +613,16 @@ void load_config(KConfig *cconf,bool firstTime)
 {
 	std::map<int,KExtConfig *>::iterator it;
 	bool main_config_loaded = false;
+#ifdef KANGLE_ETC_DIR
+	string configFile = KANGLE_ETC_DIR;
+#else
+	string configFile = conf.path + "/etc";
+#endif
+	configFile += CONFIG_FILE;
+	worker_config_parser.parse(configFile);
+	if (firstTime) {
+		init_program();
+	}
 	loadExtConfigFile();
 	KConfigParser parser;
 	KAccess access[2];
@@ -628,14 +636,16 @@ void load_config(KConfig *cconf,bool firstTime)
 #ifndef HTTP_PROXY
 	KHttpServerParser vhParser;
 	xmlParser.addEvent(&vhParser);
-#else
-	xmlParser.addEvent(&kaccess[0]);
-	xmlParser.addEvent(&kaccess[1]);
 #endif
 	if (firstTime) {
+		
 		xmlParser.addEvent(conf.gam);
 #ifdef ENABLE_WRITE_BACK
 		xmlParser.addEvent(&writeBackManager);
+#endif
+#ifdef HTTP_PROXY
+		xmlParser.addEvent(&kaccess[0]);
+		xmlParser.addEvent(&kaccess[1]);
 #endif
 		cconf->am = conf.gam;
 		cconf->vm = conf.gvm;
@@ -647,6 +657,9 @@ void load_config(KConfig *cconf,bool firstTime)
 #ifndef HTTP_PROXY
 		vhParser.kaccess[0] = &access[0];
 		vhParser.kaccess[1] = &access[1];
+#else
+		xmlParser.addEvent(&access[0]);
+		xmlParser.addEvent(&access[1]);
 #endif
 		xmlParser.addEvent(&am);
 		xmlParser.addEvent(&wm);
@@ -658,7 +671,7 @@ void load_config(KConfig *cconf,bool firstTime)
 		if(!main_config_loaded && (*it).first>=100){
 			main_config_loaded = true;
 			cur_config_ext = false;
-			load_main_config(cconf,xmlParser,firstTime);
+			load_main_config(cconf, configFile,xmlParser,firstTime);
 			cur_config_ext = true;
 		}
 		loadExtConfigFile((*it).second,xmlParser);
@@ -667,7 +680,7 @@ void load_config(KConfig *cconf,bool firstTime)
 	extconfigs.clear();	
 	cur_config_ext = false;
 	if(!main_config_loaded){
-		load_main_config(cconf,xmlParser,firstTime);
+		load_main_config(cconf, configFile,xmlParser,firstTime);
 	}
 	
 #ifndef HTTP_PROXY
@@ -708,14 +721,14 @@ void parse_config(bool firstTime)
 		conf.worker_dns = 2;
 	}
 	if (conf.ioWorker==NULL) {
-		conf.ioWorker = new KAsyncWorker(conf.worker_io,conf.max_io);
+		conf.ioWorker = kasync_worker_init(conf.worker_io,conf.max_io);
 	} else {
-		conf.ioWorker->setWorker(conf.worker_io,conf.max_io);
+		kasync_worker_set(conf.ioWorker,conf.worker_io,conf.max_io);
 	}
 	if (conf.dnsWorker==NULL) {
-		conf.dnsWorker = new KAsyncWorker(conf.worker_dns,512);
+		conf.dnsWorker = kasync_worker_init(conf.worker_dns,512);
 	} else {
-		conf.dnsWorker->setWorker(conf.worker_dns,512);
+		kasync_worker_set(conf.dnsWorker, conf.worker_dns, 512);
 	}
 	if (*conf.disk_work_time) {
 		conf.diskWorkTime.set(conf.disk_work_time);
@@ -746,8 +759,8 @@ void parse_config(bool firstTime)
 		conf.gvm->flush_static_listens(conf.service);
 		//÷ÿ÷√log
 		klog_start();
-		selectorManager.setTimeOut();
 	}
+	selector_manager_set_timeout(conf.connect_time_out, conf.time_out);
 	cache.init(firstTime);
 	
 	::logHandle.setLogHandle(conf.logHandle);

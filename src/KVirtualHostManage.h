@@ -55,15 +55,15 @@ public:
 	/*
 	 * 查找虚拟主机并绑定在rq上。
 	 */
-	void add_static(KServer *server);
-	void remove_static(KServer *server);
-	query_vh_result queryVirtualHost(KServer *ls,KSubVirtualHost **rq_svh,const char *site,int site_len);
+	void add_static(kserver *server);
+	void remove_static(kserver *server);
+	query_vh_result queryVirtualHost(kserver *ls,KSubVirtualHost **rq_svh,const char *site,int site_len);
 	int find_domain(const char *domain, WhmContext *ctx);
 	void getAllVh(std::list<std::string> &vhs,bool status,bool onlydb);
 	bool getAllTempleteVh(const char *templeteGroup,std::list<std::string> &vhs);
 	void getAllGroupTemplete(std::list<std::string> &vhs);
 	KVirtualHost *refsVirtualHostByName(std::string name);
-	KServer *refsServer(u_short port);
+	kserver *refsServer(u_short port);
 	KTempleteVirtualHost *refsTempleteVirtualHost(std::string name);
 	bool updateTempleteVirtualHost(KTempleteVirtualHost *tvh);
 	bool removeTempleteVirtualHost(std::string name);	

@@ -1,6 +1,6 @@
 #ifndef KDISKCACHEINDEX_H
 #define KDISKCACHEINDEX_H
-#include "KAsyncWorker.h"
+#include "kasync_worker.h"
 #include "KDiskCache.h"
 #ifdef ENABLE_DB_DISK_INDEX
 class KHttpObject;
@@ -37,9 +37,9 @@ public:
 	void work(diskCacheOperatorParam *param);
 	bool allWorkedDone()
 	{
-		return worker->isEmpty();
+		return kasync_worker_empty(worker);
 	}
-	KAsyncWorker *getWorker()
+	kasync_worker *getWorker()
 	{
 		return worker;
 	}
@@ -53,7 +53,7 @@ protected:
 	virtual bool update(unsigned filename1,unsigned filename2,const char *data,int dataLen) = 0;
 	virtual bool load(loadDiskCacheIndexCallBack callBack) = 0;
 private:
-	KAsyncWorker *worker;
+	kasync_worker *worker;
 	int transaction_count;
 	bool shutdown_flag;
 };

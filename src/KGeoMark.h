@@ -1,36 +1,53 @@
 #ifndef KGEOMARK_H
 #define KGEOMARK_H
 #include "KMark.h"
-#include "rbtree.h"
+#include "krbtree.h"
 #include "KIpMap.h"
 #include "utils.h"
 #include "KLineFile.h"
-iterator_ret free_geo_env(void *data, void *argv);
+#include "KRWLock.h"
+
+struct geo_lable {
+	char *data;
+	int len;
+	geo_lable *next;
+};
 class KGeoMark : public KMark
 {
 public:
 	KGeoMark()
 	{
-		env = NULL;
 		last_modified = 0;
 		pool = NULL;
-		current_lable = NULL;
 		total_item = 0;
+		url = NULL;
+		flush_time = 86400;
+		flush_timer = false;
 	}
 	~KGeoMark()
 	{
 		clean_env();
+		if (url) {
+			xfree(url);
+		}
+		kassert(flush_timer == false);
 	}
 	bool supportRuntime()
 	{
-		return true;
+		return false;
 	}
 	bool mark(KHttpRequest *rq, KHttpObject *obj, const int chainJumpType, int &jumpType) {
-		char *lable = (char *)im.find(rq->getClientIp());
+		lock.RLock();
+		geo_lable *lable = (geo_lable *)im.find(rq->getClientIp());
 		if (lable == NULL) {
+			lock.RUnlock();
 			return false;
 		}
-		rq->parser.insertHeader(this->name.c_str(), this->name.size(), lable, strlen(lable));
+		while (lable) {
+			rq->AddHeader(this->name.c_str(), this->name.size(), lable->data, lable->len);
+			lable = lable->next;
+		}
+		lock.RUnlock();
 		return true;
 	}
 	std::string getDisplay() {
@@ -38,45 +55,26 @@ public:
 		s << this->name << " " << total_item;
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attr)
-		throw(KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attr)	throw(KHtmlSupportException) {
+		lock.WLock();
 		this->file = attr["file"];
 		this->name = attr["name"];
-
+		this->flush_time = atoi(attr["flush_time"].c_str());
+		if (this->url) {
+			xfree(this->url);
+			this->url = NULL;
+		}
+		if (!attr["url"].empty()) {
+			this->url = strdup(attr["url"].c_str());
+		}
 		std::string file;
 		if (isAbsolutePath(this->file.c_str())) {
 			file = this->file;
 		} else {
 			file = conf.path + this->file;
 		}
-		time_t last_modified = kfile_last_modified(file.c_str());
-		if (last_modified == this->last_modified) {
-			return;
-		}
-		this->last_modified = last_modified;
-		im.clear();
-		clean_env();
-		env = rbtree_create();
-		pool = kgl_create_pool(KGL_REQUEST_POOL_SIZE);
-		KStreamFile lf;
-		if (!lf.open(file.c_str())) {
-			return;
-		}
-		for (;;) {
-			char *line = lf.read();
-			if (line == NULL) {
-				break;
-			}
-			if (*line=='*') {
-				current_lable = pool_strdup(line + 1);
-				total_item++;
-				continue;
-			}
-			if (current_lable == NULL) {
-				continue;
-			}
-			im.add_addr(line, current_lable);
-		}		
+		this->load_data(file.c_str());
+		lock.WUnlock();		
 	}
 	bool startCharacter(KXmlContext *context, char *character, int len) {		
 		return true;
@@ -94,7 +92,16 @@ public:
 			s << m->file;
 		}
 		s << "'>";
-
+		s << "url:<input name='url' value='";
+		if (m && m->url) {
+			s << m->url;
+		}
+		s << "'>";
+		s << "flush_time:<input name='flush_time' value='";
+		if (m) {
+			s << m->flush_time;
+		}
+		s << "'>";
 		return s.str();
 	}
 	KMark *newInstance() {
@@ -106,39 +113,65 @@ public:
 	void buildXML(std::stringstream &s) {
 		s << " file='" << this->file << "'";
 		s << " name='" << this->name << "'";
+		if (url) {
+			int url_len = strlen(url);
+			char *encode_url = KXml::htmlEncode(url, url_len, NULL);
+			s << " url='" << encode_url << "'";
+			xfree(encode_url);
+			s << " flush_time='" << flush_time << "'";
+		}
 		s << ">";
 	}
+	void flush_timer_callback();
+	void download_callback(int status);
 private:
-	char *pool_strdup(const char *str)
+	void load_data(const char *file);
+	void add_flush_timer(int timer);
+	geo_lable *build_lable(char *str)
 	{
-		int len = strlen(str);
-		char *data = (char *)kgl_pnalloc(pool, len+1);
-		memcpy(data, str, len);
-		data[len] = '\0';
-		return data;
+		geo_lable *last = NULL;
+		while (*str) {
+			while (*str && *str == '*') {
+				str++;
+			}
+			char *end = str;
+			while (*end && *end != '*') {
+				end++;
+			}
+			int len = end - str;
+			if (*end) {
+				*end++ = '\0';
+			}			
+			if (len > 0) {
+				geo_lable *lable = (geo_lable *)kgl_pnalloc(pool, sizeof(geo_lable));
+				lable->data = (char *)kgl_pnalloc(pool, len);
+				lable->len = len;
+				memcpy(lable->data, str, len);
+				lable->next = last;
+				last = lable;
+			}
+			str = end;
+		}
+		return last;
 	}
 	void clean_env()
 	{
-		if (env) {
-			rbtree_iterator(env, free_geo_env,NULL);
-			rbtree_destroy(env);
-			env = NULL;
-		}
 		if (pool) {
 			kgl_destroy_pool(pool);
 			pool = NULL;
 		}
-		current_lable = NULL;
 		total_item = 0;
 	}
 	std::string file;
 	std::string name;
+	char *url;
 	KIpMap im;
-	rb_tree *env;
 	kgl_pool_t *pool;
 	time_t last_modified;
-	char *current_lable;
 	int total_item;
+	int flush_time;
+	bool flush_timer;
+	KRWLock lock;
 };
 #endif
 

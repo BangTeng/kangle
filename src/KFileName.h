@@ -18,12 +18,19 @@
 #ifndef KFileName_h_slkdjf981223
 #define KFileName_h_slkdjf981223
 #include <string>
+#include <stdarg.h>
+#include <stdio.h>
 #ifndef _WIN32
 #include <sys/stat.h> 
 #endif
 #include "global.h"
-#include "forwin32.h"
-
+#include "kforwin32.h"
+#include "kfile.h"
+#include "kasync_file.h"
+#include "kmalloc.h"
+#ifdef _WIN32
+#define ENABLE_UNICODE_FILE 1
+#endif
 enum CheckLinkState 
 {
 	CheckLinkFailed,
@@ -41,7 +48,7 @@ public:
 	bool setName(const char *path);
 	bool giveName(char *path);
 	const char *getName();
-#ifdef _WIN32
+#ifdef ENABLE_UNICODE_FILE
 	const wchar_t *getNameW();
 #endif
 	char *saveName();
@@ -77,7 +84,7 @@ public:
 		return pathInfoLength;
 	}
 private:
-#ifdef _WIN32
+#ifdef ENABLE_UNICODE_FILE
 	wchar_t *wname;
 #endif
 	char *name;
@@ -89,5 +96,198 @@ private:
 	bool linkChecked;
 	//path_info时，url的长度
 	unsigned pathInfoLength;
+};
+class KFile
+{
+public:
+	KFile()
+	{
+		kfinit(fp);
+	}
+	~KFile()
+	{
+		this->close();
+	}
+	void flush()
+	{
+#ifdef _WIN32
+		FlushFileBuffers(fp);
+#else
+		//fflush(fp);
+#endif
+	}
+#ifdef ENABLE_SENDFILE
+	int sendfile(SOCKET sockfd, off_t offset, int size)
+	{
+		return ::sendfile(sockfd, fp, &offset, (size_t)size);
+	}
+#endif
+#ifdef _WIN32
+	bool readEx(char *buf, int len, LPOVERLAPPED lp, LPOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine)
+	{
+		return ReadFileEx(fp, buf, len, lp, lpCompletionRoutine) == TRUE;
+	}
+	bool connectIOCP(HANDLE iocp, void *data)
+	{
+		CreateIoCompletionPort(fp, iocp, (ULONG_PTR)data, 0);
+		return true;
+	}
+	bool openW(const wchar_t *path, fileModel model, int flag = 0)
+	{
+		fp = kfopen_w(path, model, flag);
+		return kflike(fp);
+	}
+#endif
+	INT64 getFileSize()
+	{
+		return kfsize(fp);
+	}
+	INT64 getCreateTime()
+	{
+		return kftime(fp);
+	}
+	bool open(const char *path, fileModel model, int flag = 0)
+	{
+		fp = kfopen(path, model, flag);
+		return kflike(fp);
+	}
+	void sync_data()
+	{
+#ifdef _WIN32
+		FlushFileBuffers(fp);
+#elif O_DSYNC
+		fdatasync(fp);
+#else
+		fsync(fp);
+#endif
+	}
+	int vfprintf(const char *fmt, va_list ap)
+	{
+		int len;
+		char buf[512];
+		len = vsnprintf(buf, sizeof(buf), fmt, ap);
+		return write(buf, len);
+	}
+	int fprintf(const char *fmt, ...)
+	{
+		va_list ap;
+		va_start(ap, fmt);
+		int len = vfprintf(fmt, ap);
+		va_end(ap);
+		return len;
+	}
+	int read(char *buf, int len)
+	{
+		return ::kfread(fp, buf, len);
+	}
+	int write(const char *buf, int len)
+	{
+		return ::kfwrite(fp, buf, len);
+	}
+	void close()
+	{
+		if (kflike(fp)) {
+			::kfclose(fp);
+			kfinit(fp);
+		}
+	}
+	bool opened()
+	{
+		return kflike(fp);
+	}
+	bool seek(INT64 len, seekPosion position)
+	{
+		return kfseek(fp, len, position);
+	}
+	FILE_HANDLE stealHandle()
+	{
+		FILE_HANDLE fp2 = fp;
+		kfinit(fp);
+		return fp2;
+	}
+	FILE_HANDLE getHandle()
+	{
+		return fp;
+	}
+	void swap(KFile *file)
+	{
+		FILE_HANDLE t = file->fp;
+		file->fp = fp;
+		fp = t;
+	}
+	void setHandle(FILE_HANDLE fp)
+	{
+		this->fp = fp;
+	}
+private:
+	FILE_HANDLE fp;
+};
+#define KGL_MAX_BUFFER_FILE_SIZE 4194304
+class KBufferFile : public KFile
+{
+public:
+	~KBufferFile()
+	{
+		this->flush();
+		aio_free_buffer(buffer);
+	}
+	KBufferFile()
+	{
+		buffer = (char *)aio_alloc_buffer(KGL_MAX_BUFFER_FILE_SIZE);
+		init();
+	}
+	void init()
+	{
+		total_write = 0;
+		hot = buffer;
+		buffer_left = KGL_MAX_BUFFER_FILE_SIZE;
+	}
+	void close()
+	{
+		this->flush();
+		KFile::close();
+	}
+	int write(const char *buf, int len)
+	{
+		int orig_len = len;
+		while (len > 0) {
+			int write_len = MIN(len, buffer_left);
+			if (write_len <= 0) {
+				if (!flush()) {
+					return -1;
+				}
+				continue;
+			}
+			if (buf != NULL) {
+				memcpy(hot, buf, write_len);
+				buf += write_len;
+			}
+			hot += write_len;
+			len -= write_len;
+			buffer_left -= write_len;
+			total_write += write_len;
+		};
+		return orig_len;
+	}
+	INT64 get_total_write()
+	{
+		return total_write;
+	}
+private:
+	bool flush()
+	{
+		if (!this->opened()) {
+			return false;
+		}
+		int len = (int)(hot - buffer);
+		bool result = KFile::write(buffer, len) == len;
+		hot = buffer;
+		buffer_left = KGL_MAX_BUFFER_FILE_SIZE;
+		return result;
+	}
+	INT64 total_write;
+	int buffer_left;
+	char *buffer;
+	char *hot;
 };
 #endif

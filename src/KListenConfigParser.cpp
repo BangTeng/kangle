@@ -21,14 +21,29 @@
 #include "KAccess.h"
 #include "KAcserverManager.h"
 #include "KWriteBackManager.h"
-#include "malloc_debug.h"
-#include "KThreadPool.h"
+#include "kmalloc.h"
+#include "kthread.h"
 #include "KRequestQueue.h"
 #include "lib.h"
-#include "md5.h"
 #include "do_config.h"
 using namespace std;
 KListenConfigParser listenConfigParser;
+KWorkerConfigParser worker_config_parser;
+bool KWorkerConfigParser::startCharacter(KXmlContext *context, char *character, int len)
+{
+	if (context->path == "config/worker_thread") {
+		conf.select_count = atoi(character);
+		return true;
+	}
+	return false;
+}
+bool KWorkerConfigParser::parse(std::string file) {
+	KXml xmlParser;
+	xmlParser.setEvent(this);
+	bool result = false;
+	result = xmlParser.parseFile(file);
+	return result;
+}
 bool KListenConfigParser::startElement(std::string &context, std::string &qName,
 		std::map<std::string, std::string> &attribute) {
 	if (context!="config") {

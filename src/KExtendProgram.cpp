@@ -1,11 +1,12 @@
 #include <vector>
+#include "klog.h"
 #include "KExtendProgram.h"
 #include "KFileName.h"
 #include "utils.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KTempleteVirtualHost.h"
 #include "KSequence.h"
-#include "KFile.h"
+#include "kfile.h"
 #ifndef _WIN32
 extern char **environ;
 #endif

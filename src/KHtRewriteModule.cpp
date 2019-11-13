@@ -9,7 +9,7 @@
 #include "KHtAccess.h"
 #include "KHtRewriteModule.h"
 #include "KXml.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 void parseRewriteFlag(char *flag, rewrite_flag_t &rf) {
 	flag = strchr(flag, '[');
 	if (flag == NULL) {

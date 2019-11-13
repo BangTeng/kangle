@@ -14,6 +14,7 @@
 #include "KApiRedirect.h"
 #include "KApiPipeStream.h"
 //#include "api_child.h"
+#include "KStream.h"
 #include "KExtendProgram.h"
 #include "KVirtualHostProcess.h"
 
@@ -47,7 +48,7 @@ public:
 		stLock.Unlock();
 		return true;
 	}
-	KUpstreamSelectable *poweron(KVirtualHost *vh, KExtendProgram *rd, bool &success);
+	KTcpUpstream *poweron(KVirtualHost *vh, KExtendProgram *rd, bool &success);
 	
 protected:
 	bool isProcessActive()
@@ -61,7 +62,7 @@ protected:
 		return result;
 	}
 private:
-	u_short loadApi(KPoolableStream *pst, KHttpRequest *rq, KApiRedirect *rd);
+	u_short loadApi(KStream *pst, KHttpRequest *rq, KApiRedirect *rd);
 	KApiPipeStream *st;
 	KMutex stLock;
 };

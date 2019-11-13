@@ -29,38 +29,29 @@
 #include "utils.h"
 #include "log.h"
 #include "KLogElement.h"
-#include "KString.h"
+#include "KStringBuf.h"
 #define OPEN_FILE
-#include "forwin32.h"
-#include "malloc_debug.h"
-#include<sstream>
+#include "kforwin32.h"
+#include "kmalloc.h"
 #include<string>
 #include "KMutex.h"
-int log_fp = 0;
 
 #define KLOG_TO_SYSLOG		0
 #define KLOG_TO_USER		1
 #define KLOG_TO_PRINT		2
 
-FILE *m_fp = NULL;
-KMutex log_lock;
-#ifndef _WIN32
-static sigset_t m_log_blockset;
-#endif
-void vklog(int level, const char *fmt, va_list ap) {
-	if (m_debug == 0) {
-		if (level > conf.log_level) {
+
+void my_vklog(int level, const char *fmt, va_list ap) {
+	if (m_debug > 0) {
+		if (level > m_debug) {
 			return;
 		}
-	} else {
-		if (level>m_debug) {
-			return;
-		}
+		vprintf(fmt, ap);
+		return;
 	}
-#ifndef _WIN32
-	sigset_t m_old_sigset;
-	pthread_sigmask(SIG_BLOCK, &m_log_blockset, &m_old_sigset);
-#endif
+	if (level > conf.log_level) {
+		return;
+	}
 	errorLogger.startLog();
 	time_t ltime;
 	time(&ltime);
@@ -70,35 +61,9 @@ void vklog(int level, const char *fmt, va_list ap) {
 	errorLogger.log("%s|", tm);
 	errorLogger.vlog(fmt, ap);
 	errorLogger.endLog(true);
-#ifndef _WIN32
-	pthread_sigmask(SIG_SETMASK, &m_old_sigset, NULL);
-#endif
 }
-void debug(const char *fmt, ...) {
-#ifndef NDEBUG
-	if (m_debug) {
-		va_list ap;
-		va_start(ap,fmt);
-		vprintf(fmt, ap);
-		va_end(ap);
-	}
-#endif
-}
-void klog(int level, const char *fmt, ...) {
-	if (m_debug == 0) {
-		if (level > conf.log_level) {
-			return;
-		}
-	} else {
-		if (level>m_debug) {
-			return;
-		}
-	}
-	va_list ap;
-	va_start(ap, fmt);
-	vklog(level, fmt, ap);
-	va_end(ap);
-}
+
+
 void set_logger()
 {
 	if (conf.error_rotate_size > 0) {
@@ -115,10 +80,6 @@ void set_logger()
 	accessLogger.log_handle = conf.log_handle;
 }
 int klog_start() {
-#ifndef _WIN32
-	sigemptyset(&m_log_blockset);
-	sigfillset(&m_log_blockset);
-#endif
 	if (m_debug) {
 		accessLogger.place = LOG_PRINT;
 		errorLogger.place = LOG_PRINT;
@@ -155,6 +116,7 @@ int klog_start() {
 		}
 		set_logger();
 	}
+	klog_init(my_vklog);
 	return 1;
 }
 

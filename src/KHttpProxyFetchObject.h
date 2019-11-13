@@ -25,11 +25,10 @@
 
 #include "KFetchObject.h"
 #include "KAcserver.h"
-#include "KSocket.h"
+#include "ksocket.h"
 #include "KAsyncFetchObject.h"
-#include "KHttpObjectParserHook.h"
+#include "KHttpResponseParser.h"
 #include "KHttpEnv.h"
- 
 class KHttpProxyFetchObject: public KAsyncFetchObject {
 public:
 	KHttpProxyFetchObject()
@@ -51,26 +50,6 @@ public:
 	}
 protected:
 	void buildHead(KHttpRequest *rq);
-	Parse_Result parseHead(KHttpRequest *rq,char *buf,int len);
-	char *nextBody(KHttpRequest *rq,int &len)
-	{
-		if (client->parser->bodyLen>0) {
-			len = client->parser->bodyLen;
-			client->parser->bodyLen = 0;
-			return client->parser->body;
-		}
-		if (hot) {
-			len = (int)(hot - header);
-			hot = NULL;
-			return header;
-		}
-		return NULL;
-	}
-	Parse_Result parseBody(KHttpRequest *rq,char *data,int len)
-	{
-		hot = data + len;
-		return Parse_Continue;
-	}
 	bool checkContinueReadBody(KHttpRequest *rq)
 	{
 		if (rq->ctx->know_length && rq->ctx->left_read<=0) {
@@ -80,21 +59,11 @@ protected:
 		}
 		return true;
 	}
-	void expectDone(KHttpRequest *rq)
-	{
-		if (client->hook->keep_alive_time_out>=0) {
-			lifeTime = client->hook->keep_alive_time_out;
-		} else {
-			lifeTime = 0;
-		}
-		KAsyncFetchObject::expectDone(rq);
-	}
 	void readBodyEnd(KHttpRequest *rq)
 	{
 		expectDone(rq);
 	}
 private:
-	
 };
 
 #endif /* KHTTPPROXYFETCHOBJECT_H_ */

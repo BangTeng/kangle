@@ -21,8 +21,8 @@
 #include <stdio.h>
 #include "KTimeMatch.h"
 #include "log.h"
-#include "forwin32.h"
-#include "malloc_debug.h"
+#include "kforwin32.h"
+#include "kmalloc.h"
 
 KTimeMatch::KTimeMatch() {
 	init();

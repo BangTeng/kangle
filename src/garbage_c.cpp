@@ -29,15 +29,15 @@
 #include "cache.h"
 #include "utils.h"
 #include "log.h"
-#include "server.h"
+#include "extern.h"
 
 #include "utils.h"
-#include "KThreadPool.h"
+#include "kthread.h"
 #include "lib.h"
 #include "KBuffer.h"
 #include "KHttpRequest.h"
-#include "KSelectorManager.h"
-#include "malloc_debug.h"
+#include "kselector_manager.h"
+#include "kmalloc.h"
 #include "KHttpObjectHash.h"
 
 #include "KSimulateRequest.h"
@@ -46,29 +46,41 @@
 #include "KProcess.h"
 #include "KLogManage.h"
 #include "KHttpServerParser.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KHttpDigestAuth.h"
 #include "KObjectList.h"
 #include "KAcserverManager.h"
 #include "KVirtualHostDatabase.h"
 #include "KCdnContainer.h"
 #include "KWriteBackManager.h"
-#include "KAddr.h"
-#include "md5.h"
+#include "kaddr.h"
+#include "kmd5.h"
 #include "KTimer.h"
+struct kgl_gc_service {
+	void (*flush)(void *,time_t);
+	void *arg;
+	kgl_gc_service *next;
+};
 void list_all_malloc();
 using namespace std;
 
 bool dump_memory_object = false;
 volatile int stop_service_sig = 0;
-string get_service_to_name(int port);
 volatile bool autoupdate_thread_started = false;
+kgl_gc_service *gc_service = NULL;
+
 
 #ifdef ENABLE_VH_FLOW
 volatile bool flushFlowFlag = false;
 time_t lastFlushFlowTime = time(NULL);
 #endif
-
+void register_gc_service(void(*flush)(void *,time_t),void *arg) {
+	kgl_gc_service *gs = new kgl_gc_service;
+	gs->flush = flush;
+	gs->arg = arg;
+	gs->next = gc_service;
+	gc_service = gs;
+}
 std::string md5sum(FILE *fp)
 {
         KMD5_CTX context;
@@ -95,14 +107,14 @@ void get_cache_size(INT64 &total_mem_size, INT64 &total_disk_size) {
 	cache.getSize(total_mem_size,total_disk_size);
 }
 
-void flush_mem_cache(void) {
+void flush_mem_cache(int64_t last_msec) {
 	INT64 disk_cache = 0;
 	bool disk_is_radio = false;
 #ifdef ENABLE_DISK_CACHE
 	disk_cache = conf.disk_cache;
 	disk_is_radio = conf.disk_cache_is_radio;
 #endif
-	cache.flush(conf.mem_cache,disk_cache,disk_is_radio);
+	cache.flush(last_msec,conf.mem_cache,disk_cache,disk_is_radio);
 }
 /*
 void reloadVirtualHostConfig() {
@@ -114,12 +126,13 @@ void reloadVirtualHostConfig() {
 #endif
 }
 */
-FUNC_TYPE FUNC_CALL time_thread(void* arg) {
-	assert(test_simulate_request());
+KTHREAD_FUNCTION time_thread(void* arg) {
+#ifdef ENABLE_SIMULATE_HTTP
+	kassert(test_simulate_request());
+#endif
+	
 	//assert(test_timer());
 	unsigned i = rand();
-	//	quit_program_flag = PROGRAM_NO_QUIT;
-	int sleep_time = GC_SLEEP_TIME;
 #ifdef MALLOCDEBUG
 	void start_hook_alloc();
 	bool test();
@@ -129,22 +142,30 @@ FUNC_TYPE FUNC_CALL time_thread(void* arg) {
 	assert(test());
 #endif
 
-	time_t nowTime = time(NULL);
+	time_t nowTime;
+	INT64 now_msec;
+	INT64 last_msec = katom_get64((void *)&kgl_current_msec);
 	for(;;){
 		i++;
-		sleep_time = GC_SLEEP_TIME - (int)(time(NULL) - nowTime);
-		if (sleep_time > GC_SLEEP_TIME) {
-			sleep_time = GC_SLEEP_TIME;
+		now_msec = katom_get64((void *)&kgl_current_msec);
+		int past_time = (int)(now_msec - last_msec);
+		int sleep_msec = GC_SLEEP_MSEC - past_time;
+		if (sleep_msec > GC_SLEEP_MSEC) {
+			sleep_msec = GC_SLEEP_MSEC;
 		}
-		if (sleep_time>0) {
-			sleep(sleep_time);
+		last_msec = now_msec;
+		//printf("last_msec=[%lld] now_msec=[%lld] past_time=[%d] sleep_msec=[%d]\n", last_msec,now_msec,past_time,sleep_msec);
+		if (sleep_msec > 0) {
+			my_msleep(sleep_msec);
+			last_msec += sleep_msec;
 		}
-		nowTime = time(NULL);
+		nowTime = (time_t)(last_msec / 1000);
 #ifdef MALLOCDEBUG
 		if (quit_program_flag==PROGRAM_QUIT_SHUTDOWN) {
 			break;
 		}
 #endif
+		flush_mem_cache(last_msec);
 #ifdef ENABLE_VH_FLOW
 		//自动刷新流量
 		if (conf.flush_flow_time>0 && nowTime - lastFlushFlowTime > conf.flush_flow_time) {
@@ -162,25 +183,22 @@ FUNC_TYPE FUNC_CALL time_thread(void* arg) {
 
 #ifdef MALLOCDEBUG
 		if (dump_memory_object) {
-			dump_memory(0,-1);
+			dump_memory_leak(0,-1);
 			dump_memory_object = false;
 		}
 #endif
 		if (i % 6 == 0) {
-			selectorManager.flush(nowTime);
 			accessLogger.checkRotate(nowTime);
 			errorLogger.checkRotate(nowTime);
 			logManage.checkRotate(nowTime);
-			m_thread.Flush(conf.min_free_thread);	
+			kthread_flush(conf.min_free_thread);
 #ifdef ENABLE_DIGEST_AUTH
-			KHttpDigestAuth::flushSession(kgl_current_sec);
-#endif
-			flush_addr_cache(nowTime);
+			KHttpDigestAuth::flushSession(nowTime);
+#endif		
+			kgl_flush_addr_cache(nowTime);
 		}
 
-		flush_mem_cache();
-
-		cdnContainer.flush(kgl_current_sec);
+		server_container->flush(kgl_current_sec);
 		if(vhd.isLoad() && !vhd.isSuccss()){
 			klog(KLOG_ERR,"vh database last status is failed.try again.\n");
 			std::string errMsg;
@@ -194,6 +212,16 @@ FUNC_TYPE FUNC_CALL time_thread(void* arg) {
 			dci->start(ci_flush, NULL);
 		}
 #endif
+		kgl_gc_service *gs = gc_service;
+		while (gs) {
+			gs->flush(gs->arg,nowTime);
+			gs = gs->next;
+		}
+	}
+	while (gc_service) {
+		kgl_gc_service *next = gc_service->next;
+		delete gc_service;
+		gc_service = next;
 	}
 	KTHREAD_RETURN;
 }

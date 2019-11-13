@@ -18,7 +18,7 @@
 #include <string.h>
 #include "KReg.h"
 #include "log.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #define DEFAULT_OVECTOR	30
 KRegSubString::~KRegSubString()
 {

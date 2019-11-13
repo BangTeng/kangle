@@ -4,9 +4,9 @@
 #include "KTempleteVirtualHost.h"
 #include "log.h"
 #include "utils.h"
-#include "server.h"
+#include "extern.h"
 #include "KAcserverManager.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 
 KVirtualHostDatabase vhd;
 static void set_vh_data(void *ctx,const char *name,const char *value)

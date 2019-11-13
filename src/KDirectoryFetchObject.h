@@ -1,7 +1,7 @@
 #ifndef KDIRECTORYFETCHOBJECT_H
 #define KDIRECTORYFETCHOBJECT_H
 #include "KFetchObject.h"
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "KBuffer.h"
 #ifndef _WIN32
 #include <sys/types.h>
@@ -10,11 +10,12 @@
 class KPrevDirectoryFetchObject : public KFetchObject
 {
 public:
-	void open(KHttpRequest *rq);
+	kev_result open(KHttpRequest *rq);
 	
-	void readBody(KHttpRequest *rq)
+	kev_result readBody(KHttpRequest *rq)
 	{
 		assert(false);
+		return kev_err;
 	}
 };
 class KDirectoryFetchObject : public KFetchObject
@@ -22,8 +23,8 @@ class KDirectoryFetchObject : public KFetchObject
 public:
 	KDirectoryFetchObject();
 	~KDirectoryFetchObject();
-	void open(KHttpRequest *rq);
-	void readBody(KHttpRequest *rq);
+	kev_result open(KHttpRequest *rq);
+	kev_result readBody(KHttpRequest *rq);
 private:
 	void browerOneFile(KHttpRequest *rq,const char *path);
 #ifdef _WIN32
@@ -33,6 +34,6 @@ private:
 	DIR *dp;
 #endif
 	KBuffer buffer;
-	buff *hot;
+	kbuf *hot;
 };
 #endif

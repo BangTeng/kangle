@@ -20,7 +20,7 @@
 #include<string>
 #include "KXmlEvent.h"
 #include "do_config.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 class KConfigParser : public KXmlEvent {
 public:
 	void startXml(const std::string &encoding);

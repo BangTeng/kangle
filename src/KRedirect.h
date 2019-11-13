@@ -9,7 +9,8 @@
 #define KREDIRECT_H_
 #include "KFileName.h"
 #include "KJump.h"
-#include "KSocket.h"
+#include "ksocket.h"
+#include "kselector.h"
 
 class KHttpRequest;
 class KFetchObject;
@@ -18,10 +19,11 @@ public:
 	KRedirect();
 	virtual ~KRedirect();
 	virtual KFetchObject *makeFetchObject(KHttpRequest *rq, KFileName *file) = 0;
-	virtual void connect(KHttpRequest *rq) 
+	virtual kev_result connect(KHttpRequest *rq)
 	{
 		//不能执行到这里
 		assert(false);
+		return kev_err;
 	}
 	void setEnable() {
 		enable = true;

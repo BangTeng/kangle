@@ -1,6 +1,6 @@
 #ifndef KCONDWAIT_H
 #define KCONDWAIT_H
-#include "forwin32.h"
+#include "kforwin32.h"
 /**
 条件变量
 autoreset = true,自动重置变量，适应同时一个等待，多次使用的场景

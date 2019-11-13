@@ -11,15 +11,9 @@ public:
 	~KTimeoutMark()
 	{
 	}
-	bool mark(KHttpRequest *rq, KHttpObject *obj,
-				const int chainJumpType, int &jumpType)
+	bool mark(KHttpRequest *rq, KHttpObject *obj,const int chainJumpType, int &jumpType)
 	{
-#ifdef ENABLE_HTTP2
-		if (rq->http2_ctx) {
-			return false;
-		}
-#endif
-		rq->c->tmo = v;
+		rq->sink->SetTimeOut(v);
 		return true;
 	}
 	KMark *newInstance()

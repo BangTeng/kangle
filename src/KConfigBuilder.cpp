@@ -22,9 +22,9 @@
 #include "KAcserverManager.h"
 #include "KWriteBackManager.h"
 #include "KRequestQueue.h"
-#include "KSelectorManager.h"
+#include "kselector_manager.h"
 #include<sstream>
-#include "malloc_debug.h"
+#include "kmalloc.h"
 using namespace std;
 KConfigBuilder::KConfigBuilder() {
 }
@@ -184,12 +184,13 @@ void KConfigBuilder::build(std::stringstream &s) {
 		s << " per_ip_deny='1'";
 	}
 	s << ">\n";
+#if 0
 	ipLock.Lock();
 	KPerIpConnect *per_ip = conf.per_ip_head;
 	while (per_ip) {
 		s << "\t\t<per_ip src='";
 		char ips[MAXIPLEN];
-		KSocket::make_ip(&per_ip->src.addr,ips,sizeof(ips));
+		ksocket_ipaddr_ip(&per_ip->src.addr,ips,sizeof(ips));
 		s << ips;
 		if (per_ip->src.mask_num > 0) {
 			s << "/" << (int) per_ip->src.mask_num;
@@ -204,6 +205,7 @@ void KConfigBuilder::build(std::stringstream &s) {
 		per_ip = per_ip->next;		
 	}
 	ipLock.Unlock();
+#endif
 	s << "\t</connect>\n";
 #ifdef ENABLE_TF_EXCHANGE
 	//s << "\t<tempfile>" << conf.tmpfile << "</tempfile>\n";

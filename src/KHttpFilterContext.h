@@ -11,6 +11,7 @@ struct KHttpFilterRequestContext
 	void *ctx;
 	DWORD disabled_flags;
 };
+#if 0
 class KHttpFilterContext
 {
 public:
@@ -33,6 +34,6 @@ public:
 	kgl_filter_context ctx;
 	KHttpFilterRequestContext *filterContext;
 };
-KGL_RESULT add_api_var(LPVOID buffer, LPDWORD size, const char *val, int len =0);
+#endif
 #endif
 #endif

@@ -2,7 +2,7 @@
 #include <sstream>
 #include <string.h>
 #include <stdlib.h>
-#include "malloc_debug.h"
+#include "kmalloc.h"
 static const char *b64alpha =
 		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 //static unsigned char hexchars[] = "0123456789ABCDEF";

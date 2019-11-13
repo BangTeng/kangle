@@ -6,7 +6,7 @@
  */
 #include <string.h>
 #include "KIpVirtualHost.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KHttpRequest.h"
 #include "KVirtualHost.h"
 using namespace std;
@@ -24,7 +24,7 @@ bool KIpVirtualHost::parseVirtualHost(KHttpRequest *rq, const char *site) {
 	sockaddr_i addr;
 	bool result = false;
 	std::map<sockaddr_i, KVirtualHostContainer *>::iterator it;
-	rq->c->socket->get_self_addr(&addr);
+	rq->sink->get_self_addr(&addr);
 	lock.Lock();
 	it = vhs.find(addr);
 	if (it != vhs.end()) {

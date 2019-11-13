@@ -20,40 +20,38 @@
  * See COPYING file for detail.
  */
 #include "KFetchObject.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KAsyncFetchObject.h"
 #include "http.h"
-/*
-处理已经从upstream读到的数据，返回true,继续读取，false则不继续读，表示已经有数据可以发到rq
-*/
-bool KFetchObject::pushHttpBody(KHttpRequest *rq,char *buf,int len)
+#include "KHttpTransfer.h"
+StreamState KFetchObject::PushBody(KHttpRequest *rq, const char *buf, int len)
 {
 	if (!rq->ctx->connection_upgrade && rq->ctx->know_length) {
 		len = (int)MIN(rq->ctx->left_read, (INT64)len);
 		rq->ctx->left_read -= len;
 	}
-	assert(rq->ctx->st);
-	StreamState result  = rq->ctx->st->write_all(buf, len);
-	switch (result) {
+	kassert(rq->ctx->st);
+
+	return rq->ctx->st->write_all(buf, len);
+}
+/*
+处理已经从upstream读到的数据，返回true,继续读取，false则不继续读，表示已经有数据可以发到rq
+*/
+kev_result KFetchObject::pushHttpBody(KHttpRequest *rq,const char *buf,int len)
+{
+	switch (PushBody(rq,buf,len)) {
 	case STREAM_WRITE_END:
 		//正确读完了chunked数据
 		assert(rq->ctx->connection_upgrade == false);
 		readBodyEnd(rq);
-		stage_rdata_end(rq,result);
-		return false;
+		return stage_rdata_end(rq, STREAM_WRITE_END);
 	case STREAM_WRITE_FAILED:
 		if (rq->ctx->connection_upgrade) {
-			(static_cast<KAsyncFetchObject *>(this))->shutdown(rq);
-			return false;
+			return (static_cast<KAsyncFetchObject *>(this))->shutdown(rq);
 		}
-		stage_rdata_end(rq,STREAM_WRITE_FAILED);
-		return false;
+		return stage_rdata_end(rq,STREAM_WRITE_FAILED);
 	default:
-		if(try_send_request(rq)){
-			//如果已经发送了数据就不要继续读了。
-			return false;
-		}
-		return true;
+		return try_send_request(rq);
 	}
 }
 KFetchObject *KFetchObject::clone(KHttpRequest *rq)
@@ -65,7 +63,8 @@ KFetchObject *KFetchObject::clone(KHttpRequest *rq)
 	}
 	return NULL;
 }
-void KFetchObject::open(KHttpRequest *rq)
+kev_result KFetchObject::open(KHttpRequest *rq)
 {
-	this->closed = false;
+	this->closed = 0;
+	return kev_err;
 }

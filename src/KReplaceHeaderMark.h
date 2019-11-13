@@ -28,7 +28,7 @@ public:
 			}
 			header = obj->data->headers;
 		} else {
-			header = rq->parser.getHeaders();
+			header = rq->GetHeader();
 		}
 		int ovector[MAX_OVECTOR];
 		while (header) {

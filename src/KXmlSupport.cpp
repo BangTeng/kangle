@@ -19,7 +19,7 @@
 #include <string.h>
 #include <vector>
 #include "KXmlSupport.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KXml.h"
 
 using namespace std;

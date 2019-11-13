@@ -9,8 +9,9 @@
 #define SSL_UTILS_H_
 #include "global.h"
 #include "KEnvInterface.h"
-#include "KSSLSocket.h"
+#include "kgl_ssl.h"
 #ifdef KSOCKET_SSL
+
 #define strcEQ(s1,s2)    (strcasecmp(s1,s2)    == 0)
 #define strcNE(s1,s2)    (strcasecmp(s1,s2)    != 0)
 #define strcEQn(s1,s2,n) (strncasecmp(s1,s2,n) == 0)
@@ -39,7 +40,6 @@ bool make_ssl_env(KEnvInterface *env, SSL *ssl);
 char *ssl_var_lookup(SSL *ssl, const char *var);
 char *ssl_ctx_var_lookup(SSL_CTX *ssl_ctx, const char *var);
 void ssl_var_free(void *var);
-void load_ssl_library();
-
+void kgl_ssl_npn(void *ssl_ctx_data, const unsigned char **out, unsigned int *outlen);
 #endif
 #endif /* SSL_UTILS_H_ */

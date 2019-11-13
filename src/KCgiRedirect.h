@@ -9,6 +9,7 @@
 #define KCGIREDIRECT_H_
 #include <vector>
 #include "KRedirect.h"
+#ifdef ENABLE_CGI
 class KCgiRedirect: public KRedirect {
 public:
 	KCgiRedirect(const char *cmd);
@@ -32,4 +33,5 @@ private:
 	char split_char;
 };
 extern KCgiRedirect globalCgi;
+#endif
 #endif /* KCGIREDIRECT_H_ */

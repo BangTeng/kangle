@@ -19,13 +19,12 @@
 #define kacserver_h_skdfjs999sfkh1lk2j3
 #include <string>
 #include <list>
-#include "KSocket.h"
+#include "ksocket.h"
 #include "KMutex.h"
 #include "KJump.h"
 #include "KFetchObject.h"
 #include "KRedirect.h"
-#include "KUpstreamSelectable.h"
-#include "malloc_debug.h"
+#include "KUpstream.h"
 #include "KFileName.h"
 class KFetchObject;
 class KSockPoolHelper;
@@ -36,7 +35,7 @@ public:
 	KPoolableRedirect();
 	virtual ~KPoolableRedirect();
 	KFetchObject *makeFetchObject(KHttpRequest *rq, KFileName *file);
-	virtual KUpstreamSelectable *getConnection(bool &half)
+	virtual KUpstream *getConnection(bool &half)
 	{
 		return NULL;
 	}
@@ -54,12 +53,14 @@ public:
 			return "fastcgi";
 		case Proto_ajp:
 			return "ajp";
+#if 0
 		case Proto_uwsgi:
 			return "uwsgi";
 		case Proto_scgi:
 			return "scgi";
 		case Proto_hmux:
 			return "hmux";
+#endif
 		case Proto_spdy:
 			return "spdy";
 		case Proto_tcp:
@@ -78,6 +79,7 @@ public:
 		if (strcasecmp(proto, "ajp") == 0) {
 			return Proto_ajp;
 		}
+#if 0
 		if (strcasecmp(proto,"uwsgi")==0) {
 			return Proto_uwsgi;
 		}
@@ -87,6 +89,7 @@ public:
 		if (strcasecmp(proto,"hmux")==0) {
 			return Proto_hmux;
 		}
+#endif
 		if (strcasecmp(proto, "tcp") == 0) {
 			return Proto_tcp;
 		}

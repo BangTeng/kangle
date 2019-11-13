@@ -28,8 +28,10 @@
 #include<list>
 #include<stdio.h>
 #include <stdlib.h>
+#include "global.h"
 #include "KXmlEvent.h"
 #include "KXmlException.h"
+#include "kmalloc.h"
 #define CDATA_START	"<![CDATA["
 #define CDATA_END	"]]>"
 

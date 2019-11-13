@@ -21,7 +21,7 @@ public:
 	{
 		while (header) {			
 			xfree(header->data);			
-			buff *next = header->next;
+			kbuf *next = header->next;
 			xfree(header);
 			header = next;
 		}
@@ -31,7 +31,7 @@ public:
 	{
 		assert(hot);
 		assert(header);
-		buff *tmp = header;
+		kbuf *tmp = header;
 		buffer[0].iov_base = hot;
 		buffer[0].iov_len = header->used - (int)(hot - header->data);
 		int i;
@@ -62,7 +62,7 @@ public:
 			hot += this_len;
 			got -= this_len;
 			if (header->used == hot - header->data) {
-				buff *next = header->next;				
+				kbuf *next = header->next;				
 				xfree(header->data);					
 				xfree(header);				
 				header = next;
@@ -85,7 +85,7 @@ public:
 		memcpy(data,str,len);
 		pushEnd(data,len);
 	}
-	void pushEnd(buff *buf)
+	void pushEnd(kbuf *buf)
 	{
 		add(buf,buf->used);
 	}
@@ -101,8 +101,8 @@ public:
 			pushEnd(str,len);
 			return;
 		}
-		buff *t = (buff *)xmalloc(sizeof(buff));
-		memset(t,0,sizeof(buff));
+		kbuf *t = (kbuf *)xmalloc(sizeof(kbuf));
+		memset(t,0,sizeof(kbuf));
 		t->data = str;
 		t->used = len;
 		t->next = header;
@@ -113,13 +113,13 @@ public:
 	}
 	void pushEnd(char *str,uint16_t len)
 	{
-		buff *t = (buff *)xmalloc(sizeof(buff));
-		memset(t,0,sizeof(buff));
+		kbuf *t = (kbuf *)xmalloc(sizeof(kbuf));
+		memset(t,0,sizeof(kbuf));
 		t->data = str;
 		t->used = len;
 		add(t,len);
 	}
-	buff *getHeader()
+	kbuf *getHeader()
 	{
 		return header;
 	}
@@ -127,7 +127,7 @@ public:
 		return total_len;
 	}
 private:
-	void add(buff *buf,int len)
+	void add(kbuf *buf,int len)
 	{
 		total_len += len;
 		if (last==NULL) {
@@ -139,8 +139,8 @@ private:
 			last = buf;
 		}
 	}
-	buff *last;
-	buff *header;
+	kbuf *last;
+	kbuf *header;
 	char *hot;
 	int total_len;
 };

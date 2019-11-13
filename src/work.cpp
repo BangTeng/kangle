@@ -39,14 +39,14 @@
 #include	"cache.h"
 #include	"log.h"
 #include 	"KHttpManage.h"
-#include 	"KSelectorManager.h"
+#include 	"kselector_manager.h"
 #include 	"lib.h"
-#include	"malloc_debug.h"
+#include	"kmalloc.h"
 #include "KHttpObjectHash.h"
-#include "KThreadPool.h"
+#include "kthread.h"
 #include "KVirtualHostManage.h"
 #include "KSequence.h"
-#include	"md5.h"
+#include "kmd5.h"
 #include "KFastcgiUtils.h"
 #include "KFastcgiFetchObject.h"
 #include "KApiFetchObject.h"
@@ -57,11 +57,11 @@
 #include "time_utils.h"
 #include "KHttpDigestAuth.h"
 #include "KHttpBasicAuth.h"
-#include "KSubRequest.h"
+#include "KSSLSniContext.h"
 
 #include "KHttpFilterManage.h"
 #include "ksapi.h"
-#include "KAddr.h"
+#include "kaddr.h"
 #include "KLogDrill.h"
 using namespace std;
 
@@ -69,119 +69,55 @@ void free_url(KUrl *url) {
 	url->destroy();
 }
 inline bool in_stop_cache(KHttpRequest *rq) {
-	if (TEST(rq->filter_flags,RF_NO_CACHE))
+	if (TEST(rq->filter_flags, RF_NO_CACHE)) {
 		return true;
+	}
 	if (rq->meth == METH_GET || rq->meth == METH_HEAD) {
 		return false;
 	}
 	return true;
 }
-/*
- check if the keep-alive client has next request data.
- return 0=close 1=yes 2=continue 3=no next request but continue
- */
-inline int checkHaveNextRequest(KHttpRequest *rq) {
-	if (rq->pre_post_length>0) {
-		rq->parser.bodyLen -= rq->pre_post_length;
-		rq->parser.body += rq->pre_post_length;
-		rq->pre_post_length = 0;
-	}
-	int bodyLen = rq->parser.bodyLen;
-	if (bodyLen > 0) {
-		memcpy(rq->readBuf, rq->parser.body , bodyLen);
-		rq->clean();
-		rq->init(NULL);
-		rq->hot = rq->readBuf + bodyLen;
-		return rq->parser.parse(rq->readBuf, bodyLen, rq);
-	}
-	return HTTP_PARSE_NO_NEXT_BUT_CONTINUE;
-}
-void nextRequest(void *arg,int got)
-{
-	handleStartRequest((KHttpRequest *)arg,0);
-}
-void resultEndSubRequest(void *arg ,int got)
+static kev_result stageUnlockedEndRequest(void *arg,int got)
 {
 	KHttpRequest *rq = (KHttpRequest *)arg;
-	rq->endSubRequest();
-}
-void stageUnlockedEndRequest(void *arg,int got)
-{
-	KHttpRequest *rq = (KHttpRequest *)arg;
-	CLR(rq->workModel, WORK_MODEL_INTERNAL | WORK_MODEL_REPLACE);
-	int status = HTTP_PARSE_FAILED;
 	log_access(rq);
 	rq->ctx->clean_obj(rq);
-#ifdef ENABLE_KSAPI_FILTER
-	/* http filter end request hook */
-	if (rq->svh && rq->svh->vh->hfm) {
-		KHttpFilterHookCollect *end_request = rq->svh->vh->hfm->hook.end_request;
-		if (end_request) {
-			end_request->process(rq, KF_NOTIFY_END_REQUEST, NULL);
-		}
-	}
-	if (conf.gvm->globalVh.hfm) {
-		KHttpFilterHookCollect *end_request = conf.gvm->globalVh.hfm->hook.end_request;
-		if (end_request) {
-			end_request->process(rq, KF_NOTIFY_END_REQUEST, NULL);
-		}
-	}
-#endif
-	if (!TEST(rq->flags, RQ_CONNECTION_CLOSE) && TEST(rq->flags, RQ_HAS_KEEP_CONNECTION)) {
-		status = checkHaveNextRequest(rq);
-		if (status == HTTP_PARSE_SUCCESS) {
-			rq->c->selector->next(nextRequest, rq);
-			return;
-		}
-	}
-	if (status == HTTP_PARSE_FAILED) {
-		delete rq;
-		return;
-	}
-	if (status != HTTP_PARSE_CONTINUE) {
-		rq->clean();
-		rq->init(NULL);
-	}
-	rq->c->read(rq, resultRequestRead, bufferRequestRead);
+	rq->endRequest();
+	return kev_destroy;
 }
 bool is_request_locked(KHttpRequest *rq)
 {
 	//client/upstream must be non-lock
-	if (rq->c->is_locked(rq)) {
+	if (rq->sink->IsLocked()) {
 		return true;
 	}
 	if (rq->fetchObj) {
-		KUpstreamSelectable *st = rq->fetchObj->getSelectable();
+		KUpstream *st = rq->fetchObj->GetUpstream();
 		if (st) {
-			return st->is_upstream_locked();
+			return st->IsLocked();
 		}
 	}
 	return false;
 }
-void stageEndRequest(KHttpRequest *rq)
+kev_result stageEndRequest(KHttpRequest *rq, bool expected)
 {
-#ifndef _WIN32	
-#ifndef NDEBUG
-	assert(!rq->c->socket->isBlock());
-#endif
-#endif
+	//printf("stageEndRequest=[%p]\n", rq);
+	if (rq->IsSync()) {
+		rq->RemoveSync();
+	}
 	if (rq->fetchObj && rq->ctx->connection_upgrade) {
-		if (rq->c->is_locked(rq)) {
-			rq->c->shutdown(rq);
-			return;
+		if (rq->sink->IsLocked()) {
+			rq->sink->Shutdown();
+			return kev_ok;
 		}
-		KUpstreamSelectable *st = rq->fetchObj->getSelectable();
-		if (st && st->is_upstream_locked()) {
-			st->upstream_shutdown();
-			return;
+		KUpstream *st = rq->fetchObj->GetUpstream();
+		if (st && st->IsLocked()) {
+			st->Shutdown();
+			return kev_ok;
 		}
 	}
 	assert(!is_request_locked(rq));
 
-	if (!TEST(rq->flags,RQ_CONNECTION_CLOSE) && rq->sr) {
-		rq->c->selector->next(resultEndSubRequest,rq);
-		return;
-	}
 #ifdef ENABLE_TF_EXCHANGE
 	if (rq->tf && rq->tf->switchRead()) {
 #ifndef NDEBUG
@@ -189,18 +125,20 @@ void stageEndRequest(KHttpRequest *rq)
 		char *buf = rq->tf->readBuffer(len);
 		assert(len>0 && buf);
 #endif
-		kassert(!rq->tf->isWrite());
-		startTempFileWriteRequest(rq);
-		return;
+		return startTempFileWriteRequest(rq);
 	}
 #endif
-	rq->c->remove_read_hup(rq);
-	stageUnlockedEndRequest(rq, 0);
+	rq->sink->RemoveReadHup();
+	if (rq->sink->HasHeaderDataToSend()) {
+		return rq->Write(rq, stageUnlockedEndRequest, NULL);
+	}
+	return stageUnlockedEndRequest(rq, 0);
 }
 
 void log_access(KHttpRequest *rq) {
+	//printf("log_access=[%p]\n", rq);
 	if (rq->isBad()) {
-		klog(KLOG_ERR,"BAD REQUEST FROM [%s] len=[%d]\n", rq->getClientIp(),(int)(rq->hot - rq->readBuf));
+		klog(KLOG_ERR,"BAD REQUEST FROM [%s].\n", rq->getClientIp());
 		return;
 	}
 	INT64 sended_length = rq->send_size;
@@ -232,7 +170,7 @@ void log_access(KHttpRequest *rq) {
 	}
 	l << rq->getClientIp();	
 	//l.WSTR(":");
-	//l << rq->c->socket->get_remote_port();
+	//l << rq->sink->get_remote_port();
 	l.WSTR(" - ");
 	if (rq->auth) {
 		const char *user = rq->auth->getUser();
@@ -251,27 +189,26 @@ void log_access(KHttpRequest *rq) {
 	l.WSTR(" \"");
 	l << rq->getMethod();
 	l.WSTR(" ");
+#ifdef HTTP_PROXY
+	if (rq->meth!=METH_CONNECT)
+#endif
 	l << (TEST(rq->raw_url.flags,KGL_URL_SSL) ? "https://" : "http://");
-	KUrl *url;
-	if (rq->sr) {
-		url = rq->url;
-		referer = rq->sr->url->getUrl();
-		user_agent = "-sub request-";
-	} else {
-		url = &rq->raw_url;
-		referer = (char *)rq->parser.getHttpValue("Referer");
-		user_agent = rq->parser.getHttpValue("User-Agent");
-	}
+	KUrl *url = &rq->raw_url;
+	referer = (char *)rq->GetHttpValue("Referer");
+	user_agent = rq->GetHttpValue("User-Agent");
 	l << url->host;
 	if (url->port != default_port) {
 		l << ":" << url->port;
 	}
+#ifdef HTTP_PROXY
+	if (rq->meth != METH_CONNECT)
+#endif
 	l << url->path;
 	if (url->param) {
 		l << "?" << url->param;
 	}
 #ifdef ENABLE_HTTP2
-	if (rq->http2_ctx) {
+	if (rq->http_major>1) {
 		l.WSTR(" HTTP/2\" ");
 	} else 
 #endif	
@@ -285,7 +222,7 @@ void log_access(KHttpRequest *rq) {
 	sprintf(tmp,formatString,sended_length);
 	l << tmp;
 #ifndef NDEBUG
-	const char *range = rq->parser.getHttpValue("Range");
+	const char *range = rq->GetHttpValue("Range");
 	if (range) {
 	       l << " \"" << range << "\"" ;
 	}
@@ -307,11 +244,14 @@ void log_access(KHttpRequest *rq) {
 	l.WSTR("\"[");
 #ifndef NDEBUG
 	l << "F" << (unsigned)rq->flags << "f" << (unsigned)rq->filter_flags;
-	l << "u" << (int)rq->ctx->upstream_socket;
+	//l << "u" << (int)rq->ctx->upstream_socket;
 	if (!rq->ctx->upstream_expected_done) {
 		l.WSTR("e");
 	}
 #endif
+	if (rq->ctx->read_huped) {
+		l.WSTR("h");
+	}
 	if (TEST(rq->flags, RQ_UPSTREAM_ERROR)) {
 		l.WSTR("E");
 	}
@@ -336,15 +276,11 @@ void log_access(KHttpRequest *rq) {
 	if(TEST(rq->flags,RQ_TE_CHUNKED)){
 		l.WSTR("K");
 	}
-
 	if (TEST(rq->flags,RQ_HAS_KEEP_CONNECTION|RQ_CONNECTION_CLOSE) == RQ_HAS_KEEP_CONNECTION) {
 		l.WSTR("L");
 	}
 	if (rq->ctx->upstream_connection_keep_alive) {
 		l.WSTR("l");
-	}
-	if (rq->sr) {
-		free(referer);
 	}
 	
 	l.WSTR("t");
@@ -359,8 +295,8 @@ void log_access(KHttpRequest *rq) {
 		l.WSTR("m");
 		l << (int)rq->mark;
 	}
-	l.WSTR("a");
-	l << rq->ctx->us_code;
+	//l.WSTR("a");
+	//l << rq->ctx->us_code;
 	l.WSTR("]");
 	if (conf.log_event_id) {
 		l.WSTR(" ");
@@ -396,12 +332,6 @@ void log_access(KHttpRequest *rq) {
 }
 inline int checkRequest(KHttpRequest *rq)
 {
-#ifdef ENABLE_KSAPI_FILTER
-	if (conf.gvm->globalVh.hfm &&
-		!conf.gvm->globalVh.hfm->check_request(rq)) {
-		return JUMP_DENY;
-	}
-#endif
 	return kaccess[REQUEST].check(rq, NULL);
 }
 void handleConnectMethod(KHttpRequest *rq)
@@ -410,7 +340,7 @@ void handleConnectMethod(KHttpRequest *rq)
 	send_error(rq,NULL,STATUS_METH_NOT_ALLOWED,"The requested method CONNECT is not allowed");
 
 }
-void stageHttpManageLogin(KHttpRequest *rq)
+kev_result stageHttpManageLogin(KHttpRequest *rq)
 {
 	if (rq->auth) {
 		delete rq->auth;
@@ -426,42 +356,32 @@ void stageHttpManageLogin(KHttpRequest *rq)
 		rq->auth = new KHttpBasicAuth(PROGRAM_NAME);
 	rq->auth->set_auth_header(AUTH_HEADER_WEB);
 	const char path_split_str[2]={PATH_SPLIT_CHAR,0};
-	rq->buffer << "<html><body>Please set the admin user and password in the file: <font color='red'>"
+	KAutoBuffer buffer(rq->pool);
+	buffer << "<html><body>Please set the admin user and password in the file: <font color='red'>"
 		<< "kangle_installed_path" << path_split_str << "etc" << path_split_str 
 		<< "config.xml</font> like this:"
 		"<font color=red><pre>"
 		"&lt;admin user='admin' password='kangle' admin_ips='127.0.0.1|*'/&gt;"
 		"</pre></font>\n"
 		"The default admin user is admin, password is kangle</body></html>";
-
-	send_auth(rq,&rq->buffer);
+	return send_auth(rq,&buffer);
 }
-void stageHttpManage(KHttpRequest *rq)
+kev_result stageHttpManage(KHttpRequest *rq)
 {
 	rq->releaseVirtualHost();
 	conf.admin_lock.Lock();
 	if (!checkManageLogin(rq)) {
 		conf.admin_lock.Unlock();
 		char ips[MAXIPLEN];
-		rq->c->socket->get_remote_ip(ips,sizeof(ips));
-		klog(KLOG_WARNING, "[ADMIN_FAILED]%s:%d %s\n",
-				ips,
-				rq->c->socket->get_remote_port(), rq->raw_url.path);
-		stageHttpManageLogin(rq);
-		return;
+		rq->sink->GetRemoteIp(ips,sizeof(ips));
+		klog(KLOG_WARNING, "[ADMIN_FAILED] %s %s\n",	ips, rq->raw_url.path);
+		return stageHttpManageLogin(rq);
 	}
 	conf.admin_lock.Unlock();
-	/*
-	if(getUrlValue("url_password")=="1" && rq->raw_url.param){
-		xfree(rq->raw_url.param);
-		rq->raw_url.param = xstrdup("***url_password***");
-	}
-	*/
 	char ips[MAXIPLEN];
-	rq->c->socket->get_remote_ip(ips,sizeof(ips));
-	klog(KLOG_NOTICE, "[ADMIN_SUCCESS]%s:%d %s%s%s\n",
-			ips,
-			rq->c->socket->get_remote_port(), rq->raw_url.path,
+	rq->sink->GetRemoteIp(ips, sizeof(ips));
+	klog(KLOG_NOTICE, "[ADMIN_SUCCESS]%s %s%s%s\n",
+			ips, rq->raw_url.path,
 			(rq->raw_url.param?"?":""),(rq->raw_url.param?rq->raw_url.param:""));
 	if(strstr(rq->url->path,".whm") 
 		|| strcmp(rq->url->path,"/logo.gif")==0
@@ -471,45 +391,40 @@ void stageHttpManage(KHttpRequest *rq)
 		rq->svh = conf.sysHost->getFirstSubVirtualHost();
 		if(rq->svh){
 			rq->svh->vh->addRef();
-			async_http_start(rq);
-			return;
+			return async_http_start(rq);
 		}
 		assert(false);
 	}
 	rq->fetchObj = new KHttpManage;
-	processRequest(rq);
+	return processRequest(rq);
 }
-void stageDeniedRequest(KHttpRequest *rq) {
-	if (rq->send_ctx.getBufferSize() > 0 || rq->buffer.getLen() > 0
-		|| rq->status_code>0
-		) {
-#ifdef ENABLE_TF_EXCHANGE
-		if (rq->tf) {
-			
-			delete rq->tf;
-			rq->tf = NULL;
+kev_result stageDeniedRequest(KHttpRequest *rq) {
+	if (rq->fetchObj != NULL) {
+		if (rq->status_code == 0) {
+			rq->responseConnection();
+			rq->responseStatus(STATUS_OK);
 		}
-#endif
 		rq->startResponseBody(-1);
-		stageWriteRequest(rq);
-		return;
+		return rq->fetchObj->open(rq);
+	}
+	if (rq->status_code > 0) {
+		rq->startResponseBody(0);
+		return stageEndRequest(rq,true);
 	}
 	if (TEST(rq->filter_flags, RQ_SEND_AUTH)) {
-		send_auth(rq);
-		return;
+		return send_auth(rq);
 	}
 	if (!TEST(rq->flags, RQ_HAS_SEND_HEADER)) {
-		send_error(rq, NULL, STATUS_FORBIDEN, "denied by request access control");
-		return;
+		return send_error(rq, NULL, STATUS_FORBIDEN, "denied by request access control");
 	}
+	return kev_err;
 }
-bool check_virtual_host_request(KHttpRequest *rq) {
+kev_result check_virtual_host_request(KHttpRequest *rq) {
 	if (rq->svh==NULL) {
-		return true;
+		return kev_err;
 	}
 	if (rq->svh->vh->status != 0) {
-		handleError(rq, STATUS_SERVICE_UNAVAILABLE, "virtual host is closed");
-		return false;
+		return handleError(rq, STATUS_SERVICE_UNAVAILABLE, "virtual host is closed");
 	}
 #ifdef ENABLE_VH_RS_LIMIT
 	KSpeedLimit *sl= rq->svh->vh->refsSpeedLimit();
@@ -528,46 +443,53 @@ bool check_virtual_host_request(KHttpRequest *rq) {
 	switch(rq->svh->vh->checkRequest(rq)) {
 	case JUMP_DROP:
 		SET(rq->flags,RQ_CONNECTION_CLOSE);
-		stageEndRequest(rq);
-		return false;
+		return stageEndRequest(rq);
 	case JUMP_DENY:
-		stageDeniedRequest(rq);
-		return false;
+		return stageDeniedRequest(rq);
 	default:
 		break;
 	}
 #endif
 #endif
-	return true;
+	return kev_err;
 }
-bool bind_virtual_host(KHttpRequest *rq,const char *hostname,int len) {
+kev_result bind_virtual_host(KHttpRequest *rq,const char *hostname,int len) {
 	query_vh_result vh_result;
 #ifdef KSOCKET_SSL
-	if (rq->c->sni) {
-		vh_result = rq->c->useSniVirtualHost(rq);
+	kconnection *c = rq->sink->GetConnection();
+	if (c && c->sni) {
+		vh_result = kgl_use_ssl_sni(c, rq);
 	} else
 #endif
-		vh_result = conf.gvm->queryVirtualHost(rq->c->ls,&rq->svh,hostname,len);
+		vh_result = conf.gvm->queryVirtualHost(rq->sink->GetBindServer(),&rq->svh,hostname,len);
+#ifdef ENABLE_VH_RS_LIMIT
+	if (query_vh_success == vh_result && rq->svh) {
+		if (!rq->svh->vh->addConnection(rq)) {
+			vh_result = query_vh_connect_limit;
+		}
+	}
+#endif
 	switch (vh_result) {
 	case query_vh_connect_limit:
-		send_error(rq, NULL, STATUS_SERVER_ERROR, "max connect limit.");
-		return false;
+		return send_error(rq, NULL, STATUS_SERVER_ERROR, "max connect limit.");
 	case query_vh_host_not_found:
-		send_error(rq,NULL,STATUS_BAD_REQUEST,"host not found.");
-		return false;
+		return send_error(rq,NULL,STATUS_BAD_REQUEST,"host not found.");
 	default:
 		break;
 	}
 	u_short flags = rq->raw_url.flags;
 	rq->raw_url.flags = 0;
-	if (!check_virtual_host_request(rq)) {
-		SET(rq->raw_url.flags, flags);
-		return false;
+	kev_result ret = check_virtual_host_request(rq);
+	if (KEV_HANDLED(ret)) {
+		if (KEV_AVAILABLE(ret)) {
+			SET(rq->raw_url.flags, flags);
+		}
+		return ret;
 	}
 	if (TEST(rq->raw_url.flags,KGL_URL_REWRITED)) {
 		//rewrite host
 		KSubVirtualHost *new_svh = NULL;
-		conf.gvm->queryVirtualHost(rq->c->ls, &new_svh, rq->url->host, 0);
+		conf.gvm->queryVirtualHost(rq->sink->GetBindServer(), &new_svh, rq->url->host, 0);
 		if (new_svh) {
 			if (new_svh->vh == rq->svh->vh) {
 				rq->svh->release();
@@ -578,95 +500,79 @@ bool bind_virtual_host(KHttpRequest *rq,const char *hostname,int len) {
 		}
 	}
 	SET(rq->raw_url.flags, flags);
-	return true;
+	return kev_err;
 }
-bool bind_virtual_host(KHttpRequest *rq)
+kev_result bind_virtual_host(KHttpRequest *rq)
 {
 	return bind_virtual_host(rq,rq->url->host,0);
 }
-void handleStartRequest(KHttpRequest *rq,int got)
+kev_result handleStartRequest(KHttpRequest *rq,int got)
 {
-	
+	kev_result ret;
 	rq->beginRequest();
 #ifdef HTTP_PROXY
 	if (rq->meth == METH_CONNECT) {
-		handleConnectMethod(rq);
-		return;
+		return handleConnectMethod(rq);
 	}
 #endif
 	if (rq->ctx->read_huped) {
 		SET(rq->flags,RQ_CONNECTION_CLOSE);
-		send_error(rq,NULL,STATUS_BAD_REQUEST,"Client close connection");
-		return;
+		return send_error(rq,NULL,STATUS_BAD_REQUEST,"Client close connection");
 	}
 	if (TEST(rq->raw_url.flags,KGL_URL_BAD)) {
 		SET(rq->flags,RQ_CONNECTION_CLOSE);
-		send_error(rq, NULL, STATUS_BAD_REQUEST, "Bad url");
-		return;
+		return send_error(rq, NULL, STATUS_BAD_REQUEST, "Bad url");
 	}
 
 	if (rq->isBad()) {
 		SET(rq->flags,RQ_CONNECTION_CLOSE);
-		send_error(rq, NULL, STATUS_BAD_REQUEST, "Bad request format.");
-		return;
+		return send_error(rq, NULL, STATUS_BAD_REQUEST, "Bad request format.");
 	}
-	if (TEST(rq->workModel,WORK_MODEL_MANAGE)) {
-		stageHttpManage(rq);
-		return;
+	if (rq->IsWorkModel(WORK_MODEL_MANAGE)) {
+		return stageHttpManage(rq);
 	}
 #ifdef ENABLE_STAT_STUB
 	if (strcmp(rq->url->path, "/kangle.status") == 0) {
-		if (rq->meth!=METH_HEAD) {
-			rq->buffer << "OK\n";
-			/*
-			rq->buffer << (INT64)katom_get64((void *)&kgl_total_accepts) << "\t";
-			rq->buffer << (INT64)katom_get64((void *)&kgl_total_requests) << "\n";
-			*/
+		KAutoBuffer s(rq->pool);
+		if (rq->meth!=METH_HEAD) {			
+			s << "OK\n";
 		}
-		send_http(rq, NULL, STATUS_OK, &rq->buffer);
-		return;
+		return send_http(rq, NULL, STATUS_OK, &s);
 	}
 #endif
-	if (!TEST(rq->workModel, WORK_MODEL_MANAGE | WORK_MODEL_INTERNAL|WORK_MODEL_SKIP_ACCESS)) {
+	if (!rq->ctx->skip_access) {
 		switch(checkRequest(rq)) {
 		case JUMP_DROP:
-			SET(rq->flags,RQ_CONNECTION_CLOSE);
-			stageEndRequest(rq);
-			return;
+			return stageEndRequest(rq);
 		case JUMP_DENY:
-			stageDeniedRequest(rq);
-			return;
+			return stageDeniedRequest(rq);
 		case JUMP_VHS:
-			if (!bind_virtual_host(rq)) {
-				return;
+			ret = bind_virtual_host(rq);
+			if (KEV_HANDLED(ret)) {
+				return ret;
 			}
-		default:
-			break;
 		}
 	}
-	async_http_start(rq);
+	return async_http_start(rq);
 }
-void async_http_start(KHttpRequest *rq)
+kev_result async_http_start(KHttpRequest *rq)
 {
+	//printf("async_http_start. [%p].\n",rq);
 	KContext *context = rq->ctx;
 	
-	if (TEST(rq->flags,RQ_HAVE_EXPECT)) {
-		rq->c->socket->write_all("HTTP/1.1 100 Continue\r\n\r\n");
-		CLR(rq->flags,RQ_HAVE_EXPECT);
-	}
+#ifdef ENABLE_STAT_STUB
 	if (conf.max_io>0 && katom_get((void *)&kgl_aio_count) > (uint32_t)conf.max_io) {
 		//async io limit
 		SET(rq->filter_flags, RF_NO_DISK_CACHE);
 	}
+#endif
 	//only if cached
 	if (TEST(rq->flags, RQ_HAS_ONLY_IF_CACHED)) {
-		context->obj = findHttpObject(rq, false, &context->new_object);
+		context->obj = findHttpObject(rq, false, context);
 		if (!context->obj) {
-			send_error(rq, context->obj, 404, "Not in cache");
-			goto done;
+			return send_error(rq, context->obj, 404, "Not in cache");
 		}
-		processCacheRequest(rq);
-		goto done;
+		return processCacheRequest(rq);
 	}
 	//end purge or only if cached
 	if (in_stop_cache(rq)) {
@@ -674,36 +580,22 @@ void async_http_start(KHttpRequest *rq)
 		context->new_object = 1;
 		if (!context->obj) {
 			SET(rq->flags,RQ_CONNECTION_CLOSE);
-			//context->last_status = false;
-			goto done;
+			return send_error(rq, context->obj, STATUS_SERVER_ERROR, "cann't malloc memory.");
 		}
 		SET(context->obj->index.flags,FLAG_DEAD);
 	} else {
-		context->obj = findHttpObject(rq, true, &context->new_object);
-		//		msg = "net";
+		context->obj = findHttpObject(rq, true, context);
 		if (!context->obj) {
 			SET(rq->flags,RQ_CONNECTION_CLOSE);
-			goto done;
+			return send_error(rq, context->obj, STATUS_SERVER_ERROR, "cann't malloc memory.");
 		}
 	}
 	if (context->new_object) { //It is a new object
 		if (rq->meth != METH_GET) {
 			SET(context->obj->index.flags,FLAG_DEAD);
 		}
-		processNotCacheRequest(rq);
-	} else {
-		//useCache = true;
-		processCacheRequest(rq);
+		return processNotCacheRequest(rq);
 	}
-	done:
-	return;
+	return processCacheRequest(rq);	
 }
-
-void processHttpRequest(KHttpRequest *rq) {
-	//KContext context;
-	//memset(&context,0,sizeof(KContext));
-	//context.rq = rq;
-	 async_http_start(rq);
-}
-
 

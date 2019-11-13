@@ -12,7 +12,7 @@
 #include "do_config.h"
 #include "log.h"
 #include "utils.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 
 int numberCpu = 1;
 #ifdef SOLARIS

@@ -19,7 +19,6 @@
 #define KMARK_H_
 #include "KModel.h"
 #include "KBuffer.h"
-#include "malloc_debug.h"
 #define 	MARK_CONTEXT		"mark"
 class KHttpRequest;
 class KHttpObject;

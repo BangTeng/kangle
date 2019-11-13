@@ -1,5 +1,5 @@
 #include "KIpSpeedLimitMark.h"
-void WINAPI ip_speed_limit_clean(void *data)
+void ip_speed_limit_clean(void *data)
 {
 	KIpSpeedLimitContext *ctx = (KIpSpeedLimitContext *)data;
 	ctx->mark->requestClean(ctx->ip);

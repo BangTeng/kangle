@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include "KFastcgiUtils.h"
 #include "log.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 FCGI_BeginRequestRecord fastRequestStart, fastRequestStartKeepAlive;
 
 void initFastcgiData() {

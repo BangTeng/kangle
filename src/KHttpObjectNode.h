@@ -26,7 +26,7 @@
 #include "KHttpObject.h"
 #include "log.h"
 #include "http.h"
-#include "rbtree.h"
+#include "krbtree.h"
 #if 0
 class KHttpObjectNode
 {

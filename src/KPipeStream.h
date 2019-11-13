@@ -8,7 +8,7 @@
 #ifndef KPIPESTREAM_H_
 #define KPIPESTREAM_H_
 
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "KProcess.h"
 #include "ksapi.h"
 #define READ_PIPE		0

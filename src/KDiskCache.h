@@ -1,11 +1,11 @@
 #ifndef KDiskCache_h_0s9dflk1j231hhhh1
 #define KDiskCache_h_0s9dflk1j231hhhh1
 #include "global.h"
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "KHttpRequest.h"
-#include "KFile.h"
+#include "KFileName.h"
 #include <stdio.h>
-#include "KAsyncFile.h"
+#include "kasync_file.h"
 #include <list>
 #define INDEX_STATE_UNCLEAN 0
 #define INDEX_STATE_CLEAN   1

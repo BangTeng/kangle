@@ -1,6 +1,6 @@
 #include <string.h>
 #include "KHttpPost.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KUrlParser.h"
 int get_tmp(char m_char) {
 	if (m_char <= '9' && m_char >= '0')

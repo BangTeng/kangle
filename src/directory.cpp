@@ -5,8 +5,8 @@
 #include <sstream>
 #endif
 #include "directory.h"
-#include "malloc_debug.h"
-#include "forwin32.h"
+#include "kmalloc.h"
+#include "kforwin32.h"
 int list_dir(const char *dir,list_dir_handle_f file_handle,void *param)
 {
 	int ret = 0;

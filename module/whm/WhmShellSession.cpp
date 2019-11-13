@@ -1,7 +1,7 @@
 #include "WhmShellSession.h"
 #if 0
 WhmShellSession whmShellSession;
-static FUNC_TYPE FUNC_CALL flushThread(void *param)
+static KTHREAD_FUNCTION flushThread(void *param)
 {
 	for (;;) {
 		sleep(2);

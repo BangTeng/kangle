@@ -23,7 +23,7 @@
 #include "do_config.h"
 #include "KNsVirtualHost.h"
 #include "KHttpRequest.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KVirtualHostManage.h"
 #include "lang.h"
 #include "KLineFile.h"

@@ -7,8 +7,9 @@
 #include <vector>
 #include "KCgiFetchObject.h"
 #include "KCgiRedirect.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "utils.h"
+#ifdef ENABLE_CGI
 KCgiRedirect globalCgi;
 using namespace std;
 KCgiRedirect::KCgiRedirect() {
@@ -90,4 +91,4 @@ void KCgiRedirect::buildXML(std::stringstream &s) {
 	}
 	s << "/>\n";
 }
-
+#endif

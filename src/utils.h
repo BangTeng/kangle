@@ -38,10 +38,9 @@
 #include "do_config.h"
 #include "global.h"
 #include "KHttpRequest.h"
-#include "forwin32.h"
-#include "malloc_debug.h"
-#include "KSelectable.h"
-#include "KServer.h"
+#include "kforwin32.h"
+#include "kselectable.h"
+#include "kserver.h"
 #include "KPipeStream.h"
 #include "KCgiEnv.h"
 #include "KWinCgiEnv.h"
@@ -76,8 +75,8 @@ typedef KCgiEnv KCmdEnv;
 //#endif
 int get_path(char *argv0, std::string &path);
 int get_param(int argc, char **argv, int &i,const char *param, char *value);
-FUNC_TYPE FUNC_CALL time_thread(void *arg);
-void closeAllConnection();
+KTHREAD_FUNCTION time_thread(void *arg);
+void register_gc_service(void(*flush)(void *,time_t),void *arg);
 std::string b64encode(const unsigned char *in, int len = 0);
 char *b64decode(const unsigned char *in, int *l);
 char *my_strtok(char *msg, char split, char **ptrptr);
@@ -87,18 +86,13 @@ void explode(const char *str, const char split,
 void explode(const char *str, const char split,
 		std::map<char *, bool, lessp> *result, int limit = -1);
 std::string string2lower(std::string str);
-buff *inflate_buff(buff *in_buf, INT64 &len, bool fast);
-buff *deflate_buff(buff *in_buf, int level, INT64 &len, bool fast);
+kbuf *inflate_buff(kbuf *in_buf, INT64 &len, bool fast);
+kbuf *deflate_buff(kbuf *in_buf, int level, INT64 &len, bool fast);
 char *utf82charset(const char *str, size_t len, const char *charset);
 
 FILE *fopen_as(const char *file, const char *mode, int uid, int gid);
-int create_select_pipe(KHttpRequest *rq, KClientSocket *client, int tmo,
-		int max_server_len = -1, int max_client_len = -1);
 bool name2uid(const char *name, int &uid, int &gid);
 bool name2gid(const char *name, int &gid);
-#ifdef _WIN32
-bool setCloseOnExec(HANDLE fd, bool closeExec);
-#endif
 wchar_t *toUnicode(const char *str,int len=0,int cp_code=0);
 bool waitForRW(SOCKET sockfd, bool isWrite, int timeo);
 bool startService(KListenHost *service, bool start = false);

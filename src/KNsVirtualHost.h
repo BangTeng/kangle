@@ -26,10 +26,9 @@
 #include <vector>
 #include "global.h"
 #include "KVirtualHost.h"
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "KMutex.h"
 #include "KJump.h"
-#include "malloc_debug.h"
 #include "KBaseVirtualHost.h"
 
 class KHttpRequest;

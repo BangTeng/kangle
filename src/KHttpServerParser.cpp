@@ -33,9 +33,9 @@
 #include "utils.h"
 #include "KVirtualHostDatabase.h"
 #include "lib.h"
-#include "server.h"
+#include "extern.h"
 #include "KHttpFilterManage.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #ifndef HTTP_PROXY
 using namespace std;
 KHttpServerParser::KHttpServerParser() {
@@ -131,19 +131,6 @@ bool KHttpServerParser::startElement(KXmlContext *context, std::map<
 	}
 	std::string parent = context->getParentName();
 	if (parent=="vh" || parent=="vhs" || parent=="vh_templete"){
-#ifdef ENABLE_KSAPI_FILTER
-		if (context->qName == "filter") {
-			if (virtualHost==NULL) {
-				//已知的问题是为了性能http filter不加锁，所以这里恢复全局
-				bv = &conf.gvm->globalVh;
-			}
-			if (bv->hfm==NULL) {
-				bv->hfm = new KHttpFilterManage(virtualHost==NULL);
-			}
-			bv->hfm->add(attribute["name"].c_str());
-			return true;
-		}
-#endif
 		if (context->qName == "map" || context->qName == "redirect"
 			|| context->qName == "default_map") {
 			std::string extend = attribute["extend"];
@@ -162,8 +149,7 @@ bool KHttpServerParser::startElement(KXmlContext *context, std::map<
 				}
 			}
 			if (context->qName == "default_map") {
-				KBaseRedirect *rd = new KBaseRedirect(ac, atoi(
-						attribute["confirm_file"].c_str()));
+				KBaseRedirect *rd = new KBaseRedirect(ac, (uint8_t)atoi(attribute["confirm_file"].c_str()));
 				rd->allowMethod.setMethod(attribute["allow_method"].c_str());
 				bv->lock.Lock();
 				if (bv->defaultRedirect) {
@@ -189,8 +175,7 @@ bool KHttpServerParser::startElement(KXmlContext *context, std::map<
 					//e << "map must have file_ext or path attribute\n";
 					//throw e;
 				}
-				bv->addRedirect(file_ext, value, ac, attribute["allow_method"],
-						attribute["confirm_file"] != "0",attribute["params"]);
+				bv->addRedirect(file_ext, value, ac, attribute["allow_method"],(uint8_t)atoi(attribute["confirm_file"].c_str()),attribute["params"]);
 			}
 
 		}
@@ -454,11 +439,6 @@ bool KHttpServerParser::buildVirtualHost(KAttributeHelper *ah,
 	}
 	virtualHost->setSSLInfo(certfile, keyfile, cipher, protocols);
 #endif
-	if (ah->getValue("concat", value)) {
-		virtualHost->concat = atoi(value.c_str())==1;
-	} else if (tm) {
-		virtualHost->concat = tm->concat;
-	}
 #ifdef ENABLE_VH_RUN_AS
 	if (ah->getValue("add_dir", value)) {
 		virtualHost->add_dir = value;

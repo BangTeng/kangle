@@ -9,12 +9,13 @@
 #define KPOOLABLESTREAMCONTAINER_H_
 #include <list>
 #include "global.h"
-#include "KUpstreamSelectable.h"
-#include "KString.h"
+#include "KUpstream.h"
+#include "KStringBuf.h"
 #include "KMutex.h"
 #include "KCountable.h"
 #include "time_utils.h"
 #include "KHttpEnv.h"
+void SafeDestroyUpstream(KUpstream *st);
 /*
  * 连接池容器类
  */
@@ -24,25 +25,27 @@ public:
 	~KPoolableSocketContainerImp();
 	void refresh(bool clean);
 	void refreshList(kgl_list *l, bool clean);
-	kgl_list *getPopList(KConnectionSelectable *st);
-	kgl_list *getPushList(KUpstreamSelectable *st);
+	kgl_list *GetList()
+	{
+		return &head;
+	}	
 	unsigned size;
 protected:
-	kgl_list **l;
+	kgl_list head;
 };
 class KPoolableSocketContainer: public KCountableEx {
 public:
 	KPoolableSocketContainer();
 	virtual ~KPoolableSocketContainer();
-	KUpstreamSelectable *getPoolSocket(KHttpRequest *rq);
+	KUpstream *getPoolSocket(KHttpRequest *rq);
 	/*
 	回收连接
 	close,是否关闭
 	lifeTime 连接时间
 	*/
-	virtual void gcSocket(KUpstreamSelectable *st,int lifeTime);
-	void bind(KUpstreamSelectable *st);
-	void unbind(KUpstreamSelectable *st);
+	virtual void gcSocket(KPoolableUpstream *st,int lifeTime, time_t base_time);
+	void bind(KPoolableUpstream *st);
+	void unbind(KPoolableUpstream *st);
 	int getLifeTime() {
 		return lifeTime;
 	}
@@ -71,10 +74,10 @@ public:
 		return size;
 	}
 	//isBad,isGood用于监控连接情况
-	virtual void isBad(KUpstreamSelectable *st,BadStage stage)
+	virtual void isBad(KUpstream *st,BadStage stage)
 	{
 	}
-	virtual void isGood(KUpstreamSelectable *st)
+	virtual void isGood(KUpstream *st)
 	{
 	}
 
@@ -87,17 +90,12 @@ protected:
 	/*
 	 * 把连接真正放入池中
 	 */
-	void putPoolSocket(KUpstreamSelectable *st);
-	/*
-		通知事件.
-		ev = 0 关闭
-		ev = 1 放入pool
-	*/
-
-	KUpstreamSelectable *internalGetPoolSocket(KHttpRequest *rq);
+	void putPoolSocket(KUpstream *st);
+	
 	int lifeTime;	
 	KMutex lock;
 private:
+	KUpstream *internalGetPoolSocket(KHttpRequest *rq);
 	time_t getHttp2ExpireTime()
 	{
 		int lifeTime = this->lifeTime;

@@ -7,28 +7,30 @@
 #include <vector>
 #include "KChildListen.h"
 #include "log.h"
-//#include "KSelectorManager.h"
 #include "api_child.h"
 
 KChildListen::KChildListen() {
-	server = NULL;
+	st = NULL;
+	ksocket_init(sockfd);
 }
 KChildListen::~KChildListen() {
-	if(server){
-		delete server;
+	if (ksocket_opened(sockfd)) {
+		ksocket_close(sockfd);
 	}
 }
-ReadState KChildListen::canRead()
+bool KChildListen::canRead()
 {
-	KClientSocket *client = new KClientSocket;
-	if (!server->accept(client,false)) {
-		delete client;
-		debug("cann't accept error=%d\n",GetLastError());
-		return READ_CONTINUE;
+	sockaddr_i addr;
+	SOCKET s = ksocket_accept(this->sockfd, &addr, false);
+	//debug("ksocket_accept result sockfd=[%d]\n", (int)s);
+	if (!ksocket_opened(s)) {
+		return false;
 	}
-	if(!m_thread.start(client,api_child_thread,false)){
-		delete client;
+	KSocketStream *ss = new KSocketStream(s);
+	if (!kthread_start(api_child_thread, ss)) {
+		delete ss;
+		return false;
 	}
-	return READ_CONTINUE;
+	return true;
 }
 

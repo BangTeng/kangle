@@ -2,16 +2,16 @@
 #define KCDNCONTAINER_H
 #include <map>
 #include "global.h"
-#include "KList.h"
+#include "klist.h"
 #include "KSingleAcserver.h"
 #include "KMultiAcserver.h"
 #include "KMutex.h"
-#include "rbtree.h"
+#include "krbtree.h"
 struct KRedirectNode
 {
 	char *name;
 	KRedirect *rd;
-	rb_node *node;
+	krb_node *node;
 	time_t lastActive;
 	KRedirectNode *next;
 	KRedirectNode *prev;
@@ -27,13 +27,15 @@ public:
 	KRedirect *refsRedirect(const char *val);
 	KMultiAcserver *refsMultiServer(const char *name);
 	void flush(time_t nowTime);
+	void Clean();
 private:
+	void Remove(KRedirectNode *rn);
 	KRedirect *findRedirect(const char *name);
 	void addRedirect(KRedirectNode *rn);
 	KMutex lock;
 	KRedirectNode rd_list;
-	rb_tree *rd_map;
+	krb_tree *rd_map;
 };
-extern KCdnContainer cdnContainer;
+extern KCdnContainer *server_container;
 #endif
 

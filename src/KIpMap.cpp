@@ -1,6 +1,7 @@
 #include "KIpMap.h"
 #include "log.h"
 #include "katom.h"
+#include "kmalloc.h"
 #include <sstream>
 static int ip_addr_cmp(ip_addr *a1,ip_addr *a2)
 {
@@ -86,7 +87,8 @@ void ntoh_addr(ip_addr *addr)
 }
 bool get_local_addr(const char *value,ip_addr *addr)
 {
-	if (!KSocket::getaddr(value,addr)) {
+	
+	if (!ksocket_get_ipaddr(value,addr)) {
 		return false;
 	}
 	ntoh_addr(addr);
@@ -135,10 +137,10 @@ bool make_local_ip(ip_addr *addr,char *ips,int ips_len)
 {
 	ip_addr net_addr;
 	memcpy(&net_addr,addr,sizeof(ip_addr));
-	hton_addr(&net_addr);
-	return KSocket::make_ip(&net_addr,ips,ips_len);
+	hton_addr(&net_addr);	
+	return ksocket_ipaddr_ip(&net_addr,ips,ips_len);
 }
-inline void get_ipv4_cidr_max_addr(u_int32_t *min_addr,u_int32_t *max_addr,int prefix)
+inline void get_ipv4_cidr_max_addr(uint32_t *min_addr,uint32_t *max_addr,int prefix)
 {
 	*min_addr &= ((uint32_t)~0 << (32 - prefix));
 	if (prefix<32) {
@@ -249,7 +251,7 @@ bool KIpMap::add_range_addr(struct dns_range_addr *range_addr,void *bind_data)
 {
 	char ips[MAXIPLEN];
 	int new_flag;
-	struct rb_node *node;
+	struct krb_node *node;
 	if (ip_addr_cmp(&range_addr->min_addr,&range_addr->max_addr)>0) {
 		make_local_ip(&range_addr->min_addr, ips, MAXIPLEN);
 		klog(KLOG_ERR,"ip [%s] is error,min>max\n",ips);
@@ -267,7 +269,7 @@ bool KIpMap::add_range_addr(struct dns_range_addr *range_addr,void *bind_data)
 	node->data = addr;
 	addr->bind_data = bind_data;
 	//处理前面的ip覆盖
-	struct rb_node *pre_node = rb_prev(node);
+	struct krb_node *pre_node = rb_prev(node);
 	if (pre_node) {
 		struct dns_range_addr *pre_addr = (struct dns_range_addr *)pre_node->data;
 		if (ip_addr_cmp(&pre_addr->max_addr,&range_addr->max_addr)>0) {
@@ -293,7 +295,7 @@ bool KIpMap::add_range_addr(struct dns_range_addr *range_addr,void *bind_data)
 		}
 	}
 	//处理后面的ip覆盖
-	struct rb_node *next_node = rb_next(node);
+	struct krb_node *next_node = rb_next(node);
 	if (next_node) {
 		struct dns_range_addr *next_addr = (struct dns_range_addr *)next_node->data;
 		if (ip_addr_cmp(&range_addr->max_addr,&next_addr->max_addr)>0) {
@@ -321,11 +323,27 @@ bool KIpMap::add_min_max_addr(const char *min_addr,const char *max_addr,void *vi
 {
 	struct dns_range_addr range_addr;
 	memset(&range_addr,0,sizeof(range_addr));
+	bool include_min_addr = true;
+	if (*min_addr == '_') {
+		include_min_addr = false;
+		min_addr++;
+	}
+	bool include_max_addr = true;
+	if (*max_addr == '_') {
+		include_max_addr = false;
+		max_addr++;
+	}
 	if (!get_local_addr(min_addr,&range_addr.min_addr)) {
 		return false;
-	}	
+	}
+	if (!include_min_addr) {
+		addr_add(&range_addr.min_addr, 1);
+	}
 	if (!get_local_addr(max_addr,&range_addr.max_addr)) {
 		return false;
+	}
+	if (!include_max_addr) {
+		addr_sub(&range_addr.max_addr, 1);
 	}
 	return add_range_addr(&range_addr,view);
 }
@@ -349,7 +367,7 @@ void *KIpMap::find(const char *ip)
 }
 void *KIpMap::find(ip_addr *local_addr)
 {
-	struct rb_node *node = rbtree_find(ip,local_addr,range_addr_find_cmp);	
+	struct krb_node *node = rbtree_find(ip,local_addr,range_addr_find_cmp);	
 	if (node==NULL) {
 		return NULL;
 	}
@@ -357,10 +375,10 @@ void *KIpMap::find(ip_addr *local_addr)
 	assert(range_addr);
 	return range_addr->bind_data;
 }
-struct dump_addr_arg {
+typedef struct {
 	std::stringstream *s;
 	char split;
-};
+}dump_addr_arg ;
 static iterator_ret dump_addr_iterator(void *data,void *arg)
 {
 	dump_addr_arg *da = (dump_addr_arg *)arg;
@@ -394,7 +412,7 @@ bool test_ip_map()
 	//printf("ips=[%s]\n",ips);
 	KIpMap ipmap;
 	ipmap.add_multi_addr("192.168.1.1-250.168.1.255",'|',(void *)1);
-	printf("success added item=[%d]\n",ipmap.add_multi_addr("::1-::255|2:4::/64",'|',(void *)2));
+	//printf("success added item=[%d]\n",ipmap.add_multi_addr("::1-::255|2:4::/64",'|',(void *)2));
 	//ipmap.dump_addr();
 	//void *data = ipmap.find("192.168.2.3");
 	//assert(data!=NULL);

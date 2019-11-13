@@ -22,7 +22,7 @@
 #include "KLangParser.h"
 #include "KXml.h"
 #include "do_config.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include<iostream>
 KLang klang;
 using namespace std;

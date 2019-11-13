@@ -33,7 +33,7 @@ public:
 					obj->insertHttpHeader((const char *)attr,attr_len,s->getString(),s->getSize());
 				}
 			} else {
-				rq->parser.insertHeader((const char *)attr,attr_len,s->getString(),s->getSize());
+				rq->AddHeader((const char *)attr,attr_len,s->getString(),s->getSize());
 			}
 			delete s;
 		}

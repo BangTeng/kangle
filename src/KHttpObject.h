@@ -3,7 +3,7 @@
 
 #include "KMutex.h"
 
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "KBuffer.h"
 #include "log.h"
 #include "KHttpKeyValue.h"
@@ -15,7 +15,7 @@
 
 #include "KHttpKeyValue.h"
 #include "time_utils.h"
-#include "KFile.h"
+#include "KFileName.h"
 #include "KBuffer.h"
 
 #define   LIST_IN_MEM   0
@@ -47,7 +47,7 @@ public:
 		switch(type){
 		case MEMORY_OBJECT:
 			if (bodys) {
-				KBuffer::destroy(bodys);
+				destroy_kbuf(bodys);
 			}
 			break;
 #ifdef ENABLE_DISK_CACHE
@@ -71,7 +71,7 @@ public:
 	unsigned short type;
 	KHttpHeader *headers; /* headers */
 	union {
-		buff *bodys;
+		kbuf *bodys;
 #ifdef ENABLE_DISK_CACHE
 		KHttpObjectSwaping *os;
 #endif
@@ -259,7 +259,7 @@ public:
 		}
 	}
 #ifdef ENABLE_DISK_CACHE
-	bool swapout(bool fast_model);
+	bool swapout(KBufferFile *file,bool fast_model);
 	bool swapin(KHttpObjectBody *data);
 	bool swapinBody(KFile *fp, KHttpObjectBody *data);
 	void unlinkDiskFile();

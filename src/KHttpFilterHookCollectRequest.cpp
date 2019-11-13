@@ -1,6 +1,7 @@
 #include "KHttpFilterHookCollectRequest.h"
 #include "http.h"
 #ifdef ENABLE_KSAPI_FILTER
+#if 0
 static KGL_RESULT WINAPI  GetHeader (
     kgl_filter_context * pfc,
     LPSTR                         lpszName,
@@ -8,7 +9,7 @@ static KGL_RESULT WINAPI  GetHeader (
     LPDWORD                       lpdwSize)
 {
 	KHttpRequest *rq = (KHttpRequest *)pfc->ServerContext;
-	KHttpHeader *header = rq->parser.getHeaders();
+	KHttpHeader *header = rq->GetHeader();
 	while (header) {
 		if (is_attr(header,lpszName)) {
 			DWORD len = strlen(header->val) + 1;
@@ -26,7 +27,7 @@ static KGL_RESULT WINAPI  SetHeader (
     LPSTR                         lpszValue)
 {
 	KHttpRequest *rq = (KHttpRequest *)pfc->ServerContext;
-	KHttpHeader *header = rq->parser.getHeaders();
+	KHttpHeader *header = rq->GetHeader();
 	while (header) {
 		if (is_attr(header,lpszName)) {
 			xfree(header->val);
@@ -43,7 +44,7 @@ static KGL_RESULT WINAPI  AddHeader (
     LPSTR                         lpszValue)
 {
 	KHttpRequest *rq = (KHttpRequest *)pfc->ServerContext;
-	rq->parser.insertHeader(lpszName,strlen(lpszName),lpszValue,strlen(lpszValue));
+	rq->AddHeader(lpszName,strlen(lpszName),lpszValue,strlen(lpszValue));
 	return KGL_OK;
 }
 int KHttpFilterHookCollectRequest::check_request(KHttpRequest *rq)
@@ -66,4 +67,5 @@ void init_kgl_filter_request(kgl_filter_request &notification)
 	notification.get_header = GetHeader;
 	notification.set_header = SetHeader;
 }
+#endif
 #endif

@@ -1,29 +1,31 @@
+#include "kselector_manager.h"
 #include "KTimer.h"
-#include "KSelectorManager.h"
 struct timer_run_param
 {
-	KSelector *selector;
+	kselector *selector;
 	timer_func func;
 	void *arg;
 };
-void result_timer_call_back(void *arg, int got)
+kev_result result_timer_call_back(void *arg, int got)
 {
 	timer_run_param *param = (timer_run_param *)arg;
 	param->func(param->arg);
 	delete param;
+	return kev_ok;
 }
-void next_timer_call_back(void *arg, int got)
+kev_result next_timer_call_back(void *arg, int got)
 {
 	timer_run_param *param = (timer_run_param *)arg;
-	param->selector->add_timer(result_timer_call_back, param,got,NULL);
+	kselector_add_timer(param->selector,result_timer_call_back, param,got,NULL);
+	return kev_ok;
 }
 void timer_run(timer_func func,void *arg,int msec,unsigned short selector)
 {
 	timer_run_param *param = new timer_run_param;
-	param->selector = (selector == 0 ? selectorManager.getSelector() : selectorManager.getSelectorByIndex(selector));
+	param->selector = (selector == 0 ? get_perfect_selector() : get_selector_by_index(selector));
 	param->func = func;
 	param->arg = arg;
-	param->selector->next(next_timer_call_back, param,msec);
+	kgl_selector_module.next(param->selector,next_timer_call_back, param,msec);
 }
 bool test_timer()
 {

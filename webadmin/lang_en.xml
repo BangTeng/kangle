@@ -373,4 +373,5 @@ http_filter="filter"
 keep_alive_count="keep alive count"
 return="return"
 connect_time_out="connect time out"
+dso="dso"
 />

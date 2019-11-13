@@ -7,15 +7,16 @@
 #ifndef _WIN32
 #include <dlfcn.h>
 #endif
+#include <errno.h>
 #include "WhmDso.h"
 #include "WhmLog.h"
-#include "forwin32.h"
+#include "kforwin32.h"
 struct WhmCreateProcessParam
 {
 	WHM_CMD_DATA *cmd;
 	KPipeStream *st;
 };
-FUNC_TYPE FUNC_CALL createProcessThread(void *param)
+KTHREAD_FUNCTION createProcessThread(void *param)
 {
 	WhmCreateProcessParam *cp = (WhmCreateProcessParam *)param;
 	KPipeStream *st = cp->st;

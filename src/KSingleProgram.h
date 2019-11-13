@@ -7,7 +7,7 @@
 
 #ifndef KSINGLEPROGRAM_H_
 #define KSINGLEPROGRAM_H_
-#include "KFile.h"
+#include "kfile.h"
 class KSingleProgram {
 public:
 	KSingleProgram();

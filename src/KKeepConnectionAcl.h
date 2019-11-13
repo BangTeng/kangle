@@ -2,6 +2,7 @@
 #define KKEEPCONNECTIONACL_H
 #include "KAcl.h"
 //@deprecated use work_model instead
+#if 0
 class KKeepConnectionAcl : public KAcl
 {
 public:
@@ -36,4 +37,5 @@ public:
 	}
 private:
 };
+#endif
 #endif

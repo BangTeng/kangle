@@ -25,7 +25,7 @@
 #include "KCountable.h"
 #include "KTimeMatch.h"
 #include "KMutex.h"
-#include "KFile.h"
+#include "KFileName.h"
 enum {
 	LOG_NONE, LOG_PRINT, LOG_FILE
 };

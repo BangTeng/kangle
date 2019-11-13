@@ -25,15 +25,14 @@
 #ifndef _WIN32
 #include <sys/uio.h>
 #endif
-
-void KSocketBuffer::getRBuffer(LPWSABUF buffer,int &bufferCount)
+#if 0
+int KSocketBuffer::getReadBuffer(LPWSABUF buffer,int bufferCount)
 {
 	if(hot==NULL){
-		bufferCount = 0;
-		return;
+		return 0;
 	}
 	assert(hot_buf);
-	buff *tmp = hot_buf;
+	kbuf *tmp = hot_buf;
 	buffer[0].iov_base = hot;
 	buffer[0].iov_len = hot_buf->used - (hot - hot_buf->data);
 	int i;
@@ -45,7 +44,7 @@ void KSocketBuffer::getRBuffer(LPWSABUF buffer,int &bufferCount)
 		buffer[i].iov_base = tmp->data;
 		buffer[i].iov_len = tmp->used;
 	}
-	bufferCount = i;
+	return i;
 }
 void KSocketBuffer::writeSuccess(int got)
 {
@@ -54,7 +53,7 @@ void KSocketBuffer::writeSuccess(int got)
 	totalLen += got;
 	hot += got;
 }
-char *KSocketBuffer::getWBuffer(int &len)
+char *KSocketBuffer::getWriteBuffer(int &len)
 {
 	if(hot_buf==NULL){
 		assert(head==NULL);
@@ -64,7 +63,7 @@ char *KSocketBuffer::getWBuffer(int &len)
 	}
 	len = chunk_size - hot_buf->used;
 	if (len == 0) {
-		buff *nbuf = newbuff();
+		kbuf *nbuf = newbuff();
 		assert(hot_buf->next==NULL);
 		hot_buf->next = nbuf;
 		hot_buf = nbuf;
@@ -75,7 +74,7 @@ char *KSocketBuffer::getWBuffer(int &len)
 	return hot;
 	//*data = hot;
 }
-char *KSocketBuffer::getRBuffer(int &len)
+char *KSocketBuffer::getReadBuffer(int &len)
 {
 	if (hot_buf==NULL) {
 		return NULL;
@@ -115,7 +114,7 @@ StreamState KSocketBuffer::write_all(const char *buf, int len)
 {	
 	while (len>0) {
 		int wlen;
-		char *t = getWBuffer(wlen);
+		char *t = getWriteBuffer(wlen);
 		assert(t);
 		wlen = MIN(len,wlen);
 		memcpy(t,buf,wlen);
@@ -131,7 +130,7 @@ int KSocketBuffer::read(char *buf,int len)
 	int got = 0;
 	while (len>0) {
 		int length;
-		char *read_data = getRBuffer(length);
+		char *read_data = getReadBuffer(length);
 		if (read_data==NULL) {
 			return 0;
 		}
@@ -149,3 +148,4 @@ int KSocketBuffer::read(char *buf,int len)
 	}
 	return got;
 }
+#endif

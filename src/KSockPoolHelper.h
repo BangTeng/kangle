@@ -27,10 +27,11 @@
 #include <map>
 #include <string>
 #include <list>
-#include "KSocket.h"
+#include "ksocket.h"
 #include "global.h"
 #include "KCountable.h"
 #include "KPoolableSocketContainer.h"
+#include "KTcpUpstream.h"
 #include "KHttpRequest.h"
 #define ERROR_RECONNECT_TIME	600
 /**
@@ -40,8 +41,8 @@ class KSockPoolHelper : public KPoolableSocketContainer {
 public:
 	KSockPoolHelper();
 	virtual ~KSockPoolHelper();
-	void connect(KHttpRequest *rq);
-	void isBad(KUpstreamSelectable *st,BadStage stage)
+	kev_result connect(KHttpRequest *rq);
+	void isBad(KUpstream *st,BadStage stage)
 	{
 		katom_inc64((void *)&this->total_error);
 		switch(stage){
@@ -68,11 +69,14 @@ public:
 		if (ssl!=sh->ssl) {
 			return true;
 		}
+		if (no_sni != sh->no_sni) {
+			return true;
+		}
 #endif
 		if (weight!=sh->weight) {
 			return true;
 		}
-		if (isUnix!=sh->isUnix) {
+		if (is_unix!=sh->is_unix) {
 			return true;
 		}
 		if (ip!=sh->ip || (ip && strcmp(ip,sh->ip)!=0)) {
@@ -86,12 +90,12 @@ public:
 		}
 		return false;
 	}
-	void isGood(KUpstreamSelectable *st)
+	void isGood(KUpstream *st)
 	{
 		enable();
 	}
 	void start_monitor_call_back();
-	void syncCheckConnect();
+	//void syncCheckConnect();
 	void setErrorTryTime(int max_error_count, int error_try_time)
 	{
 		lock.Lock();
@@ -124,13 +128,21 @@ public:
 	{
 		return this->ip;
 	}
-	uint64_t hit;
-	int weight;
 	std::string host;
-	int port;
-	bool monitor;
-	bool isUnix;
-	bool sign;
+	uint64_t hit;
+	uint16_t weight;
+	uint16_t port;
+	union {
+		struct {
+			uint32_t monitor : 1;
+			uint32_t is_unix : 1;
+			uint32_t sign : 1;
+#ifdef ENABLE_UPSTREAM_SSL
+			uint32_t no_sni : 1;
+#endif
+		};
+		uint32_t flags;
+	};
 #ifdef ENABLE_UPSTREAM_SSL
 	
 	std::string ssl;
@@ -141,17 +153,16 @@ public:
 	 * 连续错误连接次数，如果超过MAX_ERROR_COUNT次，就会认为是问题的。
 	 * 下次试连接时间会从当前时间加ERROR_RECONNECT_TIME秒。
 	 */
-	int error_count;
-	int max_error_count;
+	uint16_t error_count;
+	uint16_t max_error_count;
 	/*
 	 * 下次试连接时间，如果是0表示活跃的。
 	 */
 	time_t tryTime;
-	bool try_numerichost_connect(KHttpRequest *rq, KUpstreamSelectable *socket,bool &need_name_resolved);
-	bool connect_addr(KHttpRequest *rq, KUpstreamSelectable *socket,sockaddr_i &addr);
+	bool try_numerichost_connect(KHttpRequest *rq, KTcpUpstream *socket,bool &need_name_resolved);
+	bool connect_addr(KHttpRequest *rq, KTcpUpstream *socket,sockaddr_i &addr);
 	void buildXML(std::stringstream &s);
 	bool parse(std::map<std::string,std::string> &attr);
-	void monitorConnectStage(KHttpRequest *rq, KUpstreamSelectable *socket);
 	void monitorNextTick();
 	void stopMonitor()
 	{
@@ -163,16 +174,15 @@ public:
 	volatile uint64_t total_connect;
 	INT64 monitor_start_time;
 	int avg_monitor_tick;
-	KSelector *selector;
 	KSockPoolHelper *next;
 	KSockPoolHelper *prev;
 private:
-	KUpstreamSelectable *getConnection(KHttpRequest *rq, bool &half, bool &need_name_resolved);
-	KUpstreamSelectable *newConnection(KHttpRequest *rq, bool &need_name_resolved);
+	KUpstream *getConnection(KHttpRequest *rq, bool &half, bool &need_name_resolved);
+	KUpstream *newConnection(KHttpRequest *rq, bool &need_name_resolved);
 	void startMonitor();
 	void internalStopMonitor()
 	{
-		monitor = false;
+		monitor = 0;
 	}
 	char *ip;
 	KMutex lock;

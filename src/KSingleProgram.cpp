@@ -19,8 +19,8 @@
 
 #include "KSingleProgram.h"
 #include "log.h"
-#include "malloc_debug.h"
-#include "forwin32.h"
+#include "kmalloc.h"
+#include "kforwin32.h"
 KSingleProgram singleProgram;
 KSingleProgram::KSingleProgram() {
 	kfinit(fd);

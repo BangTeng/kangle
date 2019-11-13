@@ -28,6 +28,7 @@
 
 #else
 #define _USE_BSD
+#include <errno.h>
 #include <pthread.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -44,15 +45,14 @@
 #include "utils.h"
 #include "log.h"
 #include "do_config.h"
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "http.h"
-#include "server.h"
-#include "KThreadPool.h"
-#include "malloc_debug.h"
+#include "kthread.h"
+#include "kmalloc.h"
 #include "KBuffer.h"
 #include "lib.h"
 #include "KServerListen.h"
-#include "md5.h"
+#include "kmd5.h"
 #include "lang.h"
 #include "extern.h"
 #include "KWinCgiEnv.h"
@@ -65,7 +65,6 @@ volatile uint64_t kgl_total_servers = 0;
 volatile uint32_t kgl_reading = 0;
 volatile uint32_t kgl_writing = 0;
 volatile uint32_t kgl_waiting = 0;
-volatile uint32_t kgl_aio_count = 0;
 #endif
 /*
  const char ap_month_snames[12][4] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -149,12 +148,13 @@ std::string string2lower(std::string str) {
 	}
 	return s.str();
 }
+#if 0
 int create_select_pipe(KHttpRequest *rq, KClientSocket *client, int tmo,
 		int max_server_len, int max_client_len) {
 	char *buf;
 	int len;
 	assert(rq && client);
-	int s1 = rq->c->socket->get_socket(), s2 = client->get_socket();
+	int s1 = rq->c->sd, s2 = client->get_socket();
 	int server_recv_len = 0, client_recv_len = 0;
 	if (s1 <= 0 || s2 <= 0)
 		return 0;
@@ -202,7 +202,7 @@ int create_select_pipe(KHttpRequest *rq, KClientSocket *client, int tmo,
 				max_recv_len = MIN(max_server_len-server_recv_len,max_recv_len);
 
 			}
-			if ((len = rq->c->socket->read(buf, max_recv_len)) <= 0) {
+			if ((len = read(rq->sink->read(buf, max_recv_len)) <= 0) {
 				ret = s1;
 				break;
 			}
@@ -245,6 +245,7 @@ int create_select_pipe(KHttpRequest *rq, KClientSocket *client, int tmo,
 	xfree(buf);
 	return ret;
 }
+#endif
 void explode(const char *str, const char split,
 		map<char *, bool, lessp> *result, int limit) {
 	char *tmp;
@@ -435,7 +436,7 @@ void change_admin_password_crypt_type() {
 					<< conf.admin_passwd.c_str();
 		}
 		char md5result[33];
-		KMD5(s.getString(), md5result);
+		KMD5(s.getString(), s.getSize(),md5result);
 		conf.admin_passwd = md5result;
 	}
 }

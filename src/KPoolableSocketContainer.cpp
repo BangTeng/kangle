@@ -8,12 +8,31 @@
 #include "KPoolableSocketContainer.h"
 #include "log.h"
 #include "time_utils.h"
-#include "KSelectorManager.h"
+#include "kselector_manager.h"
+#include "KHttpRequest.h"
+#include "KSink.h"
+#include "KTsUpstream.h"
+
 using namespace std;
 struct KUpstreamSelectableList {
 	kgl_list queue;
-	KUpstreamSelectable *st;
+	KPoolableUpstream *st;
 };
+kev_result next_destroy(void *arg, int got)
+{
+	KPoolableUpstream *st = (KPoolableUpstream *)arg;
+	st->Destroy();
+	return kev_destroy;
+}
+void SafeDestroyUpstream(KUpstream *st)
+{
+	kselector *selector = st->GetConnection()->st.selector;
+	if (selector != NULL && selector != kgl_get_tls_selector()) {
+		kgl_selector_module.next(selector, next_destroy, st, 0);
+	} else {
+		st->Destroy();
+	}
+}
 void KPoolableSocketContainerImp::refreshList(kgl_list *l,bool clean)
 {
 	for (;;) {
@@ -22,65 +41,31 @@ void KPoolableSocketContainerImp::refreshList(kgl_list *l,bool clean)
 			break;
 		}
 		KUpstreamSelectableList *socket_list = kgl_list_data(n, KUpstreamSelectableList, queue);
-		if (!clean && socket_list->st->expireTime > kgl_current_sec) {
+		if (!clean && socket_list->st->expire_time > kgl_current_sec) {
 			break;
 		}
 		size--;
 		klist_remove(n);
 		assert(socket_list->st->container == NULL);
-		socket_list->st->destroy();
-		delete socket_list;
+		KPoolableUpstream *st = socket_list->st;
+		delete socket_list;	
+		SafeDestroyUpstream(st);
 	}
 }
 KPoolableSocketContainerImp::KPoolableSocketContainerImp()
 {
-	assert(selectorManager.isInit());
+	assert(is_selector_manager_init());
 	size = 0;
-	int count = selectorManager.getSelectorCount()+1;
-	l = (kgl_list **)malloc(sizeof(kgl_list *)*count);
-	for (int i = 0; i < count; i++) {
-		l[i] = new kgl_list;
-		klist_init(l[i]);
-	}
+	klist_init(&head);
 }
 KPoolableSocketContainerImp::~KPoolableSocketContainerImp()
 {
-	int count = selectorManager.getSelectorCount()+1;
-	for (int i = 0; i < count; i++) {
-		assert(l[i]->next == l[i] && l[i] == l[i]->prev);
-		delete l[i];
-	}
-	xfree(l);
+	kassert(head.next == &head);
+	kassert(head.prev == &head);
 }
 void KPoolableSocketContainerImp::refresh(bool clean)
 {
-	int count = selectorManager.getSelectorCount()+1;
-	for (int i = 0; i < count; i++) {
-		refreshList(l[i],clean);
-	}
-}
-kgl_list *KPoolableSocketContainerImp::getPushList(KUpstreamSelectable *st)
-{
-	int sid = 0;
-	assert(l);
-	if (st->selector != NULL) {
-#ifdef _WIN32
-		sid = st->selector->sid + 1;
-#else
-		
-#endif			
-	}
-	return l[sid];
-}
-kgl_list *KPoolableSocketContainerImp::getPopList(KConnectionSelectable *st)
-{
-	if (!klist_empty(l[0])) {
-		//Í¨ÓÃ
-		return l[0];
-	}
-	assert(st->selector != NULL);
-	int sid = st->selector->sid + 1;
-	return l[sid];
+	refreshList(&head,clean);
 }
 KPoolableSocketContainer::KPoolableSocketContainer() {
 	lifeTime = 0;
@@ -93,31 +78,36 @@ KPoolableSocketContainer::~KPoolableSocketContainer() {
 	}
 }
 
-void KPoolableSocketContainer::unbind(KUpstreamSelectable *st) {	
+void KPoolableSocketContainer::unbind(KPoolableUpstream *st) {
 	release();
 }
-void KPoolableSocketContainer::gcSocket(KUpstreamSelectable *st,int lifeTime) {
-	
+void KPoolableSocketContainer::gcSocket(KPoolableUpstream *st,int lifeTime,time_t base_time) {
 	if (this->lifeTime <= 0) {
 		//debug("sorry the lifeTime is zero.we must close it\n");
 		//noticeEvent(0, st);
-		st->destroy();
+		st->Destroy();
 		return;
 	}
 	if (lifeTime<0) {
 		//debug("the poolableSocket have error,we close it\n");
 		//noticeEvent(0, st);
-		st->destroy();
+		st->Destroy();
 		return;
 	}	
 	if (lifeTime == 0 || lifeTime>this->lifeTime) {
 		lifeTime = this->lifeTime;
 	}
-	st->expireTime = kgl_current_sec + lifeTime;
+	st->expire_time = base_time + lifeTime;
+	time_t now_time = kgl_current_sec;
+	if (st->expire_time < now_time || base_time > now_time) {
+		st->Destroy();
+		return;
+	}
 	putPoolSocket(st);
 }
-void KPoolableSocketContainer::putPoolSocket(KUpstreamSelectable *st)
+void KPoolableSocketContainer::putPoolSocket(KPoolableUpstream *st)
 {
+	st->OnPushContainer();
 	lock.Lock();
 	if (imp == NULL) {
 		imp = new KPoolableSocketContainerImp;
@@ -125,7 +115,7 @@ void KPoolableSocketContainer::putPoolSocket(KUpstreamSelectable *st)
 	imp->size++;
 	assert(st->container);
 	st->container = NULL;
-	kgl_list *l = imp->getPushList(st);
+	kgl_list *l = imp->GetList();
 	KUpstreamSelectableList *st_list = new KUpstreamSelectableList;
 	st_list->st = st;
 	l = l->next;
@@ -133,18 +123,31 @@ void KPoolableSocketContainer::putPoolSocket(KUpstreamSelectable *st)
 	lock.Unlock();
 	unbind(st);
 }
-KUpstreamSelectable *KPoolableSocketContainer::internalGetPoolSocket(KHttpRequest *rq) {
+KUpstream *KPoolableSocketContainer::internalGetPoolSocket(KHttpRequest *rq) {
 	if (imp == NULL) {
 		imp = new KPoolableSocketContainerImp;
 	}
-	kgl_list *list_head = imp->getPopList(rq->c);
+	kgl_list *list_head = imp->GetList();
 	imp->refreshList(list_head, false);
-	KUpstreamSelectable *socket = NULL;
+	KUpstream *socket = NULL;
 	kgl_list *n = klist_head(list_head);
 	while (n!=list_head) {
 		KUpstreamSelectableList *st_list = kgl_list_data(n, KUpstreamSelectableList, queue);
 		socket = st_list->st;
-		
+		if (socket->IsMultiStream()) {
+			KUpstream *us = st_list->st->NewStream(rq);
+			if (us==NULL) {
+				imp->size--;
+				kgl_list *next = n->next;
+				klist_remove(n);
+				delete st_list;
+				SafeDestroyUpstream(socket);
+				n = next;
+				continue;
+			}
+			bind(us);
+			return us;
+		}
 		imp->size--;
 		klist_remove(n);
 		delete st_list;	
@@ -153,8 +156,8 @@ KUpstreamSelectable *KPoolableSocketContainer::internalGetPoolSocket(KHttpReques
 	}
 	return NULL;
 }
-void KPoolableSocketContainer::bind(KUpstreamSelectable *st) {
-	assert(st->container==NULL);
+void KPoolableSocketContainer::bind(KPoolableUpstream *st) {
+	kassert(st->container==NULL);
 	st->container = this;
 	refsLock.Lock();
 	refs++;
@@ -173,11 +176,17 @@ void KPoolableSocketContainer::refresh(time_t nowTime) {
 	}
 	lock.Unlock();
 }
-KUpstreamSelectable *KPoolableSocketContainer::getPoolSocket(KHttpRequest *rq) {
+KUpstream *KPoolableSocketContainer::getPoolSocket(KHttpRequest *rq) {
 	lock.Lock();
-	KUpstreamSelectable *socket = internalGetPoolSocket(rq);
+	KUpstream *socket = internalGetPoolSocket(rq);
 	lock.Unlock();
-	//printf("get pool socket=[%p] url=[%s]\n", socket,rq->url->path);
+	if (socket==NULL) {
+		return NULL;
+	}
+	kselector *selector = socket->GetConnection()->st.selector;
+	if (selector!=NULL  && selector!=rq->sink->GetSelector()) {
+		return new KTsUpstream(rq->sink->GetSelector(),socket);
+	}
 	return socket;
 }
 void KPoolableSocketContainer::clean()

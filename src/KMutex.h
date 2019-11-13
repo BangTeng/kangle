@@ -21,12 +21,13 @@
 #ifndef _WIN32
 #include<pthread.h>
 #else
-#include "forwin32.h"
+#include "kforwin32.h"
 //#define DEAD_LOCK   1
 #endif
 #include <assert.h>
 #include <stdlib.h>
 #include <time.h>
+#include "ksync.h"
 #ifndef DEAD_LOCK
 #define Lock Lock2
 #define Unlock	Unlock2

@@ -140,7 +140,7 @@ bool WhmShellProcess::run(WhmShellContext *sc)
 	if (big_stdin_pipe_created) {
 		if (result) {
 			//创建成功才写入数据
-			buff *buf = sc->in_buffer.getHead();
+			kbuf *buf = sc->in_buffer.getHead();
 			while (buf && buf->data) {
 				if (write_pipe(big_stdin_pipe[WRITE_PIPE],buf->data,buf->used)!=buf->used) {
 					break;

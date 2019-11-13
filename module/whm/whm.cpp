@@ -24,7 +24,7 @@ DLL_PUBLIC DWORD WINAPI Whm_HttpExtensionProc(EXTENSION_CONTROL_BLOCK *pECB) {
 	}
 	return FALSE;
 }
-DLL_PUBLIC BOOL  WINAPI Whm_TerminateExtension( DWORD dwFlags )
+DLL_PUBLIC BOOL WINAPI Whm_TerminateExtension( DWORD dwFlags )
 {
 	packageManage.clean();
 	return TRUE;

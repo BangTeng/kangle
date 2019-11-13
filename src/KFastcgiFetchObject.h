@@ -4,10 +4,8 @@
 #include "KFetchObject.h"
 #include "KFastcgiUtils.h"
 #include "KFileName.h"
-#include "KSocket.h"
+#include "ksocket.h"
 #include "KAsyncFetchObject.h"
-#include "KHttpHeadPull.h"
-#include "KHttpObjectParserHook.h"
 
 class KFastcgiFetchObject: public KAsyncFetchObject {
 public:
@@ -15,19 +13,18 @@ public:
 	virtual ~KFastcgiFetchObject();
 protected:
 	void buildHead(KHttpRequest *rq);
-	Parse_Result parseHead(KHttpRequest *rq,char *buf,int len) ;
-	char *nextBody(KHttpRequest *rq,int &len);
 	void buildPost(KHttpRequest *rq);
-	Parse_Result parseBody(KHttpRequest *rq,char *data,int len);
 	virtual bool isExtend()
 	{
 		return false;
 	}
+	/*
 	void expectDone(KHttpRequest *rq)
 	{
-		lifeTime = 0;		
+		parser_ctx.keep_alive_time_out = 0;
 		KAsyncFetchObject::expectDone(rq);
 	}
+	*/
 	bool needTempFile()
 	{
 		return true;
@@ -36,38 +33,60 @@ protected:
 	{
 		return !bodyEnd;
 	}
-	void readBodyEnd(KHttpRequest *rq)
+	kgl_parse_result ParseHeader(KHttpRequest *rq, char **data, int *len);
+	StreamState ParseBody(KHttpRequest *rq, char **data, int *len);
+private:
+	void appendPostEnd();
+	char *parse(KHttpRequest *rq,char **str,int *len,int *packet_len);
+	void readBodyEnd(KHttpRequest *rq,char **data,int *len)
 	{
 		//要保持长连接，必须读完此连接全部数据，在读完body后还有可能有两个包要解析。
 		//一个是空的数据包，一个是END_REQUEST包
-		for(int i=0;i<2;i++){
+		int packet_len;
+		for (int i = 0; i < 2; i++) {
 			if (bodyEnd) {
+				*len = 0;
 				break;
 			}
-			int len = (int)(end - hot);
-			if (len<=0) {
+			if (*len <= 0) {
 				break;
 			}
-			parse(rq,&hot,len);
+			parse(rq, data, len,&packet_len);
 		}
 	}
-	void adjustBuffer(INT64 offset)
-	{
-		if (end) {
-			end += offset;
-		}
-	}
-private:
-	void appendPostEnd();
-	char *parse(KHttpRequest *rq,char **str,int &len);
-	char *end;
-	int buf_len;
-	FCGI_Header buf;	
+	char *pad_buf;
+	int pad_len;
 	//body_len = -1时表示在读head
 	int body_len;
-	KHttpHeadPull parser;
-	KHttpObjectParserHook hook;
 	bool bodyEnd;
+	FCGI_Header buf;
 protected:
+	void RestorePacket(char **packet, int *packet_len)
+	{
+		if (pad_buf) {
+			char *nb = (char *)xmalloc(pad_len + *packet_len);
+			memcpy(nb, pad_buf, pad_len);
+			memcpy(nb + pad_len, *packet, *packet_len);
+			xfree(pad_buf);
+			pad_buf = nb;
+			pad_len += *packet_len;
+			*packet = pad_buf;
+			*packet_len = pad_len;
+		}
+	}
+	void SavePacket(char *packet, int packet_len)
+	{
+		char *save_pad_buf = NULL;
+		if (packet_len > 0) {
+			save_pad_buf = (char *)xmalloc(packet_len);
+			memcpy(save_pad_buf, packet, packet_len);
+		}
+		if (pad_buf) {
+			xfree(pad_buf);
+		}
+		pad_buf = save_pad_buf;
+		pad_len = packet_len;
+		return;
+	}
 };
 #endif /* KFASTCGIFETCHOBJECT_H_ */

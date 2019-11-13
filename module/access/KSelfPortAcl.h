@@ -45,10 +45,11 @@ public:
 		return "self_port";
 	}
 	bool match(KHttpRequest *rq, KHttpObject *obj) {
-		if (rq->c->socket->get_self_port() != port) {
+		sockaddr_i addr;
+		if (!rq->sink->GetSelfAddr(&addr)) {
 			return false;
 		}
-		return true;
+		return ksocket_addr_port(&addr) == port;
 	}
 	std::string getDisplay() {
 		std::stringstream s;

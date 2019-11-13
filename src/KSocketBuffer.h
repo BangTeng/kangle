@@ -24,12 +24,14 @@
 #ifndef KSOCKETBUFFER_H
 #define KSOCKETBUFFER_H
 #include "KStream.h"
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "KBuffer.h"
 #ifdef _WIN32
 #pragma warning(disable:4200)
 #endif
-class KSocketBuffer : public KStream
+#define KSocketBuffer KReadWriteBuffer
+#if 0
+class KSocketBuffer : public KWStream
 {
 public:
 	KSocketBuffer(int chunk_size)
@@ -51,24 +53,24 @@ public:
 	~KSocketBuffer()
 	{
 		while(head){
-			buff *next = head->next;
+			kbuf *next = head->next;
 			free(head->data);
 			free(head);
 			head = next;
 		}
 	}
-	//调用getRBuffer之前要调用startRead切换到读模式
-	void getRBuffer(LPWSABUF buffer,int &bufferCount);
-	char *getRBuffer(int &len);
+	//调用getReadBuffer之前要调用startRead切换到读模式
+	int getReadBuffer(LPWSABUF buffer,int bufferCount);
+	char *getReadBuffer(int &len);
 	bool readSuccess(int got);
 	void writeSuccess(int got);
-	char *getWBuffer(int &len);
+	char *getWriteBuffer(int &len);
 	void nextStep(int got)
 	{
 		assert(hot_buf && hot);
 		hot += got;
 	}
-	inline void appendBuffer(buff *buf)
+	inline void appendBuffer(kbuf *buf)
 	{
 		if (hot_buf==NULL) {
 			assert(head == NULL);
@@ -85,7 +87,7 @@ public:
 	template<typename T>
 	inline T *append()
 	{
-		buff *buf = (buff *)malloc(sizeof(buff));
+		kbuf *buf = (kbuf *)malloc(sizeof(kbuf));
 		buf->data = (char *)malloc(sizeof(T));
 		buf->used = sizeof(T);
 		appendBuffer(buf);
@@ -94,7 +96,7 @@ public:
 	template<typename T>
 	inline T *insert()
 	{
-		buff *buf = (buff *)malloc(sizeof(buff));
+		kbuf *buf = (kbuf *)malloc(sizeof(kbuf));
 		buf->data = (char *)malloc(sizeof(T));
 		buf->used = sizeof(T);
 		totalLen += buf->used;
@@ -102,7 +104,7 @@ public:
 		head = buf;
 		return (T *)buf->data;		
 	}
-	inline void insertBuffer(buff *buf)
+	inline void insertBuffer(kbuf *buf)
 	{
 		buf->next = head;
 		head = buf;
@@ -130,7 +132,7 @@ public:
 	}
 	inline void print()
 	{
-		buff *tmp = head;
+		kbuf *tmp = head;
 		while(tmp){
 			if(tmp->used>0){
 				fwrite(tmp->data,1,tmp->used,stdout);
@@ -141,7 +143,7 @@ public:
 	inline void destroy()
 	{
 		while(head){
-			buff *next = head->next;
+			kbuf *next = head->next;
 			free(head->data);
 			free(head);
 			head = next;
@@ -154,29 +156,31 @@ public:
 	{
 		return totalLen;
 	}
-	buff *getHead()
+	kbuf *getHead()
 	{
 		return head;
 	}
-	buff *getHot()
+	kbuf *getHot()
 	{
 		return hot_buf;
 	}
 	//调试要用，要判断private值
 	friend class KFastcgiFetchObject;
 private:
-	inline buff *newbuff()
+	inline kbuf *newbuff()
 	{
-		buff *buf = (buff *)malloc(sizeof(buff));
+		kbuf *buf = (kbuf *)malloc(sizeof(kbuf));
 		buf->data = (char *)malloc(chunk_size);
 		buf->used = 0;
 		buf->next = NULL;
 		return buf;
 	}
-	buff *hot_buf;
-	buff *head;
+	kbuf *hot_buf;
+	kbuf *head;
 	char *hot;
 	unsigned totalLen;
 	int chunk_size;
 };
+#endif
+
 #endif

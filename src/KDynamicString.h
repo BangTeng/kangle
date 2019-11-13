@@ -3,7 +3,7 @@
 #include <map>
 #include <list>
 #include <string.h>
-#include "KString.h"
+#include "KStringBuf.h"
 #include "global.h"
 
 const char *getSystemEnv(const char *name);

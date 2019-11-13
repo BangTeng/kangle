@@ -22,17 +22,10 @@ bool KWhmService::service(KServiceProvider *provider) {
 	WhmContext context(provider);
 	KUrlValue *uv = context.getUrlValue();
 	uv->parse(provider->getQueryString());
-	int contentLength = provider->getContentLength();
+	INT64 contentLength = provider->getContentLength();
 	if(contentLength > 0){
 		KHttpPost httpPost;
-		httpPost.init(contentLength);
-		int len;
-		char *data = provider->getPreLoadedBody(&len);
-		if(data && len>0){
-			if(!httpPost.addData(data,len)){
-				return false;
-			}
-		}
+		httpPost.init((int)contentLength);		
 		if(!httpPost.readData(provider->getInputStream())){
 			return false;
 		}

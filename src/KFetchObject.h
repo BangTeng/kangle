@@ -26,6 +26,8 @@
 #include "KHttpRequest.h"
 #include "KBuffer.h"
 #include "KPathRedirect.h"
+#include "kselector.h"
+
 #define READ_SWITCH_FUNCTION	-3
 #define READ_PROTOCOL_ERROR		-2
 #define SEND_HEAD_FAILED		0
@@ -39,9 +41,8 @@ class KRequestQueue;
 #endif
 class KHttpObject;
 class KHttpRequest;
-struct buff;
 class KContext;
-class KUpstreamSelectable;
+class KUpstream;
 /**
 数据源类(静态数据，动态数据，除缓存的数据外，所有请求的数据均来源于数据源)
 所有数据源的基类
@@ -51,7 +52,7 @@ public:
 	KFetchObject()
 	{
 		brd = NULL;
-		closed = true;
+		flags = 0;
 	}
 	virtual ~KFetchObject()
 	{
@@ -62,10 +63,12 @@ public:
 	/*
 	 * 打开数据源,并处理请求。
 	 */
-	virtual void open(KHttpRequest *rq);	
+	virtual kev_result open(KHttpRequest *rq);
 	//处理数据源读body请求。
-	virtual void readBody(KHttpRequest *rq)
+	virtual kev_result readBody(KHttpRequest *rq)
 	{
+		kassert(false);
+		return kev_err;
 	}
 #ifdef WORK_MODEL_TCP
 	virtual bool isPipeLine()
@@ -76,6 +79,7 @@ public:
 	//通知读完了body
 	virtual void readBodyEnd(KHttpRequest *rq)
 	{
+		
 	}
 	/*
 	 *是否是同步调用
@@ -84,14 +88,14 @@ public:
 	{
 		return false;
 	}
-	virtual KUpstreamSelectable *getSelectable()
+	virtual KUpstream *GetUpstream()
 	{
 		return NULL;
 	}
 	//关闭数据源
 	virtual void close(KHttpRequest *rq)
 	{
-		this->closed = true;
+		this->closed = 1;
 	}
 	bool isClosed()
 	{
@@ -114,6 +118,10 @@ public:
 	{
 		return true;
 	}
+	bool IsChunkPost()
+	{
+		return chunk_post;
+	}
 #ifdef ENABLE_REQUEST_QUEUE
 	//此数据源是否需要队列功能。对于本地数据不用该功能。
 	//对于上游数据和动态的则返回true
@@ -122,6 +130,7 @@ public:
 		return false;
 	}
 #endif
+	StreamState PushBody(KHttpRequest *rq, const char *buf, int len);
 protected:
 	void setClosed(bool closed)
 	{
@@ -131,8 +140,14 @@ protected:
 	/*
 	处理已经从upstream读到的数据，返回true,继续读取，false则不继续读，表示已经有数据可以发到rq
 	*/
-	bool pushHttpBody(KHttpRequest *rq,char *buf,int len);
-	bool closed;
+	kev_result pushHttpBody(KHttpRequest *rq,const char *buf,int len);
+	struct {
+		union {
+			uint32_t closed : 1;
+			uint32_t chunk_post : 1;
+		};
+		uint32_t flags;
+	};
 };
 
 #endif /* KFETCHOBJECT_H_ */

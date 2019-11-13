@@ -1,6 +1,8 @@
 #ifndef KREPLACEIPMARK_H
 #define KREPLACEIPMARK_H
 #include "KMark.h"
+#include "kmd5.h"
+
 class KReplaceIPMark : public KMark
 {
 public:
@@ -19,17 +21,18 @@ public:
 	{
 		if (header.empty()) {
 #ifdef ENABLE_PROXY_PROTOCOL
-			if (rq->c->proxy_protocol_ip) {
+			kconnection *c = rq->sink->GetConnection();
+			if (c && c->proxy_ip) {
 				if (rq->client_ip) {
 					free(rq->client_ip);
 				}
-				rq->client_ip = strdup(rq->c->proxy_protocol_ip);
+				rq->client_ip = strdup(c->proxy_ip);
 				return true;
 			}
 #endif
 			return false;
 		}
-		KHttpHeader *h = rq->parser.headers;
+		KHttpHeader *h = rq->GetHeader();
 		KHttpHeader *prev = NULL;
 		while (h) {
 			if (strcasecmp(h->attr, header.c_str()) == 0) {
@@ -41,7 +44,7 @@ public:
 					if (prev) {
 						prev->next = h->next;
 					} else {
-						rq->parser.headers = h->next;
+						rq->header = h->next;
 					}
 					if (rq->client_ip) {
 						free(rq->client_ip);
@@ -59,8 +62,14 @@ public:
 					free(h);
 					if (TEST(rq->raw_url.flags,KGL_URL_ORIG_SSL)) {
 						SET(rq->raw_url.flags,KGL_URL_SSL);
+						if (rq->raw_url.port == 80) {
+							rq->raw_url.port = 443;
+						}
 					} else {
 						CLR(rq->raw_url.flags,KGL_URL_SSL);
+						if (rq->raw_url.port == 443) {
+							rq->raw_url.port = 80;
+						}
 					}
 					return true;
 				}
@@ -147,7 +156,7 @@ public:
 	}
 	bool mark(KHttpRequest *rq, KHttpObject *obj,const int chainJumpType, int &jumpType)
 	{
-		KHttpHeader *h = rq->parser.removeHeader("x-real-ip-sign");
+		KHttpHeader *h = rq->RemoveHeader("x-real-ip-sign");
 		if (h == NULL) {
 			return false;
 		}
@@ -198,8 +207,14 @@ public:
 					} else if (strcmp(hot, "p") == 0) {
 						if (strcmp(val, "https") == 0) {
 							SET(rq->raw_url.flags, KGL_URL_SSL);
+							if (rq->raw_url.port == 80) {
+								rq->raw_url.port = 443;
+							}
 						} else {
 							CLR(rq->raw_url.flags, KGL_URL_SSL);
+							if (rq->raw_url.port == 443) {
+								rq->raw_url.port = 80;
+							}
 						}
 					}
 				}
@@ -311,7 +326,7 @@ public:
 		}
 		if (ip.empty()) {
 			char ip[MAXIPLEN];
-			rq->c->socket->get_self_ip(ip,sizeof(ip));
+			rq->sink->GetSelfIp(ip,sizeof(ip));
 			rq->bind_ip = strdup(ip);
 		} else if (ip[0] == '$') {
 			rq->bind_ip = strdup(rq->getClientIp());

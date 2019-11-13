@@ -22,23 +22,23 @@ void loadDiskCacheIndex(unsigned filename1, unsigned filename2, const char *url,
 	obj->release();
 	return;
 }
-KTHREAD_FUNCTION diskCacheIndexCallBack(void *data,int msec)
+kev_result diskCacheIndexCallBack(void *data,int msec)
 {
 	diskCacheOperatorParam *param = (diskCacheOperatorParam *)data;
 	dci->work(param);
 	delete param;
-	KTHREAD_RETURN;
+	return kev_ok;
 }
 KDiskCacheIndex::KDiskCacheIndex()
 {
-	worker = new KAsyncWorker(1,0);
+	worker = kasync_worker_init(1, 0);
 	load_count = 0;
 	shutdown_flag = false;
 	transaction_count = 0;
 }
 KDiskCacheIndex::~KDiskCacheIndex()
 {
-	worker->release();
+	kasync_worker_release(worker);
 }
 void KDiskCacheIndex::work(diskCacheOperatorParam *param)
 {
@@ -114,6 +114,6 @@ void KDiskCacheIndex::start(ci_operator op,KHttpObject *obj)
 		delete param;
 		return;
 	}
-	worker->tryStart(param,diskCacheIndexCallBack);
+	kasync_worker_start(worker, param, diskCacheIndexCallBack);
 }
 #endif

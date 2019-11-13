@@ -1,7 +1,7 @@
 #ifndef KPROCESS_H
 #define KPROCESS_H
 #include "global.h"
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "KStream.h"
 #ifndef _WIN32
 

@@ -6,9 +6,11 @@
  */
 
 #include "ssl_utils.h"
-#include "KString.h"
-#include "malloc_debug.h"
+#include "KStringBuf.h"
+#include "KHttp2.h"
 #ifdef KSOCKET_SSL
+#define KGL_HTTP_NPN_ADVERTISE  "\x08http/1.1"
+
 static const char *ssl_vars[] = { "CERT_ISSUER", "CERT_SUBJECT",
 		"CERT_KEYSIZE", "CERT_SERIALNUMBER", "CERT_SERVER_ISSUER",
 		"CERT_SERVER_SUBJECT", "CERT_SERVER_SERIALNUMBER", NULL };
@@ -119,13 +121,18 @@ void ssl_var_free(void *var)
 {
 	OPENSSL_free(var);
 }
-void load_ssl_library()
+void kgl_ssl_npn(void *ssl_ctx_data, const unsigned char **out, unsigned int *outlen)
 {
-	SSL_load_error_strings();
-	SSL_library_init();
-	SSLeay_add_ssl_algorithms();
-	kangle_ssl_conntion_index = SSL_get_ex_new_index(0, NULL, NULL, NULL, NULL);
-	kangle_ssl_ctx_index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, NULL);
+#ifdef ENABLE_HTTP2
+	bool *http2 = (bool *)ssl_ctx_data;
+	if (http2 && *http2) {
+		*out = (unsigned char *)KGL_HTTP_V2_NPN_ADVERTISE KGL_HTTP_NPN_ADVERTISE;
+		*outlen = sizeof(KGL_HTTP_V2_NPN_ADVERTISE KGL_HTTP_NPN_ADVERTISE) - 1;
+		return;
+	}
+#endif
+	*out = (unsigned char *)KGL_HTTP_NPN_ADVERTISE;
+	*outlen = sizeof(KGL_HTTP_NPN_ADVERTISE) - 1;
 }
 #endif
 

@@ -7,13 +7,29 @@
 #include "do_config.h"
 #include "log.h"
 #include "http.h"
-#include "malloc_debug.h"
 #include "KLastModify.h"
 #include "KUrlValue.h"
 #include "KSyncFetchObject.h"
 enum {
 	USER_TYPE_UNAUTH, USER_TYPE_ADMIN, USER_TYPE_VIRTUALHOST, USER_TYPE_NORMAL
 };
+class KConnectionInfoContext {
+public:
+	KConnectionInfoContext()
+	{
+		debug = 0;
+		total_count = 0;
+		vh = NULL;
+		translate = false;
+	}
+	int debug;
+	int total_count;
+	const char *vh;
+	bool translate;
+	std::stringstream s;
+};
+bool kconnection_info_iterator(void *ctx, kselector *selector, kselectable *st);
+
 class KHttpManage : public KSyncFetchObject {
 public:
 	bool sendHttpContent();

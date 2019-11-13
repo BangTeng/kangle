@@ -1,9 +1,9 @@
 #include "KCloudIpAcl.h"
 #include "KSimulateRequest.h"
 #include "KTimer.h"
-#include "KSelectorManager.h"
+#include "kselector_manager.h"
 #ifdef ENABLE_SIMULATE_HTTP
-static void WINAPI cloud_ip_start(void *arg) {
+static void cloud_ip_start(void *arg) {
 	KCloudIpAcl *acl = (KCloudIpAcl *)arg;
 	acl->start_http();
 }
@@ -52,9 +52,10 @@ bool KCloudIpAcl::parse_data()
 		free(buf);
 		return true;
 	}
-	if (strlen(buf)<6) {
+	int buf_len = strlen(buf);
+	if (buf_len < 6) {
+		klog(KLOG_ERR,"cloud_ip buf=[%s] len=[%d] is too short min len [6]\n",buf,buf_len);
 		free(buf);
-		klog(KLOG_ERR,"cloud_ip sign [%s] is too short min len [6]\n");
 		return false;
 	}
 	char *end = strchr(hot, '\n');
@@ -120,7 +121,7 @@ const char *KCloudIpAcl::getName()
 }
 bool KCloudIpAcl::match(KHttpRequest *rq, KHttpObject *obj)
 {
-	char *client_ip = rq->getClientIp();	
+	const char *client_ip = rq->getClientIp();	
 	bool result = false;
 	lock.Lock();
 	if (im) {
@@ -153,7 +154,7 @@ void KCloudIpAcl::start() {
 	if (!this->started) {
 		this->started = true;
 		this->addRef();
-		selectorManager.onReady(cloud_ip_start, this);		
+		selector_manager_on_ready(cloud_ip_start, this);		
 	}
 
 }

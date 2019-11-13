@@ -1,6 +1,6 @@
 #include "KPerIpAcl.h"
 #include "KAccess.h"
-void WINAPI per_ip_mark_call_back(void *data)
+void per_ip_mark_call_back(void *data)
 {
 	KPerIpCallBackData *param = (KPerIpCallBackData *)data;
 	param->mark->callBack(param);

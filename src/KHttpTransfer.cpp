@@ -22,16 +22,68 @@
 
 #include "http.h"
 #include "KHttpTransfer.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KCacheStream.h"
 #include "KGzip.h"
 #include "KContentTransfer.h"
-#include "KSelector.h"
+#include "kselector.h"
 #include "KFilterContext.h"
-#include "KSubRequest.h"
 #include "KHttpFilterManage.h"
-#include "cache.h"
 
+#include "cache.h"
+static kev_result stage_request_write_clean(KHttpRequest *rq)
+{
+	if (rq->fetchObj && !rq->fetchObj->isClosed()) {
+		
+		if (rq->ctx->connection_upgrade) {
+			rq->sink->Flush();
+		}
+		return rq->fetchObj->readBody(rq);
+	}
+	rq->ctx->expected_done = 1;
+	return stageEndRequest(rq);
+}
+int buffer_http_transfer(void *arg, LPWSABUF buf, int bc)
+{
+	KHttpRequest *rq = (KHttpRequest *)arg;
+	return rq->tr->buffer.getReadBuffer(buf, bc);
+}
+kev_result result_http_transfer(void *arg, int got)
+{
+	KHttpRequest *rq = (KHttpRequest *)arg;
+	if (got < 0) {
+		return stageEndRequest(rq);
+	}
+	if (got == 0) {
+		return stage_request_write_clean(rq);
+	}
+	rq->addFlow(got);
+	if (rq->tr->buffer.readSuccess(got)) {
+		return rq->Write(rq, result_http_transfer, buffer_http_transfer);
+	}
+	return stage_request_write_clean(rq);
+}
+bool KHttpTransfer::TrySyncWrite()
+{
+	kbuf *buf = buffer.stealBuff();
+	if (buf) {
+		bool result = rq->WriteBuff(buf);
+		destroy_kbuf(buf);
+		return result;
+	}
+	return true;
+}
+kev_result KHttpTransfer::TryWrite()
+{
+	kassert(rq->tr == this);
+	if (buffer.getLen() > 0) {
+		return rq->Write(rq, result_http_transfer, buffer_http_transfer);
+	}
+	if (rq->sink->HasHeaderDataToSend()) {
+		return rq->Write(rq, result_http_transfer, NULL);
+	}
+	return kev_err;
+}
 KHttpTransfer::KHttpTransfer(KHttpRequest *rq, KHttpObject *obj) {
 	init(rq, obj);
 }
@@ -42,32 +94,12 @@ void KHttpTransfer::init(KHttpRequest *rq, KHttpObject *obj) {
 	isHeadSend = false;
 	this->rq = rq;
 	this->obj = obj;
-	wst = NULL;
-	
-	wstDelete = false;
 	responseChecked = false;
-	if (rq) {
-		sr = rq->sr;
-		workModel = rq->workModel;
-	} else {
-		sr = NULL;
-		workModel = 0;
-	}
 }
 KHttpTransfer::~KHttpTransfer() {
-	if (wstDelete && wst) {
-		delete wst;
-	}
+	
 }
-KWStream *KHttpTransfer::getWStream()
-{
-	if(wst){
-		return wst;
-	}
-	wst = makeWriteStream(rq,obj,this,wstDelete);
-	assert(wst);
-	return wst;
-}
+
 StreamState KHttpTransfer::write_all(const char *str, int len) {
 	if (len<=0) {
 		return STREAM_WRITE_SUCCESS;
@@ -81,12 +113,9 @@ StreamState KHttpTransfer::write_all(const char *str, int len) {
 	if (st == NULL) {
 		return STREAM_WRITE_FAILED;
 	}
-	return st->write_all(str,len);
+	return st->write_all(str, len);
 }
 StreamState KHttpTransfer::write_end() {
-	if (preventWriteEnd) {
-		return STREAM_WRITE_SUCCESS;
-	}
 	if (!isHeadSend) {
 		if (sendHead(true) != STREAM_WRITE_SUCCESS) {
 			SET(rq->flags,RQ_CONNECTION_CLOSE);
@@ -97,13 +126,7 @@ StreamState KHttpTransfer::write_end() {
 }
 bool KHttpTransfer::support_sendfile()
 {
-	if (st != static_cast<KWStream *>(rq)) {
-		return false;
-	}
-	if (rq->c->isSSL()) {
-		return false;
-	}
-
+	return false;
 	if (!isHeadSend) {
 		if (sendHead(false) != STREAM_WRITE_SUCCESS) {
 			SET(rq->flags, RQ_CONNECTION_CLOSE);
@@ -126,17 +149,6 @@ StreamState KHttpTransfer::sendHead(bool isEnd) {
 			cache_layer = cache_none;
 		}
 	}
-#ifdef ENABLE_KSAPI_FILTER
-	if (!(TEST(workModel,WORK_MODEL_INTERNAL|WORK_MODEL_REPLACE)==WORK_MODEL_INTERNAL)) {
-		//处理http过滤器的过滤
-		KHttpStream *raw_send_head = NULL;
-		KHttpStream *raw_send_end = NULL;
-		KHttpFilterManage::buildSendStream(rq,&raw_send_head,&raw_send_end);
-		if (raw_send_head) {
-			rq->getOutputFilterContext()->registerFilterStreamEx(raw_send_head,raw_send_end,true);
-		}
-	}
-#endif
 	if (rq->needFilter()) {
 		/*
 		 检查是否需要加载内容变换层，如果要，则长度未知
@@ -145,7 +157,8 @@ StreamState KHttpTransfer::sendHead(bool isEnd) {
 		cache_layer = cache_memory;
 	}
 	gzip_layer = false;
-	if (TEST(workModel,WORK_MODEL_INTERNAL) && !TEST(workModel,WORK_MODEL_REPLACE)) {
+	if (rq->ctx->internal && !rq->ctx->replace) {
+	//if (TEST(workModel,WORK_MODEL_INTERNAL) && !TEST(workModel,WORK_MODEL_REPLACE)) {
 		/* 子请求,内部但不是替换模式 */
 	} else {
 		if (check_need_gzip(rq, obj)) {
@@ -164,20 +177,15 @@ StreamState KHttpTransfer::sendHead(bool isEnd) {
 		if (TEST(rq->flags,RQ_TE_GZIP)) {
 			assert(gzip_layer);
 		} else {
-			assert(gzip_layer == false);		
+			assert(gzip_layer == false);
 		}
 #endif
-		if (TEST(rq->flags,RQ_SYNC) && rq->send_ctx.getBufferSize()>0) {
-			//同步模式发送header
-			if (!rq->sync_send_header()) {
-				return STREAM_WRITE_FAILED;
-			}
-		}
 	}
 	if (obj->in_cache) {
 		cache_layer = cache_none;
 	} else if (TEST(rq->filter_flags,RF_ALWAYS_ONLINE) && status_code_can_cache(obj->data->status_code)) {
 		//永久在线模式
+#if 0
 		if (TEST(obj->index.flags, ANSW_NO_CACHE)) {
 			//如果是动态网页，并且无Cookie(游客模式)
 			if (rq->parser.findHttpHeader(kgl_expand_string("Cookie")) == NULL
@@ -188,26 +196,32 @@ StreamState KHttpTransfer::sendHead(bool isEnd) {
 				CLR(obj->index.flags, ANSW_NO_CACHE | FLAG_DEAD);
 			}
 		}
+#endif
 	}
 	loadStream();
 	return result;
 }
 bool KHttpTransfer::loadStream() {
-	assert(st==NULL && rq);
-	if (sr) {
-		st = sr->ctx->st;
-	} else {
-		st = rq;
-	}
+
 	/*
 	 从下到上开始串流
 	 最下面是限速发送.
 	 */
 	autoDelete = false;
+
+	assert(st==NULL && rq);
+#ifdef ENABLE_TF_EXCHANGE
+	if (rq->tf) {
+		st = rq->tf;
+	} else
+#endif
+	st = &buffer;
+
 	/*
 	 检查是否有chunk层
 	 */
-	if (!(TEST(workModel,WORK_MODEL_INTERNAL|WORK_MODEL_REPLACE)==WORK_MODEL_INTERNAL) && TEST(rq->flags,RQ_TE_CHUNKED)) {
+	if ((!rq->ctx->internal || rq->ctx->replace) && TEST(rq->flags, RQ_TE_CHUNKED)) {
+	//if (!(TEST(workModel,WORK_MODEL_INTERNAL|WORK_MODEL_REPLACE)==WORK_MODEL_INTERNAL) && TEST(rq->flags,RQ_TE_CHUNKED)) {
 		KWStream *st2 = new KChunked(st, autoDelete);
 		if (st2) {
 			st = st2;
@@ -240,7 +254,8 @@ bool KHttpTransfer::loadStream() {
 		}
 	}
 	//内容变换层
-	if (!(TEST(workModel,WORK_MODEL_INTERNAL|WORK_MODEL_REPLACE)==WORK_MODEL_INTERNAL) && rq->needFilter()) {
+	if ((!rq->ctx->internal || rq->ctx->replace) && rq->needFilter()) {
+	//if (!(TEST(workModel,WORK_MODEL_INTERNAL|WORK_MODEL_REPLACE)==WORK_MODEL_INTERNAL) && rq->needFilter()) {
 		//debug("加载内容变换层\n");
 		if (rq->of_ctx->head) {
 			KContentTransfer *st_content = new KContentTransfer(st, autoDelete);

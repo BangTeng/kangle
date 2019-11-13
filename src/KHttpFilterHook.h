@@ -1,12 +1,13 @@
 #ifndef KHTTPFILTERHOOK_H
 #define KHTTPFILTERHOOK_H
 #include "global.h"
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "ksapi.h"
 class KHttpFilterDso;
 class KHttpRequest;
 class KHttpStream;
 #ifdef ENABLE_KSAPI_FILTER
+#if 0
 class KHttpFilterHook
 {
 public:
@@ -39,6 +40,7 @@ class KHttpFilterHookCollectLog : public KHttpFilterHookCollect
 };
 void init_kgl_filter_response(kgl_filter_response &notification);
 void init_kgl_filter_request(kgl_filter_request &notification);
+#endif
 #endif
 #endif
 

@@ -28,7 +28,6 @@
 #include "KHttpObject.h"
 #include "KHtmlSupport.h"
 #include "KModel.h"
-#include "malloc_debug.h"
 #define 	ACL_CONTEXT		"acl"
 
 /*

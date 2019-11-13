@@ -1,23 +1,15 @@
 #ifndef KHTTPHEADER_H_
 #define KHTTPHEADER_H_
-#include "KSocket.h"
+#include "ksocket.h"
 #include "ksapi.h"
+#include "kmalloc.h"
+#include "kstring.h"
+
 #define MAX_HEADER_ATTR_VAL_SIZE 65500
-struct kgl_str_t
-{
-	char *data;
-	size_t len;
-};
 struct kgl_keyval_t {
 	kgl_str_t   key;
 	kgl_str_t   value;
 };
-#define kgl_expand_string(str)  (char *)str ,sizeof(str) - 1
-#define kgl_string(str)     { (char *)str,sizeof(str) - 1 }
-#define kgl_null_string     {  NULL,0 }
-#define kgl_str_set(str, text) \
-    (str)->len = sizeof(text) - 1; (str)->data = (char *) text
-#define kgl_str_null(str)   (str)->len = 0; (str)->data = NULL
 enum know_http_header
 {
 	kgl_response_server,
@@ -26,6 +18,22 @@ enum know_http_header
 extern kgl_str_t know_http_headers[];
 void *kgl_memstr(char *haystack, int haystacklen, char *needle, int needlen);
 #define kgl_cpymem(dst, src, n)   (((u_char *) memcpy(dst, src, n)) + (n))
+inline KHttpHeader *new_http_header(kgl_pool_t *pool,const char *attr, int attr_len, const char *val, int val_len) {
+	if (attr_len > MAX_HEADER_ATTR_VAL_SIZE || val_len > MAX_HEADER_ATTR_VAL_SIZE) {
+		return NULL;
+	}
+	KHttpHeader *header = (KHttpHeader *)kgl_pnalloc(pool,sizeof(KHttpHeader));
+	header->next = NULL;
+	header->attr = (char *)kgl_pnalloc(pool,attr_len + 1);
+	memcpy(header->attr, attr, attr_len);
+	header->attr[attr_len] = '\0';
+	header->attr_len = attr_len;
+	header->val = (char *)kgl_pnalloc(pool, val_len + 1);
+	memcpy(header->val, val, val_len);
+	header->val[val_len] = '\0';
+	header->val_len = val_len;
+	return header;
+}
 inline KHttpHeader *new_http_header(const char *attr,int attr_len,const char *val,int val_len) {
 	if (attr_len > MAX_HEADER_ATTR_VAL_SIZE || val_len>MAX_HEADER_ATTR_VAL_SIZE) {
 		return NULL;
@@ -53,4 +61,85 @@ inline void free_header(struct KHttpHeader *av) {
 	}
 }
 bool is_attr(KHttpHeader *av, const char *attr,int attr_len);
+inline char *strlendup(const char *str, int len)
+{
+	char *buf = (char *)malloc(len + 1);
+	memcpy(buf, str, len);
+	buf[len] = '\0';
+	return buf;
+}
+class KHttpHeaderManager {
+public:
+	void Append(KHttpHeader *new_t)
+	{
+		if (header == NULL) {
+			header = last = new_t;
+			return;
+		}
+		new_t->next = header;
+		header = new_t;
+	}
+	void Insert(KHttpHeader *new_t)
+	{
+		if (header == NULL) {
+			header = last = new_t;
+			return;
+		}
+		kassert(last);
+		last->next = new_t;
+		last = new_t;
+		return;
+	}
+	bool AddHeader(const char *attr, int attr_len, const char *val, int val_len, bool tail = true)
+	{
+		if (attr_len > MAX_HEADER_ATTR_VAL_SIZE || val_len > MAX_HEADER_ATTR_VAL_SIZE) {
+			return false;
+		}
+		KHttpHeader *new_t = new KHttpHeader;
+		if (new_t == NULL) {
+			return false;
+		}
+		new_t->attr = strlendup(attr, attr_len);
+		new_t->attr_len = attr_len;
+		new_t->val = strlendup(val, val_len);
+		new_t->val_len = val_len;
+		new_t->next = NULL;
+		if (tail) {
+			Insert(new_t);
+			return true;
+		}
+		Append(new_t);
+		return true;
+	}
+	KHttpHeader *RemoveHeader(const char *attr)
+	{
+		KHttpHeader *l = header;
+		KHttpHeader *prev = NULL;
+		while (l) {
+			if (strcasecmp(l->attr, attr) == 0) {
+				if (prev) {
+					prev->next = l->next;
+				} else {
+					header = l->next;
+				}
+				return l;
+			}
+			prev = l;
+			l = l->next;
+		}
+		return NULL;
+	}
+	KHttpHeader *GetHeader()
+	{
+		return header;
+	}
+	KHttpHeader *StealHeader()
+	{
+		KHttpHeader *h = header;
+		header = last = NULL;
+		return h;
+	}
+	KHttpHeader *header;
+	KHttpHeader *last;
+};
 #endif /*KHTTPHEADER_H_*/

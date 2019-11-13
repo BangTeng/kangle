@@ -19,7 +19,6 @@
 #define KXMLEXCEPTION_H_
 #include<exception>
 #include<string>
-#include "malloc_debug.h"
 /*
  * xmlΩ‚Œˆ“Ï≥£¿‡
  */

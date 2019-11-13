@@ -3,21 +3,6 @@
 #include "KMutex.h"
 #ifdef ENABLE_ATOM
 #include "katom.h"
-inline void kgl_pause()
-{
-#ifdef _WIN32
-	YieldProcessor();
-#else
-#if defined(__i386__) || defined(__x86_64__)
-#if defined(__SSE__)
-         //_mm_pause();
-         __asm__ ("pause" ) ;
-#else
-        __asm__ __volatile__ ("rep; nop");
-#endif
-#endif
-#endif
-}
 class KRWLock
 {
 public:

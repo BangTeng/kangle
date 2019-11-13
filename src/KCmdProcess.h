@@ -9,9 +9,10 @@
 #define KCMDPROCESS_H_
 
 #include "KVirtualHostProcess.h"
-#include "KList.h"
+#include "klist.h"
 #include "KListenPipeStream.h"
-#include "KSelectorManager.h"
+#include "kselector_manager.h"
+#include "KTcpUpstream.h"
 /*
 多线程命令进程
 */
@@ -19,7 +20,7 @@ class KCmdProcess: public KVirtualHostProcess {
 public:
 	KCmdProcess();
 	~KCmdProcess();
-	KUpstreamSelectable *poweron(KVirtualHost *vh,KExtendProgram *rd,bool &success);
+	KTcpUpstream *poweron(KVirtualHost *vh,KExtendProgram *rd,bool &success);
 	void getProcessInfo(const USER_T &user, const std::string &name,
 			std::stringstream &s,int &count)
 	{
@@ -61,10 +62,10 @@ class KMPCmdProcess: public KVirtualHostProcess {
 public:
 	KMPCmdProcess();
 	~KMPCmdProcess();
-	void handleRequest(KHttpRequest *rq,KExtendProgram *rd);
+	kev_result handleRequest(KHttpRequest *rq,KExtendProgram *rd);
 	void getProcessInfo(const USER_T &user, const std::string &name,std::stringstream &s,int &count);
 	bool killProcess(int pid);
-	KUpstreamSelectable *poweron(KVirtualHost *vh,KExtendProgram *erd,bool &success);
+	KTcpUpstream *poweron(KVirtualHost *vh,KExtendProgram *erd,bool &success);
 	void gcProcess(KSingleListenPipeStream *st);
 	bool isMultiProcess()
 	{
@@ -89,28 +90,36 @@ public:
 	~KSingleListenPipeStream()
 	{
 		if (socket) {
-			socket->destroy();
+			socket->Destroy();
 		}
 		unlink_unix();
 	}
-	KUpstreamSelectable *getConnection(KHttpRequest *rq,bool &isHalf)
+	KUpstream *getConnection(KHttpRequest *rq,bool &isHalf)
 	{
 		lastActive = kgl_current_sec;
-		KUpstreamSelectable *st = socket;
-		if(socket == NULL) {
-			st = KPoolableSocketContainer::getPoolSocket(rq);
+		KTcpUpstream *st = socket;
+		if(st == NULL) {
+			st = static_cast<KTcpUpstream *>(KPoolableSocketContainer::getPoolSocket(rq));
 			if (st) {
 				isHalf = false;
 				return st;
 			}
-			st = new KUpstreamSelectable(new KClientSocket);
-#ifdef KSOCKET_UNIX
-			if(unix_path.size()>0){
-					st->socket->halfconnect(unix_path.c_str());
-			} else 
-#endif
-				st->socket->halfconnect(addr);
 			isHalf = true;
+			kconnection *cn = kconnection_new(&addr);
+#ifdef KSOCKET_UNIX
+			if (!unix_path.empty()) {
+				struct sockaddr_un un_addr;
+				ksocket_unix_addr(unix_path.c_str(),&un_addr);
+				SOCKET fd = ksocket_half_connect((sockaddr_i *)&un_addr,NULL,0);
+				if (!ksocket_opened(fd)) {
+					kconnection_destroy(cn);
+					return NULL;
+				}
+				cn->st.fd = fd;
+			} else
+#endif
+			kconnection_half_connect(cn, NULL, 0);
+			st = new KTcpUpstream(cn);
 		} else {	
 			isHalf = false;
 			socket = NULL;
@@ -120,22 +129,26 @@ public:
 		}
 		return st;
 	}
-	void gcSocket(KUpstreamSelectable *st,int lifeTime)
+	void gcSocket(KPoolableUpstream *st,int lifeTime,time_t last_recv_time)
 	{
+#if 0
 #ifdef _WIN32
-		if (selectorManager.getSelectorCount() == 1) {
+		if (get_selector_count() == 1) {
 			//windows下只有一个selector时才使用长连接
-			KPoolableSocketContainer::gcSocket(st, lifeTime);
+			KPoolableSocketContainer::gcSocket(st, lifeTime, last_recv_time);
 		} else {
-			st->destroy();
+			st->Destroy();
 		}
 #else
-		KPoolableSocketContainer::gcSocket(st, lifeTime);
+		KPoolableSocketContainer::gcSocket(st, lifeTime, last_recv_time);
 #endif
+#endif
+		//使用了KTsUpstream后，windows下多iocp，也可以使用长连接.
+		KPoolableSocketContainer::gcSocket(st, lifeTime, last_recv_time);
 		kassert(vprocess!=NULL);
 		vprocess->gcProcess(this);
 	}
-	void isBad(KUpstreamSelectable *st,BadStage stage)
+	void isBad(KUpstream *st,BadStage stage)
 	{
 		process.kill();
 	}
@@ -145,7 +158,7 @@ public:
 	}
 	friend class KMPCmdProcess;
 private:
-	KUpstreamSelectable *socket;
+	KTcpUpstream *socket;
 	KMPCmdProcess *vprocess;
 	sockaddr_i addr;
 	time_t lastActive;

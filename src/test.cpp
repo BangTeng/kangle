@@ -27,7 +27,7 @@
 #include "lib.h"
 #include "KGzip.h"
 #include "do_config.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KLineFile.h"
 #include "KHttpFieldValue.h"
 #include "KHttpField.h"
@@ -35,15 +35,17 @@
 #include "KFileName.h"
 #include "KVirtualHost.h"
 #include "KChunked.h"
-#include "KExpressionParseTree.h"
 #include "KHtAccess.h"
 #include "KTimeMatch.h"
 #include "KReg.h"
-#include "KFile.h"
+#include "kfile.h"
 #include "KXml.h"
 #include "KUrlParser.h"
 #include "cache.h"
-#include "KConnectionSelectable.h"
+#include "kconnection.h"
+#include "KHttpSink.h"
+#include "kselector_manager.h"
+#include "KHttpParser.h"
 
 #ifdef ENABLE_INPUT_FILTER
 #include "KMultiPartInputFilter.h"
@@ -115,27 +117,6 @@ void test_htaccess() {
 	//file.setName("/","/home/keengo/");
 	//printf("result=%d\n",htaccess.load("/","/home/keengo/"));
 }
-void test_expr() {
-	static const char *to_test[] = { "name=name", "name!=name", "name!=name2",
-			"name=/na/", "name=/na/ && name!=aaa",
-			"test=ddd || (test=test && a=/b/)" };
-	static ExpResult result[] = { Exp_true, Exp_false, Exp_true, Exp_true,
-			Exp_true, Exp_false };
-	KSSIContext context;
-	for (size_t i = 0; i < sizeof(result) / sizeof(ExpResult); i++) {
-		KExpressionParseTree *parser = new KExpressionParseTree;
-		parser->setContext(&context);
-		char *buf = xstrdup(to_test[i]);
-		ExpResult result1 = parser->evaluate(buf);
-		if (result1 != result[i]) {
-			fprintf(stderr, "test exp[%s] result=[%d] test result[%d] failed.",
-					buf, result[i], result1);
-			abort();
-		}
-		xfree(buf);
-		delete parser;
-	}
-}
 void test_file(const char *path)
 {
 #if 0
@@ -188,29 +169,32 @@ void test_url_decode() {
     //printf("buf=[%s]\n",buf2);
     assert(buf2[2]=='\0');
 }
+#ifdef ENABLE_INPUT_FILTER
 void test_dechunk() {
-	KDechunkEngine engine;
+	KDechunkEngine *engine = new KDechunkEngine;
 	int buf_len;
 	const char *piece;
 	int piece_length;
 	const char *buf = "1\r\na\r\n";
 	buf_len = strlen(buf);
-	assert(engine.dechunk(&buf, buf_len, &piece, piece_length) == dechunk_success);
+	assert(engine->dechunk(&buf, buf_len, &piece, piece_length) == dechunk_success);
 	assert(strncmp(piece, "a",piece_length) == 0);
-	assert(engine.dechunk(&buf, buf_len, &piece, piece_length) == dechunk_continue);
+	assert(engine->dechunk(&buf, buf_len, &piece, piece_length) == dechunk_continue);
 	buf = "1";
 	buf_len = 1;
 	
-	assert(engine.dechunk(&buf, buf_len, &piece, piece_length) == dechunk_continue);
+	assert(engine->dechunk(&buf, buf_len, &piece, piece_length) == dechunk_continue);
 	buf = "0\r\n012345";
 	buf_len = strlen(buf);
-	assert(engine.dechunk(&buf, buf_len, &piece, piece_length) == dechunk_continue);
+	assert(engine->dechunk(&buf, buf_len, &piece, piece_length) == dechunk_continue);
 	assert(piece_length==6 && strncmp(piece, "012345", piece_length) == 0);
 	buf = "6789abcdef0\r\n";
 	buf_len = strlen(buf);
-	assert(engine.dechunk(&buf, buf_len, &piece, piece_length) == dechunk_success);
+	assert(engine->dechunk(&buf, buf_len, &piece, piece_length) == dechunk_success);
 	assert(piece_length==10 && strncmp(piece, "6789abcdef", piece_length) == 0);
+	delete engine;
 }
+#endif
 void test_white_list() {
 #ifdef ENABLE_BLACK_LIST
 	kgl_current_sec = time(NULL);
@@ -248,13 +232,24 @@ void test_freed_memory() {
         free(str);
         memcpy(str,"test",4);
 }
-
+void test_http_parser()
+{
+	char *buf = strdup("HTTP/1.1 200 OK\r\na: bsssssssssssssddddd\r\n ttt");
+	char *hot = buf;
+	int len = strlen("HTTP/1.1 200 OK\r\na: bsssssssssssssddddd\r\n ttt");
+	khttp_parser parser;
+	khttp_parse_result rs;
+	memset(&parser, 0, sizeof(parser));	
+	kassert(kgl_parse_continue == khttp_parse(&parser, &hot, &len, &rs));
+	kassert(kgl_parse_continue == khttp_parse(&parser, &hot, &len, &rs));	
+}
 bool test() {
+	//printf("size=[%d]\n", kgl_align(1, 1024));
 	//test_freed_memory();
 	//test_suffix_corrupt();
 	//test_prefix_corrupt();
-	//printf("sizeof(KSelectable) = %d\n",sizeof(KSelectable));
-	//printf("sizeof(KConnectionSelectable)=%d\n",sizeof(KConnectionSelectable));
+	//printf("sizeof(kconnection) = %d\n",sizeof(kconnection));
+	//printf("sizeof(KHttpSink)=%d\n",sizeof(KHttpSink));
 	//printf("sizeof(KHttpRequest) = %d\n",sizeof(KHttpRequest));
 	//printf("sizeof(pthread_mutex_t)=%d\n",sizeof(pthread_mutex_t));
 	//printf("sizeof(lock)=%d\n",sizeof(KMutex));
@@ -268,15 +263,18 @@ bool test() {
 #ifdef ENABLE_HTTP2
 	test_http2();
 #endif
-	buff b;
+	//selectorManager.onReady(when_selector_manager_ready, NULL);
+	kbuf b;
 	b.flags = 0;
 	test_url_decode();
 	test_regex();
 	test_htaccess();
-	test_expr();
 	test_container();
+#ifdef ENABLE_INPUT_FILTER
 	test_dechunk();
+#endif
 	test_white_list();
+	//test_http_parser();
 	//printf("sizeof(KHttpRequest)=%d\n",sizeof(KHttpRequest));
 	//	test_pipe();
 	//printf("sizeof(obj)=%d,%d\n",sizeof(KHttpObject),sizeof(HttpObjectIndex));
@@ -298,5 +296,6 @@ bool test() {
 	}
 	KHttpField field;
 //	test_files();
+	
 	return true;
 }

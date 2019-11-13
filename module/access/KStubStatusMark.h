@@ -2,6 +2,7 @@
 #define KSTUBSTATUSMARK_H_
 
 #include "KMark.h"
+#include "KBufferFetchObject.h"
 
 #ifdef ENABLE_STAT_STUB
 class KStubStatusMark: public KMark {
@@ -18,19 +19,16 @@ public:
 		rq->responseHeader(kgl_expand_string("Content-Type"), kgl_expand_string("text/plain"));
 		rq->responseHeader(kgl_expand_string("Cache-Control"), kgl_expand_string("no-cache,no-store"));
 		rq->responseHeader(kgl_expand_string("Server"),conf.serverName,conf.serverNameLength);
-		rq->buffer << "Active connections: " << (int)total_connect << " \n";
-		rq->buffer << "server accepts handled requests\n";
-		rq->buffer << " " <<(INT64)katom_get64((void *)&kgl_total_servers) << " " << (INT64)katom_get64((void *)&kgl_total_accepts) << " " << (INT64)katom_get64((void *)&kgl_total_requests) << " \n";
-		rq->buffer << "Reading: " << (int)katom_get((void *)&kgl_reading) << " Writing: " << (int)katom_get((void *)&kgl_writing) << " Waiting: " << (int)katom_get((void *)&kgl_waiting) << " \n";
-		rq->responseHeader(kgl_expand_string("Content-Length"),rq->buffer.getLen());
-		
-		if (TEST(rq->flags,RQ_CONNECTION_CLOSE) || !TEST(rq->flags,RQ_HAS_KEEP_CONNECTION)) {
-			rq->responseHeader(kgl_expand_string("Connection"),kgl_expand_string("close"));
-		} else {
-			rq->responseHeader(kgl_expand_string("Connection"),kgl_expand_string("keep-alive"));
-		}
-		
+		KAutoBuffer s(rq->pool);
+		s << "Active connections: " << (int)total_connect << " \n";
+		s << "server accepts handled requests\n";
+		s << " " <<(INT64)katom_get64((void *)&kgl_total_servers) << " " << (INT64)katom_get64((void *)&kgl_total_accepts) << " " << (INT64)katom_get64((void *)&kgl_total_requests) << " \n";
+		s << "Reading: " << (int)katom_get((void *)&kgl_reading) << " Writing: " << (int)katom_get((void *)&kgl_writing) << " Waiting: " << (int)katom_get((void *)&kgl_waiting) << " \n";
+		rq->responseHeader(kgl_expand_string("Content-Length"),s.getLen());
+		rq->responseConnection();
 		jumpType = JUMP_DENY;
+		rq->closeFetchObject();
+		rq->fetchObj = new KBufferFetchObject(&s);		
 		return true;
 	}
 	KMark *newInstance()

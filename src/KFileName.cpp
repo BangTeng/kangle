@@ -19,8 +19,8 @@
 #include "utils.h"
 #include <vector>
 #include <iostream>
-#include "malloc_debug.h"
-#include "forwin32.h"
+#include "kmalloc.h"
+#include "kforwin32.h"
 #include "KVirtualHost.h"
 #ifdef _WIN32
 #include <direct.h>
@@ -56,7 +56,7 @@ KFileName::KFileName() {
 	name = NULL;
 	index = NULL;
 	prev_dir = false;
-#ifdef _WIN32
+#ifdef ENABLE_UNICODE_FILE
 	wname = NULL;
 #endif
 	linkChecked = false;
@@ -68,7 +68,7 @@ KFileName::~KFileName() {
 		assert(name_len == strlen(name));
 		xfree(name);
 	}
-#ifdef _WIN32
+#ifdef ENABLE_UNICODE_FILE
 	if(wname){
 		xfree(wname);
 	}
@@ -303,11 +303,12 @@ bool KFileName::getFileInfo() {
 		*/
 		return true;
 	}
-#ifdef _WIN32
+#ifdef ENABLE_UNICODE_FILE
 	if(getNameW()==NULL){
 		return false;
 	}
 	if(_wstati64(wname,&buf) != 0){
+		//fwprintf(stderr, L"cann't stat file [%s] errno=%d\n",wname, errno);
 		return false;
 	}
 #else
@@ -332,7 +333,7 @@ bool KFileName::giveName(char *path) {
 	}
 	name = path;
 	name_len = strlen(path);
-#ifdef _WIN32
+#ifdef ENABLE_UNICODE_FILE
 	if(wname){
 		xfree(wname);
 		wname = NULL;
@@ -346,7 +347,7 @@ bool KFileName::setName(const char *path) {
 	}
 	name = xstrdup(path);
 	name_len = strlen(path);
-#ifdef _WIN32
+#ifdef ENABLE_UNICODE_FILE
 	if(wname){
 		xfree(wname);
 		wname = NULL;
@@ -358,7 +359,7 @@ bool KFileName::setName(const char *path) {
 
 */
 CheckLinkState KFileName::checkLink(const char *path, int follow_link) {
-#ifdef _WIN32
+#ifdef ENABLE_UNICODE_FILE
 	if(wname){
 		xfree(wname);
 	}
@@ -371,6 +372,7 @@ CheckLinkState KFileName::checkLink(const char *path, int follow_link) {
 		//fprintf(stderr, "cann't stat file %s errno=%d %s\n",m_name.c_str(),errno,strerror(errno));
 		return CheckLinkFailed;
 	}
+#ifndef _WIN32
 	if (S_ISLNK(buf.st_mode)) {
 		//link file
 		if (TEST(follow_link,FOLLOW_LINK_ALL)) {
@@ -390,6 +392,7 @@ CheckLinkState KFileName::checkLink(const char *path, int follow_link) {
 		return CheckLinkContinue;
 	}
 #endif
+#endif
 	if(TEST(follow_link,FOLLOW_PATH_INFO) && S_ISREG(buf.st_mode)){
 		return CheckLinkIsFile;
 	}
@@ -401,7 +404,7 @@ bool KFileName::setName(const char *docRoot, const char *triped_path,
 		xfree(name);
 		name = NULL;
 	}
-#ifdef _WIN32
+#ifdef ENABLE_UNICODE_FILE
 	if(wname){
 		xfree(wname);
 		wname = NULL;
@@ -515,7 +518,7 @@ bool KFileName::setName(const char *docRoot, const char *triped_path,
 char *KFileName::saveName() {
 	char *n = name;
 	name = NULL;
-#ifdef _WIN32
+#ifdef ENABLE_UNICODE_FILE
 	if(wname){
 		xfree(wname);
 		wname = NULL;
@@ -529,14 +532,14 @@ void KFileName::restoreName(char *n) {
 	}
 	name = n;
 	name_len = strlen(name);
-#ifdef _WIN32
+#ifdef ENABLE_UNICODE_FILE
 	if(wname){
 		xfree(wname);
 		wname = NULL;
 	}
 #endif
 }
-#ifdef _WIN32
+#ifdef ENABLE_UNICODE_FILE
 const wchar_t *KFileName::getNameW()
 {
 	if(wname){

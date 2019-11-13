@@ -12,9 +12,9 @@
 #include "api_child.h"
 #include "extern.h"
 #include "lang.h"
-#include "KThreadPool.h"
+#include "kthread.h"
 #include "KAsyncFetchObject.h"
-#include "KSelector.h"
+#include "kselector.h"
 
 KApiProcessManage spProcessManage;
 static const int lifeTime = 60;
@@ -34,14 +34,14 @@ void KProcessManage::clean()
 	pools.clear();
 	lock.Unlock();
 }
-void KProcessManage::connect(KHttpRequest *rq,KExtendProgram *rd) {
+kev_result KProcessManage::connect(KHttpRequest *rq,KExtendProgram *rd) {
 	KVirtualHostProcess *gc = refsVirtualHostProcess(rq->svh->vh->getApp(rq),rd);
 	if (gc == NULL) {
-		static_cast<KAsyncFetchObject *>(rq->fetchObj)->connectCallBack(rq,NULL);
-		return ;
+		return static_cast<KAsyncFetchObject *>(rq->fetchObj)->connectCallBack(rq,NULL);
 	}
-	gc->handleRequest(rq,rd);
+	kev_result ret = gc->handleRequest(rq,rd);
 	gc->release();
+	return ret;
 }
 
 void KProcessManage::refresh(time_t nowTime) {

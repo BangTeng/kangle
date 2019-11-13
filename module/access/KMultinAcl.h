@@ -22,7 +22,7 @@
 #include "KReg.h"
 #include "KXml.h"
 #include "utils.h"
-#include "rbtree.h"
+#include "krbtree.h"
 typedef int (* strncmpfunc)(const char *,const char *,size_t);
 typedef int (* strcmpfunc)(const char *,const char *);
 struct multin_item
@@ -67,7 +67,7 @@ public:
 	}
 	std::string getValList() {
 		std::stringstream s;
-		rb_node *node;
+		krb_node *node;
 		bool isFirst = true;
 		for (node=rb_first(&root); node!=NULL; node=rb_next(node)) {
 			if (!isFirst) {
@@ -124,7 +124,7 @@ protected:
 		if (item == NULL) {
 			return false;
 		}
-		struct rb_node **n = &(root.rb_node);
+		struct krb_node **n = &(root.rb_node);
 		multin_item *data;
 		while (*n) {
 			data = (multin_item *)((*n)->data);
@@ -156,7 +156,7 @@ protected:
 	}
 	void insert(char *item)
 	{
-		struct rb_node **n = &(root.rb_node), *parent = NULL;
+		struct krb_node **n = &(root.rb_node), *parent = NULL;
 		multin_item *data;
 		while (*n) {
 			data = (multin_item *)((*n)->data);
@@ -175,7 +175,7 @@ protected:
 		data->str = item;
 		data->len = strlen(item);
 
-		rb_node *node = new rb_node;
+		krb_node *node = new krb_node;
 		node->data = data;
 		rb_link_node(node, parent, n);
 		rb_insert_color(node, &root);
@@ -203,7 +203,7 @@ protected:
 	}	
 	void freeMap() {
 		for(;;){
-			rb_node *node = rb_first(&root);
+			krb_node *node = rb_first(&root);
 			if(node==NULL){
 				break;
 			}
@@ -221,7 +221,7 @@ protected:
 protected:
 	bool icase;
 	bool icase_can_change;
-	rb_root root;
+	krb_root root;
 };
 
 #endif /*KFILEEXEACL_H_*/

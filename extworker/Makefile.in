@@ -51,29 +51,31 @@ PROGRAMS = $(bin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
 am_extworker_OBJECTS = api_child.$(OBJEXT) KChildApiService.$(OBJEXT) \
 	KChildListen.$(OBJEXT) main.$(OBJEXT) \
-	../src/EdcodeUtils.$(OBJEXT) ../src/HttpExt.$(OBJEXT) \
+	../src/EdcodeUtils.$(OBJEXT) ../src/KHttpExt.$(OBJEXT) \
 	../src/KApiDso.$(OBJEXT) ../src/KApiEnv.$(OBJEXT) \
 	../src/KBuffer.$(OBJEXT) ../src/KEnvInterface.$(OBJEXT) \
 	../src/KFastcgiUtils.$(OBJEXT) ../src/KPipeStream.$(OBJEXT) \
-	../src/KSocket.$(OBJEXT) ../src/KProcess.$(OBJEXT) \
-	../src/KStream.$(OBJEXT) ../src/KString.$(OBJEXT) \
-	../src/KThreadPool.$(OBJEXT) ../src/KCgiEnv.$(OBJEXT) \
-	../src/process.$(OBJEXT) ../src/malloc_debug.$(OBJEXT)
+	../src/KProcess.$(OBJEXT) ../src/KStream.$(OBJEXT) \
+	../src/KStringBuf.$(OBJEXT) ../src/KCgiEnv.$(OBJEXT) \
+	../src/process.$(OBJEXT) ../src/KAutoBuffer.$(OBJEXT) \
+	../kasync/ksocket.$(OBJEXT) ../kasync/kthread.$(OBJEXT) \
+	../kasync/kfile.$(OBJEXT) ../kasync/kmalloc.$(OBJEXT) \
+	../kasync/kmalloc_debug.$(OBJEXT)
 extworker_OBJECTS = $(am_extworker_OBJECTS)
 extworker_LDADD = $(LDADD)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/src
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
 am__mv = mv -f
+COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
+	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
+CCLD = $(CC)
+LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
 CXXLD = $(CXX)
 CXXLINK = $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
-COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
-	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
-CCLD = $(CC)
-LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
 SOURCES = $(extworker_SOURCES)
 DIST_SOURCES = $(extworker_SOURCES)
 ETAGS = etags
@@ -184,16 +186,22 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-AM_CXXFLAGS = -I../src -I../src/xdelta
+AM_CXXFLAGS = -I ../kasync -I../src 
 AM_LDFLAGS = -L../lib 
+AM_CFLAGS = $(AM_CXXFLAGS)
 AUTOMAKE_OPTIONS = subdir-objects
-extworker_SOURCES = api_child.cpp  extworker.h  KChildApiService.cpp  KChildApiService.h  KChildListen.cpp  KChildListen.h  main.cpp\
-../src/EdcodeUtils.cpp ../src/HttpExt.cpp ../src/KApiDso.cpp ../src/KApiEnv.cpp ../src/KBuffer.cpp ../src/KEnvInterface.cpp ../src/KFastcgiUtils.cpp ../src/KPipeStream.cpp ../src/KSocket.cpp ../src/KProcess.cpp ../src/KStream.cpp ../src/KString.cpp ../src/KThreadPool.cpp ../src/KCgiEnv.cpp ../src/process.cpp ../src/malloc_debug.cpp
+extworker_SOURCES = api_child.cpp  extworker.h  KChildApiService.cpp  KChildApiService.h  KChildListen.cpp  KChildListen.h  main.cpp KSocketStream.h\
+../src/EdcodeUtils.cpp ../src/KHttpExt.cpp ../src/KApiDso.cpp ../src/KApiEnv.cpp ../src/KBuffer.cpp ../src/KEnvInterface.cpp ../src/KFastcgiUtils.cpp ../src/KPipeStream.cpp ../src/KProcess.cpp ../src/KStream.cpp ../src/KStringBuf.cpp ../src/KCgiEnv.cpp ../src/process.cpp ../src/KAutoBuffer.cpp\
+../kasync/ksocket.c\
+../kasync/kthread.c\
+../kasync/kfile.c\
+../kasync/kmalloc.c\
+../kasync/kmalloc_debug.c
 
 all: all-am
 
 .SUFFIXES:
-.SUFFIXES: .cpp .o .obj
+.SUFFIXES: .c .cpp .o .obj
 $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
@@ -269,7 +277,7 @@ clean-binPROGRAMS:
 	@: > ../src/$(DEPDIR)/$(am__dirstamp)
 ../src/EdcodeUtils.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/HttpExt.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/KHttpExt.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/KApiDso.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
@@ -283,68 +291,102 @@ clean-binPROGRAMS:
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/KPipeStream.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/KSocket.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/KProcess.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/KStream.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/KString.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/KThreadPool.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/KStringBuf.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/KCgiEnv.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/process.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/malloc_debug.$(OBJEXT): ../src/$(am__dirstamp) \
+../src/KAutoBuffer.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../kasync/$(am__dirstamp):
+	@$(MKDIR_P) ../kasync
+	@: > ../kasync/$(am__dirstamp)
+../kasync/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) ../kasync/$(DEPDIR)
+	@: > ../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/ksocket.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kthread.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kfile.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kmalloc.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
+../kasync/kmalloc_debug.$(OBJEXT): ../kasync/$(am__dirstamp) \
+	../kasync/$(DEPDIR)/$(am__dirstamp)
 extworker$(EXEEXT): $(extworker_OBJECTS) $(extworker_DEPENDENCIES) 
 	@rm -f extworker$(EXEEXT)
 	$(CXXLINK) $(extworker_OBJECTS) $(extworker_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
+	-rm -f ../kasync/kfile.$(OBJEXT)
+	-rm -f ../kasync/kmalloc.$(OBJEXT)
+	-rm -f ../kasync/kmalloc_debug.$(OBJEXT)
+	-rm -f ../kasync/ksocket.$(OBJEXT)
+	-rm -f ../kasync/kthread.$(OBJEXT)
 	-rm -f ../src/EdcodeUtils.$(OBJEXT)
-	-rm -f ../src/HttpExt.$(OBJEXT)
 	-rm -f ../src/KApiDso.$(OBJEXT)
 	-rm -f ../src/KApiEnv.$(OBJEXT)
+	-rm -f ../src/KAutoBuffer.$(OBJEXT)
 	-rm -f ../src/KBuffer.$(OBJEXT)
 	-rm -f ../src/KCgiEnv.$(OBJEXT)
 	-rm -f ../src/KEnvInterface.$(OBJEXT)
 	-rm -f ../src/KFastcgiUtils.$(OBJEXT)
+	-rm -f ../src/KHttpExt.$(OBJEXT)
 	-rm -f ../src/KPipeStream.$(OBJEXT)
 	-rm -f ../src/KProcess.$(OBJEXT)
-	-rm -f ../src/KSocket.$(OBJEXT)
 	-rm -f ../src/KStream.$(OBJEXT)
-	-rm -f ../src/KString.$(OBJEXT)
-	-rm -f ../src/KThreadPool.$(OBJEXT)
-	-rm -f ../src/malloc_debug.$(OBJEXT)
+	-rm -f ../src/KStringBuf.$(OBJEXT)
 	-rm -f ../src/process.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@../kasync/$(DEPDIR)/kfile.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../kasync/$(DEPDIR)/kmalloc.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../kasync/$(DEPDIR)/kmalloc_debug.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../kasync/$(DEPDIR)/ksocket.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../kasync/$(DEPDIR)/kthread.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/EdcodeUtils.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/HttpExt.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/KApiDso.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/KApiEnv.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/KAutoBuffer.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/KBuffer.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/KCgiEnv.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/KEnvInterface.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/KFastcgiUtils.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/KHttpExt.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/KPipeStream.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/KProcess.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/KSocket.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/KStream.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/KString.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/KThreadPool.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/malloc_debug.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/KStringBuf.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/process.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/KChildApiService.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/KChildListen.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/api_child.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
+
+.c.o:
+@am__fastdepCC_TRUE@	depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
+@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(COMPILE) -c -o $@ $<
+
+.c.obj:
+@am__fastdepCC_TRUE@	depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
+@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
+@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(COMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
 .cpp.o:
 @am__fastdepCXX_TRUE@	depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
@@ -472,6 +514,8 @@ clean-generic:
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
+	-rm -f ../kasync/$(DEPDIR)/$(am__dirstamp)
+	-rm -f ../kasync/$(am__dirstamp)
 	-rm -f ../src/$(DEPDIR)/$(am__dirstamp)
 	-rm -f ../src/$(am__dirstamp)
 
@@ -483,7 +527,7 @@ clean: clean-am
 clean-am: clean-binPROGRAMS clean-generic mostlyclean-am
 
 distclean: distclean-am
-	-rm -rf ../src/$(DEPDIR) ./$(DEPDIR)
+	-rm -rf ../kasync/$(DEPDIR) ../src/$(DEPDIR) ./$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -529,7 +573,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-	-rm -rf ../src/$(DEPDIR) ./$(DEPDIR)
+	-rm -rf ../kasync/$(DEPDIR) ../src/$(DEPDIR) ./$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

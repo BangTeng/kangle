@@ -23,7 +23,7 @@
  */
 #ifndef KTABLE_H_
 #define KTABLE_H_
-#include "KSocket.h"
+#include "ksocket.h"
 #include "KJump.h"
 #include <list>
 #include "KReg.h"

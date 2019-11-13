@@ -15,7 +15,7 @@
 #include "KAcserver.h"
 #include "KProcessManage.h"
 #include "KExtendProgram.h"
-#include "KSocket.h"
+#include "ksocket.h"
 #include "KListenPipeStream.h"
 
 
@@ -35,13 +35,13 @@ public:
 	const char *getName() {
 		return name.c_str();
 	}
-	void connect(KHttpRequest *rq);
+	kev_result connect(KHttpRequest *rq);
 	void parseConfig(std::map<std::string, std::string> &attribute);
 
 	KProcessManage *getProcessManage() {
 		return static_cast<KProcessManage *>(&pm);
 	}
-	KUpstreamSelectable *createPipeStream(KVirtualHost *vh, KListenPipeStream *st,std::string &unix_path,bool isSameRunning);
+	KTcpUpstream *createPipeStream(KVirtualHost *vh, KListenPipeStream *st,std::string &unix_path,bool isSameRunning);
 	bool parseEnv(std::map<std::string, std::string> &attribute);
 	void buildXML(std::stringstream &s);
 	const char *getType() {

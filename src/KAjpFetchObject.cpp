@@ -5,10 +5,11 @@
  *      Author: keengo
  */
 #include "http.h"
+#include "kfeature.h"
 #include "KAjpFetchObject.h"
 #include "KHttpTransfer.h"
-#include "KHttpObjectParserHook.h"
-#include "malloc_debug.h"
+#include "KHttpResponseParser.h"
+#include "kmalloc.h"
 #define MAX_AJP_RESPONSE_HEADERS 0xc
 #define MAX_AJP_REQUEST_HEADERS  0xf
 #if 0 
@@ -30,38 +31,26 @@ static const char *ajp_request_headers[MAX_AJP_REQUEST_HEADERS] = {
 	"user-agent"
 };
 #endif
-static const char *ajp_response_headers[MAX_AJP_RESPONSE_HEADERS]={
-	"Unknow",
-	"Content-Type",
-	"Content-Language",
-	"Content-Length",
-	"Date",
-	"Last-Modified",
-	"Location",
-	"Set-Cookie",
-	"Set-Cookie2",
-	"Servlet-Engine",
-	"Status",
-	"WWW-Authenticate"
+static kgl_str_t ajp_response_headers[MAX_AJP_RESPONSE_HEADERS]={
+	kgl_string("Unknow"),
+	kgl_string("Content-Type"),
+	kgl_string("Content-Language"),
+	kgl_string("Content-Length"),
+	kgl_string("Date"),
+	kgl_string("Last-Modified"),
+	kgl_string("Location"),
+	kgl_string("Set-Cookie"),
+	kgl_string("Set-Cookie2"),
+	kgl_string("Servlet-Engine"),
+	kgl_string("Status"),
+	kgl_string("WWW-Authenticate")
 };
 KAjpFetchObject::KAjpFetchObject() {
-	reuse = false;
-	header_len = 0;
 	body_len = -1;
-	body = NULL;
-	body_hot = body;
-	parsed_len = 0;
-	last_msg = NULL;
 	bodyEnd = false;
 }
 
 KAjpFetchObject::~KAjpFetchObject() {
-	if(body){
-		xfree(body);
-	}
-	if(last_msg){
-		delete last_msg;
-	}
 }
 //创建发送头到buffer中。
 void KAjpFetchObject::buildHead(KHttpRequest *rq)
@@ -84,14 +73,15 @@ void KAjpFetchObject::buildHead(KHttpRequest *rq)
 		b.putString(rq->url->path);
 	}
 	b.putString(rq->getClientIp());
+	b.putString("");
 	//remote host
-	b.putShort(0xffff);
-	//b.putString(rq->c->socket->get_remote_ip());
+	//b.putShort(0xffff);
+	//b.putString(rq->sink->get_remote_ip());
 	b.putString(rq->url->host);
-	b.putShort(rq->c->socket->get_self_port());
+	b.putShort(rq->sink->GetSelfPort());
 	//is secure
-	b.putByte(0);
-	KHttpHeader *header = rq->parser.getHeaders();
+	b.putByte(TEST(rq->url->flags,KGL_URL_SSL)?1:0);
+	KHttpHeader *header = rq->GetHeader();
 	int count = 0;
 	while(header) {
 		if (!is_internal_header(header)) {
@@ -99,7 +89,7 @@ void KAjpFetchObject::buildHead(KHttpRequest *rq)
 		}
 		header = header->next;
 	}
-	if(rq->ctx->lastModified>0){
+	if(rq->ctx->lastModified!=0 || rq->ctx->if_none_match != NULL){
 		count++;
 	}
 	if (rq->content_length > 0) {
@@ -107,7 +97,7 @@ void KAjpFetchObject::buildHead(KHttpRequest *rq)
 	}
 	b.putShort(count);
 	//printf("head count=%d\n",count);
-	header = rq->parser.getHeaders();
+	header = rq->GetHeader();
 	bool founded;
 	while(header){
 		if (is_internal_header(header)) {
@@ -135,13 +125,23 @@ void KAjpFetchObject::buildHead(KHttpRequest *rq)
 		b.putShort(0xA008);
 		b.putString((char *)int2string(rq->content_length, tmpbuff));
 	}
-	if (rq->ctx->lastModified > 0) {
-		char mk1123buff[50];
-		mk1123time(rq->ctx->lastModified, mk1123buff, sizeof(mk1123buff));
-		b.putString("If-Modified-Since");
-		b.putString(mk1123buff);
-		//printf("send if-modified-since %s\n",mk1123buff);
-	}
+	 if (rq->ctx->lastModified != 0) {
+		char tmpbuff[50];
+                mk1123time(rq->ctx->lastModified, tmpbuff, sizeof(tmpbuff));
+                if (rq->ctx->mt == modified_if_range_date) {
+			b.putString("If-Range");
+                } else {
+			b.putString("If-Modified-Since");
+                }
+		b.putString(tmpbuff);
+        } else if (rq->ctx->if_none_match != NULL) {
+                if (rq->ctx->mt == modified_if_range_etag) {
+			b.putString("If-Range");
+                } else {
+			b.putString("If-None-Match");
+                }
+		b.putString(rq->ctx->if_none_match->data,(int)rq->ctx->if_none_match->len);
+        }
 	if(rq->url->param){
 		//printf("send query_string\n");
 		b.putByte(0x05);
@@ -149,81 +149,84 @@ void KAjpFetchObject::buildHead(KHttpRequest *rq)
 	}
 	b.putByte(0xFF);
 	b.end();
-	while (rq->pre_post_length>0) {
-		int len = MIN(rq->pre_post_length,NBUFF_SIZE);
-		unsigned char h[6];
-		h[0] = 0x12;h[1] = 0x34;
-		int dlen = len + 2;
-		h[2] = (dlen>>8 &0xFF);
-		h[3] = (dlen & 0xFF);
-		h[4] = (len>>8 & 0xFF);
-		h[5] = (len & 0xFF);
-		buffer->write_all((char *)h,6);
-		buffer->write_all(rq->parser.body,len);
-		rq->left_read -= len;
-		rq->parser.bodyLen -= len;
-		rq->parser.body += len;
-		rq->pre_post_length -= len;
-	}
-	if (rq->left_read==0) {
-		appendPostEnd();
-	}
 }
 void KAjpFetchObject::appendPostEnd()
 {
-	buff *ebuff = (buff *)malloc(sizeof(buff));
-	ebuff->data = (char *)malloc(4);
+/*
+	kbuf *ebuff = (kbuf *)xmalloc(sizeof(kbuf));
+	ebuff->data = (char *)xmalloc(4);
 	ebuff->used = 4;
-	char *d = ebuff->data;
+	u_char *d = (u_char *)ebuff->data;
 	d[0] = 0x12;
 	d[1] = 0x34;
 	d[2] = 0;
 	d[3] = 0;
-	buffer->appendBuffer(ebuff);
+	buffer->Append(ebuff);
+*/
 }
-//解析head
-Parse_Result KAjpFetchObject::parseHead(KHttpRequest *rq,char *data,int len)
+StreamState KAjpFetchObject::ParseBody(KHttpRequest *rq, char **data, int *len)
 {
-	//printf("parse head len=%d\n",len);
-	//这里为什么不直接用data,len呢？而是要用header + parsed_len来确定？
-	//因为有可能一个header里面包含多条ajpmessage，要保留解析位置，下次接着从上次位置解析。
-	for (;;) {
-		char *str = header + parsed_len;
-		len = (int)(hot - header) - parsed_len;
-		if (len<=0) {
-			return Parse_Continue;
+	unsigned short chunk_length;
+	char *chunk_data;
+	unsigned char type;	
+	while (*len > 0) {
+		KAjpMessageParser msg;
+		if (!parse(data, len, &msg)) {
+			break;
 		}
-		char *save_data = str;
-		KAjpMessage *msg = parse(&str,len);
-		int this_parsed_len = (int)(str - save_data);
-		//printf("this_parsed_len=%d\n",this_parsed_len);
-		parsed_len += this_parsed_len;
-		if (msg == NULL) {
-			return Parse_Continue;
+		if (!msg.getByte(&type)) {
+			return STREAM_WRITE_FAILED;
 		}
-		unsigned char type = parseMessage(rq,msg);
-		//printf("type=%d,len=%d\n",type,msg->getLen());
-		delete msg;
-		if (type==JK_AJP13_SEND_HEADERS) {
-			return Parse_Success;
+		//printf("type=[%d]\n",type);
+		switch (type) {
+		case JK_AJP13_END_RESPONSE:
+			ReadBodyEnd(rq);
+			break;
+		case JK_AJP13_SEND_BODY_CHUNK:
+			if (!msg.getShort(&chunk_length)) {
+				return STREAM_WRITE_FAILED;
+			}
+			//printf("chunk_length=[%d]\n",chunk_length);
+			chunk_data = msg.getBytes();
+			if (STREAM_WRITE_FAILED == PushBody(rq, chunk_data, chunk_length)) {
+				return STREAM_WRITE_FAILED;
+			}
+			break;
 		}
-		if (type==JK_AJP13_GET_BODY_CHUNK) {
-			//tomcat期望body数据
-			continue;
-		}
-		return Parse_Failed;
 	}
-	
+	return STREAM_WRITE_SUCCESS;
 }
-unsigned char KAjpFetchObject::parseMessage(KHttpRequest *rq,KAjpMessage *msg)
+kgl_parse_result KAjpFetchObject::ParseHeader(KHttpRequest *rq, char **data, int *len)
 {
-	KHttpObject *obj = rq->ctx->obj;
-	KHttpObjectParserHook hook(obj,rq);
+	while (*len > 0) {
+		//printf("parse header len=[%d] ",*len);
+		KAjpMessageParser msg;
+		if (!parse(data, len, &msg)) {
+			break;
+		}
+		unsigned char type = parseMessage(rq, rq->ctx->obj, &msg);
+		//printf("type=[%d]\n",type);
+		switch (type) {
+		case JK_AJP13_SEND_HEADERS:
+			//printf("parse_finished *len=[%d]\n",*len);
+			return kgl_parse_finished;
+		case JK_AJP13_GET_BODY_CHUNK:
+			break;
+		default:
+			klog(KLOG_ERR, "ajp unknow type=[%d] when parse header.\n", (int)type);
+			break;
+		}		
+	}
+	return kgl_parse_continue;
+}
+unsigned char KAjpFetchObject::parseMessage(KHttpRequest *rq,KHttpObject *obj, KAjpMessageParser *msg)
+{
 	unsigned char type;
 	if(!msg->getByte(&type)){
 		return JK_AJP13_ERROR;
 	}
-	if(type == JK_AJP13_SEND_HEADERS){
+	switch (type) {
+	case JK_AJP13_SEND_HEADERS:
 		unsigned short status_code;
 		if(!msg->getShort(&status_code)){
 			return JK_AJP13_ERROR;
@@ -246,7 +249,10 @@ unsigned char KAjpFetchObject::parseMessage(KHttpRequest *rq,KAjpMessage *msg)
 			if(!msg->peekByte(&head_type)){
 				return JK_AJP13_ERROR;
 			}
+			int attr_len = 0;
+			int val_len = 0;
 			const char *attr = NULL;
+			char *val = NULL;
 			if(head_type==0xA0){
 				unsigned short head_attr;
 				if(!msg->getShort(&head_attr)){
@@ -254,32 +260,31 @@ unsigned char KAjpFetchObject::parseMessage(KHttpRequest *rq,KAjpMessage *msg)
 				}
 				head_attr = head_attr & 0xFF;
 				if(head_attr>0 && head_attr<MAX_AJP_RESPONSE_HEADERS){
-					attr = ajp_response_headers[head_attr];
+					kgl_str_t attr_s = ajp_response_headers[head_attr];
+					attr = attr_s.data;
+					attr_len = attr_s.len;
 				}
 
-			}else{
-				if(!msg->getString((char **)&attr)){
+			} else {
+				attr_len = msg->getString((char **)&attr);
+				if (attr_len<0) {
 					return JK_AJP13_ERROR;
 				}
-
-			}
-			char *val;
-			if(!msg->getString(&val)){
+			}			
+			val_len = msg->getString(&val);
+			if (val_len<0) {
 				return JK_AJP13_ERROR;
 			}
-			//printf("attr=%s\n",attr);
+			//printf("attr=%s ",attr);
 			//printf("val=%s\n",val);
 			if(attr){
-				int val_len = strlen(val);
-				if(hook.parseHeader(attr,val,val_len,false)==HTTP_PARSE_SUCCESS){
-					obj->insertHttpHeader(attr,strlen(attr),val,val_len);
-				}
+				parser_ctx.ParseHeader(rq, attr, attr_len, val, val_len, false);
 			}
 		}
-	} else if(type == JK_AJP13_END_RESPONSE) {
-		//printf("body end \n");
-		bodyEnd = true;
-		expectDone(rq);
+		break;
+	case JK_AJP13_END_RESPONSE:
+		ReadBodyEnd(rq);
+		break;
 	}
 	return type;
 }
@@ -290,7 +295,7 @@ void KAjpFetchObject::buildPost(KHttpRequest *rq)
 	//printf("buildpost len = %d\n",len);
 	assert(len>0 && len<=AJP_PACKAGE);
 
-	buff *nbuf = (buff *)malloc(sizeof(buff));
+	kbuf *nbuf = (kbuf *)malloc(sizeof(kbuf));
 	nbuf->data = (char  *)malloc(6);
 	nbuf->used = 6;
 	unsigned char *h = (unsigned char *)nbuf->data;
@@ -302,102 +307,39 @@ void KAjpFetchObject::buildPost(KHttpRequest *rq)
 	h[4] = (len>>8 & 0xFF);
 	h[5] = (len & 0xFF);
 	buffer->insertBuffer(nbuf);
+	/*
 	if (rq->left_read==0) {
 		appendPostEnd();
 	}
+	*/
 }
-//读取body数据
-char *KAjpFetchObject::nextBody(KHttpRequest *rq,int &len)
-{
-	if(last_msg){
-		delete last_msg;
-		last_msg = NULL;
-	}
-	char *str = header + parsed_len;
-	len = hot - header - parsed_len;
-	//printf("next Body len = %d\n",len);
-	if (len==0) {
-		return NULL;
-	}
-	last_msg = parse(&str,len);
-	parsed_len = str - header;
-	if(last_msg == NULL){
-		return NULL;
-	}
-	unsigned char type = parseMessage(rq,last_msg);
-	if (type==JK_AJP13_SEND_BODY_CHUNK) {
-		unsigned short chunked_length ;
-		if(!last_msg->getShort(&chunked_length)){
-			return NULL;
-		}
-		if(chunked_length>last_msg->getLen()){
-			return NULL;
-		}
-		len = chunked_length;
-		if (len==0) {
-			bodyEnd = true;		
-			return NULL;
-		}
-		return last_msg->getBytes();
-	}
-	return NULL;
-}
-//解析body
-Parse_Result KAjpFetchObject::parseBody(KHttpRequest *rq,char *data,int len)
-{
-	//printf("parse body len=%d\n",len);
-	parsed_len = 0;
-	hot = data + len;
-	return Parse_Continue;
-}
-KAjpMessage * KAjpFetchObject::parse(char **str,int len)
+bool KAjpFetchObject::parse(char **str,int *len,KAjpMessageParser *msg)
 {
 	//printf("parse len = %d\n",len);
 	if (body_len==-1) {
 		//head
-		if (len<=0) {
-			return NULL;
+		if (*len<4) {
+			return false;
 		}
-		assert(header_len<4);
-		int left_read = 4 - header_len;
-		left_read = MIN(left_read,len);
-		memcpy(((char *)ajp_header)+header_len,*str,left_read);
-		header_len += left_read;
-		*str += left_read;
-		len -= left_read;
-		//add_buf(str,len);
-		if (header_len<4) {
-			//continue;
-			return NULL;
-		}
+		unsigned char *ajp_header = (unsigned char *)*str;
+		*str += 4;
+		*len -= 4;
 		if(!((ajp_header[0]==0x41 && ajp_header[1]==0x42) || (ajp_header[0]==0x12 && ajp_header[1]==0x34))){
 			klog(KLOG_ERR,"recv wrong package.\n");
-			return NULL;
-			//goto done;
+			return false;
 		}
 		body_len = ajp_header[2] << 8 | ajp_header[3];
 		if (body_len>AJP_PACKAGE) {
 			klog(KLOG_ERR,"recv wrong package length %d.\n",body_len);
-			return NULL;
+			return false;
 		}
-		assert(body == NULL);
-		body = (char *)malloc(body_len);
-		body_hot = body;
 	}
-	int this_body_len = MIN(len,body_len);
-	memcpy(body_hot,*str,this_body_len);
-	body_len -= this_body_len;
-	*str += this_body_len;
-	body_hot += this_body_len;
-	if (body_len==0) {
-		//switch to read head
-		KAjpMessage *msg = new KAjpMessage(body,body_hot-body);
-		body_len = -1;
-		header_len = 0;
-		body = NULL;
-		body_hot = NULL;
-		return msg;
+	if (*len < body_len) {
+		return false;
 	}
-	//len = this_body_len;
-	return NULL;
+	msg->init(*str, body_len);
+	*str += body_len;
+	*len -= body_len;
+	body_len = -1;
+	return true;	
 }

@@ -18,7 +18,7 @@ public:
 			return false;
 		}
 		bool result = false;
-		KHttpHeader *header = rq->parser.getHeaders();
+		KHttpHeader *header = rq->GetHeader();
 		while (header) {
 			if (strcasecmp(header->attr,attr)==0) {
 				KRegSubString *sub = vary.matchSubString(header->val,strlen(header->val),0);

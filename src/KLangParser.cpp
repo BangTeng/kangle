@@ -23,7 +23,7 @@
 #include "do_config.h"
 #include "utils.h"
 #include<sstream>
-#include "malloc_debug.h"
+#include "kmalloc.h"
 using namespace std;
 KLangParser::KLangParser() {
 }

@@ -27,7 +27,7 @@
 #include "KTable.h"
 #include "lib.h"
 #include<list>
-#include "malloc_debug.h"
+#include "kmalloc.h"
 using namespace std;
 
 KChain::KChain() {

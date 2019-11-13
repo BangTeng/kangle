@@ -34,7 +34,7 @@ public:
 				data = obj->data;
 				h = data->headers;
 			} else {
-				h = rq->parser.getHeaders();
+				h = rq->GetHeader();
 			}
 			KHttpHeader *last = NULL;
 			while (h) {
@@ -46,7 +46,7 @@ public:
 						if (obj) {
 							data->headers = next;
 						} else {
-							rq->parser.headers = next;
+							rq->header = next;
 						}
 					}
 					if (!obj) {

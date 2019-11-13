@@ -44,7 +44,10 @@
 #include "KRequestQueue.h"
 #include "extern.h"
 #include "KFlowInfo.h"
+#include "KConnectionLimit.h"
 
+//由vh的引用，计算连接数的差异
+#define VH_REFS_CONNECT_DELTA 1
 class KTempleteVirtualHost;
 /**
 * 属性辅助类
@@ -79,45 +82,6 @@ public:
 	}
 private:
 	std::map<std::string,std::string> *attribute;
-};
-/**
-* 连接数限制类
-*/
-class KConnectionLimit : public KCountable
-{
-public:
-	KConnectionLimit()
-	{
-		refs = 1;
-		cur_connect = 0;
-	}
-	bool addConnection(int max_connect)
-	{
-		refsLock.Lock();
-		if(cur_connect >= max_connect){
-			refsLock.Unlock();
-			return false;
-		}
-		cur_connect ++;
-		refsLock.Unlock();
-		return true;
-	}
-	void releaseConnection()
-	{
-		refsLock.Lock();
-		cur_connect --;
-		refsLock.Unlock();
-	}
-	int getConnectionCount()
-	{
-		int count ;
-		refsLock.Lock();
-		count = cur_connect;
-		refsLock.Unlock();
-		return count;
-	}
-private:
-	int cur_connect;
 };
 /**
 * 虚拟主机类
@@ -205,18 +169,12 @@ public:
 	}
 	void setSpeedLimit(const char *speed_limit_str,KVirtualHost *ov);
 	void setSpeedLimit(int speed_limit,KVirtualHost *ov);
-	
-	int getConnectCount();
-	bool addConnection() {
+	int GetConnectionCount();
+	bool addConnection(KHttpRequest *rq) {
 		if(cur_connect==NULL || max_connect==0){
 			return true;
 		}
-		return cur_connect->addConnection(max_connect);
-	}
-	void releaseConnection() {
-		if(cur_connect){
-			cur_connect->releaseConnection();
-		}
+		return cur_connect->addConnection(rq,max_connect);
 	}
 	void initConnect(KVirtualHost *ov)
 	{
@@ -273,10 +231,10 @@ public:
 		}
 		lock.Unlock();
 	}
-	int getSpeed(bool reset)
+	INT64 get_speed(bool reset)
 	{
 		if (flow) {
-			return flow->getSpeed(reset);
+			return flow->get_speed(reset);
 		}
 		return 0;
 	}
@@ -364,8 +322,6 @@ public:
 	static void closeToken(Token_t token);
 	virtual void buildXML(std::stringstream &s);
 	bool inherit;
-	//是否支持串接请求
-	bool concat;
 	bool loadApiRedirect(KApiPipeStream *st,int workType);
 	bool saveAccess();
 	void setAccess(std::string access_file);

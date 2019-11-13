@@ -17,9 +17,9 @@ KSingleAcserver::KSingleAcserver() {
 KSingleAcserver::~KSingleAcserver() {
 	sockHelper->release();
 }
-void KSingleAcserver::connect(KHttpRequest *rq)
+kev_result KSingleAcserver::connect(KHttpRequest *rq)
 {
-	sockHelper->connect(rq);
+	return sockHelper->connect(rq);
 }
 bool KSingleAcserver::setHostPort(std::string host, const char *port) {
 	return sockHelper->setHostPort(host , port);

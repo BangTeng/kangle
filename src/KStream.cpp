@@ -27,9 +27,9 @@
 #include <stdio.h>
 
 #include "lib.h"
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "KStream.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 KConsole KConsole::out;
 char *KRStream::readLine() {
 	std::stringstream s;

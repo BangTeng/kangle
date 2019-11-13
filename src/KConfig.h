@@ -37,17 +37,13 @@
 #include <list>
 #include <string>
 #include <map>
-#include "KSocket.h"
+#include "ksocket.h"
 #include "global.h"
 #include "KMutex.h"
 #include "KTimeMatch.h"
-#include "malloc_debug.h"
 #include "KUserManageInterface.h"
-#include "server.h"
-#include "KAsyncWorker.h"
-#ifdef KSOCKET_SSL
-#include "KSSLSocket.h"
-#endif
+#include "extern.h"
+#include "kasync_worker.h"
 #define AUTOUPDATE_OFF    0
 #define AUTOUPDATE_ON   1
 #define AUTOUPDATE_DOWN   2
@@ -65,7 +61,7 @@ class KAcserverManager;
 class KVirtualHostManage;
 class KVirtualHost;
 struct KPerIpConnect;
-class KHttpFilterDsoManage;
+class KDsoExtendManage;
 class KHttpFilterManage;
 class KListenHost {
 public:
@@ -132,7 +128,6 @@ public:
 	INT64 max_bigobj_size;
 #endif
 #endif
-	int select_count;
 	int refresh;
 	int refresh_time;
 	unsigned max_connect_info;
@@ -172,7 +167,6 @@ public:
 	INT64 max_post_size;
 #endif
 	bool read_hup;
-	bool mlock;
 #ifdef KSOCKET_UNIX	
 	bool unix_socket;
 #endif
@@ -199,8 +193,8 @@ public:
 	KConfig()
 	{
 		memset(disk_cache_dir,0,sizeof(disk_cache_dir));
-		per_ip_head = NULL;
-		per_ip_last = NULL;
+		//per_ip_head = NULL;
+		//per_ip_last = NULL;
 	}
 	~KConfig();
 	KAcserverManager *am;
@@ -217,8 +211,8 @@ public:
 	//disk_cache_dir2是可以修改的。保存设置用的。
 	//实际用的时候用disk_cahce_dir.
 	char disk_cache_dir[512];
-	KPerIpConnect *per_ip_head;
-	KPerIpConnect *per_ip_last;
+	//KPerIpConnect *per_ip_head;
+	//KPerIpConnect *per_ip_last;
 	
 	void copy(KConfig *c);
 	void set_connect_time_out(unsigned val)
@@ -258,10 +252,11 @@ public:
 	std::string tmppath;
 	std::string program;
 	std::string extworker;
-	KAsyncWorker *ioWorker;
-	KAsyncWorker *dnsWorker;
+	kasync_worker *ioWorker;
+	kasync_worker *dnsWorker;
 	int serverNameLength;
 	char serverName[32];
+	int select_count;
 #ifdef _WIN32
 		//kangle程序所在的盘符
 	std::string diskName;
@@ -270,7 +265,7 @@ public:
 	KVirtualHostManage *gvm;
 	//3311的内置虚拟主机
 	KVirtualHost *sysHost;
-	KHttpFilterDsoManage *hfdm;
+	KDsoExtendManage *dem;
 };
 extern KGlobalConfig conf;
 extern int m_debug;

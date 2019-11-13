@@ -20,12 +20,10 @@
 #include "KSockFastcgiFetchObject.h"
 #include "KHttpProxyFetchObject.h"
 #include "KAjpFetchObject.h"
-
-#include "KUwsgiFetchObject.h"
-#include "KScgiFetchObject.h"
-#include "KHmuxFetchObject.h"
+#include "KTcpFetchObject.h"
 #include "KSockPoolHelper.h"
-#include "malloc_debug.h"
+#include "KLang.h"
+#include "kmalloc.h"
 using namespace std;
 KJump::~KJump() {
 }
@@ -115,6 +113,7 @@ void KPoolableRedirect::build_proto_html(KPoolableRedirect *mserver, std::string
 		s << "checked";
 	}
 	s << ">ajp";
+#if 0
 	s << "<input type='radio' value='uwsgi' name='proto' ";
 	if (mserver && mserver->proto == Proto_uwsgi) {
 		s << "checked";
@@ -130,6 +129,7 @@ void KPoolableRedirect::build_proto_html(KPoolableRedirect *mserver, std::string
 		s << "checked";
 	}
 	s << ">hmux";
+#endif
 	
 #ifdef ENABLE_PROXY_PROTOCOL
 	//proxy
@@ -151,12 +151,14 @@ KFetchObject *KPoolableRedirect::makeFetchObject(KHttpRequest *rq, KFileName *fi
 		return new KHttpProxyFetchObject();
 	case Proto_ajp:
 		return new KAjpFetchObject();
+#if 0
 	case Proto_uwsgi:
 		return new KUwsgiFetchObject();
 	case Proto_scgi:
 		return new KScgiFetchObject();
 	case Proto_hmux:
 		return new KHmuxFetchObject();
+#endif
 		
 #ifdef ENABLE_PROXY_PROTOCOL
 	case Proto_proxy:

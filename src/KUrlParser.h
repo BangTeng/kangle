@@ -2,9 +2,9 @@
 #define KURLPARSER_H
 #include <map>
 #include <string.h>
-#include "forwin32.h"
-#include "malloc_debug.h"
+#include "kforwin32.h"
 #include "KUrl.h"
+#include "kmalloc.h"
 struct lessp_url_name {
 	bool operator()(const char * __x, const char * __y) const {
 		return strcasecmp(__x, __y) < 0;

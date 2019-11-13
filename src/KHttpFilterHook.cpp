@@ -5,6 +5,7 @@
 #include "KHttpStream.h"
 #include "KHttpFilterStream.h"
 #ifdef ENABLE_KSAPI_FILTER
+#if 0
 void KHttpFilterHookCollect::add_hook(KHttpFilterDso *fd)
 {
 	KHttpFilterHook *hook = new KHttpFilterHook(fd);
@@ -97,4 +98,5 @@ int KHttpFilterHookCollectUrlMap::check_urlmap(KHttpRequest *rq)
 		return JUMP_DENY;
 	}
 }
+#endif
 #endif

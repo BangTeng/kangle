@@ -2,14 +2,17 @@
 #define KSPDYWRITEBUFFER_H
 #include <string.h>
 #include <assert.h>
+#include <ctype.h>
 #ifndef _WIN32
 #include <stdint.h>
 #include <sys/uio.h>
 #endif
 #include "global.h"
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "KMutex.h"
-#include "KSelector.h"
+#include "kselector.h"
+#include "ksocket.h"
+#ifdef ENABLE_HTTP2
 #define ENABLE_HTTP2_TCP_CORK 1
 class KHttp2Context;
 class KHttp2;
@@ -24,8 +27,8 @@ public:
 	~kgl_http2_event();
 	kgl_http2_event *next;
 	void *arg;
-	bufferEvent buffer;	
-	resultEvent result;	
+	buffer_callback buffer;	
+	result_callback result;
 	int len;	
 };
 class http2_buff
@@ -55,8 +58,7 @@ public:
 	~KHttp2HeaderFrame()
 	{
 		while (head) {
-			last = head->next;
-			free(head->data);
+			last = head->next;			
 			delete head;
 			head = last;
 		}
@@ -120,7 +122,7 @@ public:
 			return;
 		}
 		http2_buff *buf = new http2_buff;
-		buf->data = (char *)malloc(len);
+		buf->data = (char *)xmalloc(len);
 		buf->used = len;
 		memcpy(buf->data, str, len);
 		buf->next = head;
@@ -131,7 +133,7 @@ private:
 	{
 		if (last == NULL || last->used == KGL_HEADER_FRAME_CHUNK_SIZE) {
 			http2_buff *buf = new http2_buff;
-			buf->data = (char *)malloc(KGL_HEADER_FRAME_CHUNK_SIZE);
+			buf->data = (char *)xmalloc(KGL_HEADER_FRAME_CHUNK_SIZE);
 			hot = buf->data;
 			if (head == NULL) {
 				head = buf;
@@ -164,17 +166,18 @@ public:
 	{
 		KHttp2WriteBuffer::remove_buff(clean());
 	}
-	void getReadBuffer(KSocket *fd,LPWSABUF buffer,int &bufferCount)
+	int getReadBuffer(SOCKET fd,LPWSABUF buffer,int bc)
 	{
 #ifdef ENABLE_HTTP2_TCP_CORK
 		if (!tcp_cork) {
 			tcp_cork = 1;
-			fd->set_delay();
+			ksocket_delay(fd);
 		}
 #endif
 #ifndef NDEBUG
 		if (hot == NULL) {
-			printf("bug\n");
+			//it is a bug.
+			kassert(false);
 		}
 #endif
 		assert(hot);
@@ -187,7 +190,7 @@ public:
 		buffer[0].iov_len = hot_left;
 		got -= hot_left;
 		int i;
-		for (i=1;i<bufferCount;i++) {
+		for (i=1;i<bc;i++) {
 			tmp = tmp->next;
 			if (tmp==NULL || got<=0) {
 				break;
@@ -196,9 +199,9 @@ public:
 			buffer[i].iov_len = MIN(got,tmp->used);
 			got -= buffer[i].iov_len;
 		}
-		bufferCount = i;
+		return i;
 	}
-	http2_buff *readSuccess(KSocket *fd,int got)
+	http2_buff *readSuccess(SOCKET fd,int got)
 	{
 		http2_buff *remove_list = NULL;
 		left -= got;
@@ -263,7 +266,8 @@ private:
 	{
 #ifndef NDEBUG
 		if (left != 0 || header!=NULL) {
-			printf("bug\n");
+			//it is a bug.
+			kassert(false);
 		}
 #endif
 		assert(header == NULL);
@@ -272,7 +276,7 @@ private:
 		hot = NULL;
 	}
 #ifdef ENABLE_HTTP2_TCP_CORK
-	void check_tcp_cork(KSocket *fd)
+	void check_tcp_cork(SOCKET fd)
 	{
 		if (tcp_no_cork_at_empty) {
 			tcp_no_cork_at_empty = 0;
@@ -280,7 +284,7 @@ private:
 				return;
 			}
 			tcp_cork = 0;
-			fd->set_nodelay();
+			ksocket_no_delay(fd);
 		}
 	}
 #endif
@@ -305,4 +309,5 @@ private:
 	uint16_t tcp_no_cork_at_empty : 1;
 #endif
 };
+#endif
 #endif

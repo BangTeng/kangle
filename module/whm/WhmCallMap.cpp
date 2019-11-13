@@ -5,9 +5,9 @@
  *      Author: keengo
  */
 #include <string>
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "WhmCallMap.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 
 using namespace std;
 WhmCallMap::WhmCallMap(WhmExtend *callable, std::string &callName) {

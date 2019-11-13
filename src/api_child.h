@@ -7,7 +7,7 @@
 
 #ifndef API_CHILD_H_
 #define API_CHILD_H_
-#include "KSocket.h"
+#include "ksocket.h"
 #include "global.h"
 #include "KStream.h"
 #include "KPipeStream.h"
@@ -16,7 +16,7 @@
 #include "fastcgi.h"
 
 class KApiRedirect;
-FUNC_TYPE FUNC_CALL api_child_thread(void *param);
+KTHREAD_FUNCTION api_child_thread(void *param);
 void api_child_start(KApiRedirect *rd, KStream *st);
 bool api_child_listen(u_short port, KPipeStream *st,bool unix_socket);
 bool api_pipe_write(KPipeStream *st, const char *str, int len);

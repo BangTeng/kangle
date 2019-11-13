@@ -2,7 +2,7 @@
 #define WHMSHELLPROCESS_H
 #include <vector>
 #include "WhmShellContext.h"
-#include "KFile.h"
+#include "kfile.h"
 class WhmShellCommand
 {
 public:

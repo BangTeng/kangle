@@ -26,8 +26,9 @@
 #include <time.h>
 
 #include "global.h"
-#include "KFile.h"
-#define KGL_STREAM_FILE_SIZE 4096
+#include "zlib.h"
+#include "KFileName.h"
+#define KGL_STREAM_FILE_SIZE 16384
 enum OpenState
 {
 	OPEN_NOT_MODIFIED,
@@ -54,6 +55,16 @@ private:
 };
 class KStreamFile {
 public:
+	KStreamFile()
+	{
+		gzfp = NULL;
+	}
+	~KStreamFile()
+	{
+		if (gzfp) {
+			gzclose(gzfp);
+		}
+	}
 	bool open(const char *file,const char split_char='\n');
 	char *read();
 private:
@@ -61,6 +72,7 @@ private:
 	char buf[KGL_STREAM_FILE_SIZE];
 	char *hot;
 	char split_char;
+	gzFile gzfp;
 	KFile fp;
 };
 #endif /* KLINEFILE_H_ */

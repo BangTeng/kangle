@@ -25,7 +25,7 @@
 #include "http.h"
 #include "KDeChunked.h"
 #include "KHttpTransfer.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #define		CHUNKED_DF_ERROR		-2
 #define		CHUNKED_ERROR			-1
 #define		CHUNKED_CONTINUE		0

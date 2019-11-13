@@ -4,7 +4,7 @@
 #include "KMutex.h"
 #include "KHttpObject.h"
 #include "KObjectList.h"
-#include "KMemPool.h"
+#include "kmalloc.h"
 #ifdef ENABLE_DB_DISK_INDEX
 #include "KDiskCacheIndex.h"
 #endif
@@ -54,7 +54,7 @@ public:
 		if (obj->in_cache == 0) {
 			return;
 		}
-		klog(KLOG_NOTICE, "dead obj=[%p] from [%s:%d]\n", obj, file, line);
+		klog(KLOG_DEBUG, "dead obj=[%p] from [%s:%d]\n", obj, file, line);
 		cacheLock.Lock();
 		assert(obj->list_state != LIST_IN_NONE);
 		SET(obj->index.flags, FLAG_DEAD | OBJ_INDEX_UPDATE);
@@ -65,7 +65,7 @@ public:
 	{
 		return objHash[url_hash].get(rq->url,
 			rq->raw_url.encoding,
-			TEST(rq->workModel, WORK_MODEL_INTERNAL) > 0,
+			rq->ctx->internal,
 			TEST(rq->filter_flags, RF_NO_DISK_CACHE) > 0,
 			rq->min_obj_verified);
 	}
@@ -79,14 +79,15 @@ public:
 		cacheLock.Lock();
 		if (clean_blocked) {
 			cacheLock.Unlock();
-			klog(KLOG_ERR, "clean_blocked add to cache failed\n");
-			return false;
-		}
-		if (!objHash[obj->h].put(obj)) {
-			cacheLock.Unlock();
+			//klog(KLOG_INFO, "clean_blocked add to cache failed\n");
 			return false;
 		}
 		obj->in_cache = 1;
+		if (!objHash[obj->h].put(obj)) {
+			obj->in_cache = 0;
+			cacheLock.Unlock();
+			return false;
+		}
 		objList[list_state].add(obj);
 		count++;
 		cacheLock.Unlock();
@@ -112,12 +113,14 @@ public:
 #endif
 	void flush_mem_to_disk()
 	{
-		objList[LIST_IN_MEM].move(1, true);
+		KBufferFile bf;
+		objList[LIST_IN_MEM].move(&bf,kgl_current_msec,1, true);
 	}
 	bool check_count_limit(INT64 maxMemSize)
 	{
 		int max_count = int(maxMemSize / 1024);
 		cacheLock.Lock();
+		clean_blocked= false;
 		int cache_count = count;
 		if (cache_count <= max_count) {
 			cacheLock.Unlock();
@@ -130,7 +133,7 @@ public:
 		klog(KLOG_ERR, "cache count limit kill count=[%d]\n", kill_count);
 		return true;
 	}
-	void flush(INT64 maxMemSize,INT64 maxDiskSize,bool disk_is_radio)
+	void flush(int64_t last_msec,INT64 maxMemSize,INT64 maxDiskSize,bool disk_is_radio)
 	{
 		INT64 total_size = 0;
 		INT64 kill_mem_size=0,kill_disk_size =0;
@@ -138,16 +141,16 @@ public:
 		check_count_limit(maxMemSize);
 		getSize(total_size, total_disk_size);
 		kill_mem_size = total_size - maxMemSize;
-		objList[LIST_IN_MEM].move(kill_mem_size, true);
+		objList[LIST_IN_MEM].move(&bf, last_msec,kill_mem_size, true);
 #ifdef ENABLE_DISK_CACHE
 		if (disk_is_radio) {
 			kill_disk_size = get_need_free_disk_size((int)(maxDiskSize));
 		} else {
 			kill_disk_size = total_disk_size - maxDiskSize;
 		}
-		objList[LIST_IN_DISK].move(kill_disk_size, false);		
+		objList[LIST_IN_DISK].move(&bf, last_msec,kill_disk_size, false);
 #endif
-		//klog(KLOG_NOTICE, "cache flush, killed memory size=[" INT64_FORMAT "],killed disk size=[" INT64_FORMAT "]\n", kill_mem_size, kill_disk_size);
+		klog(KLOG_NOTICE, "cache flush, killed memory size=[" INT64_FORMAT "],killed disk size=[" INT64_FORMAT "]\n", kill_mem_size, kill_disk_size);
 		return;
 	}
 	void getSize(INT64 &memSize,INT64 &diskSize)
@@ -187,6 +190,10 @@ public:
 		}
 		return count;
 	}
+	bool IsCleanBlocked()
+	{
+		return clean_blocked;
+	}
 	int get_cache_info(KUrl *url,bool wide,KCacheInfo *ci)
 	{
 		int count = 0;
@@ -221,6 +228,21 @@ public:
 		}
 #endif
 		cacheLock.Unlock();
+	}
+	bool IsDiskCacheReady()
+	{
+		if (disk_shutdown) {
+			return false;
+		}
+		if (clean_blocked) {
+			return false;
+		}
+#ifdef ENABLE_DB_DISK_INDEX
+		if (dci == NULL) {
+			return false;
+		}
+#endif
+		return true;
 	}
 	bool is_disk_shutdown()
 	{
@@ -260,7 +282,7 @@ private:
 	KMutex cacheLock;
 	KObjectList objList[2];
 	KHttpObjectHash objHash[HASH_SIZE];
-
+	KBufferFile bf;
 };
 extern KCache cache;
 #endif

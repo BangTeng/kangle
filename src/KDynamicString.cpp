@@ -2,7 +2,7 @@
 #include <map>
 #include "utils.h"
 #include "KDynamicString.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 
 const char *getSystemEnv(const char *name) {
 	if (strncasecmp(name,"env:",4)==0) {

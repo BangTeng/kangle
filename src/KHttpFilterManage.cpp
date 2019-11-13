@@ -2,12 +2,14 @@
 #include "KHttpFilterDsoManage.h"
 #include "KHttpFilterDso.h"
 #include "KConfig.h"
-#include "KSelector.h"
+#include "kselector.h"
 #include "KHttpStream.h"
 #include "KConfig.h"
+#include "http.h"
 #include "KVirtualHostManage.h"
 
 #ifdef ENABLE_KSAPI_FILTER
+#if 0
 KHttpFilterManage::~KHttpFilterManage()
 {
 }
@@ -112,6 +114,7 @@ bool KHttpFilterManage::check_request(KHttpRequest *rq)
 		return true;
 	}
 	if (hook.request->check_request(rq)==JUMP_DENY) {
+#if 0
 		if (rq->send_ctx.getBufferSize()>0 || rq->buffer.getLen() > 0) {
 #ifdef ENABLE_TF_EXCHANGE
 			if (rq->tf) {
@@ -124,6 +127,7 @@ bool KHttpFilterManage::check_request(KHttpRequest *rq)
 			stageWriteRequest(rq);
 			return false;
 		}
+#endif
 		stageEndRequest(rq);
 		return false;
 	}
@@ -157,4 +161,5 @@ void KHttpFilterManage::buildSendStream(KHttpRequest *rq,KHttpStream **head,KHtt
 	}
 	return;
 }
+#endif
 #endif

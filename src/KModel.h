@@ -19,7 +19,6 @@
 #define KMODEL_H_
 #include "KXmlSupport.h"
 #include "KHtmlSupport.h"
-#include "malloc_debug.h"
 #include "KCountable.h"
 
 #define MODEL_ACL 	1

@@ -1,6 +1,7 @@
 #include "KHttpFilterDsoManage.h"
 #include "KHttpFilterDso.h"
 #ifdef ENABLE_KSAPI_FILTER
+#if 0
 int KHttpFilterDsoManage::cur_dso_index = 0;
 KHttpFilterDsoManage::KHttpFilterDsoManage()
 {
@@ -86,4 +87,5 @@ void KHttpFilterDsoManage::html(std::stringstream &s)
 	lock.Unlock();
 	s << "</table>";
 }
+#endif
 #endif

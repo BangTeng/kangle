@@ -22,7 +22,7 @@
  *  Author: KangHongjiu <keengo99@gmail.com>
  */
 #include "KXmlException.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 KXmlException::KXmlException() {
 }
 

@@ -1,8 +1,8 @@
 #include <string.h>
 #include "KHttpAuth.h"
 #include "KHttpRequest.h"
-#include "forwin32.h"
-#include "malloc_debug.h"
+#include "kforwin32.h"
+#include "kmalloc.h"
 static const char *auth_types[] = { "Basic", "Digest" };
 KHttpAuth::~KHttpAuth() {
 	//printf("delete auth now\n");

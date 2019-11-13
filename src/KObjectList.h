@@ -20,7 +20,7 @@ public:
 	void add(KHttpObject *obj);
 	void dead(KHttpObject *obj);
 	void remove(KHttpObject *obj);
-	void move(INT64 size,bool swapout);
+	void move(KBufferFile *bf,int64_t begin_msec,INT64 size,bool swapout);
 	void dead_count(int &count);
 	void dead_all_obj();
 #ifdef ENABLE_DISK_CACHE
@@ -38,7 +38,7 @@ public:
 	void free_all_cache();
 #endif
 private:
-	void swapout(KTempHttpObject *tho, int gc_used_msec);
+	void swapout(KTempHttpObject *tho, KBufferFile *bf, int gc_used_msec);
 	void swapout_result(KTempHttpObject *tho,int gc_used_msec, bool result);
 	void checkList()
 	{

@@ -18,19 +18,19 @@
 #include <string.h>
 #include <stdlib.h>
 #include <vector>
-
+#include <errno.h>
 #include <assert.h>
 #include <stdarg.h>
 #ifdef _WIN32
 #include <direct.h>
 #endif
 #include "KLogElement.h"
-#include "forwin32.h"
-#include "malloc_debug.h"
+#include "kforwin32.h"
+#include "kmalloc.h"
 #include "KLogHandle.h"
 #include "utils.h"
 #include "log.h"
-#include "KSocket.h"
+#include "ksocket.h"
 KLogElement accessLogger;
 KLogElement errorLogger;
 using namespace std;

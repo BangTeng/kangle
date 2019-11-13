@@ -10,9 +10,12 @@
 #ifndef KCHILDLISTEN_H_
 #define KCHILDLISTEN_H_
 #include <string>
-#include "KSelectable.h"
-#include "KSocket.h"
+
+#include "ksocket.h"
 #include "KApiRedirect.h"
+#include "KPipeStream.h"
+#include "KSocketStream.h"
+
 class KChildListen {
 public:
 	KChildListen();
@@ -23,9 +26,9 @@ public:
 			unlink(unix_path.c_str());			
 		}
 	}
-	ReadState canRead();
+	bool canRead();
 	KPipeStream *st;
-	KServerSocket *server;
+	SOCKET sockfd;
 	std::string unix_path;
 };
 extern KChildListen *cl;

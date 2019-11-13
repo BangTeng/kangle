@@ -21,7 +21,6 @@
  *
  *  Author: KangHongjiu <keengo99@gmail.com>
  */
-
 #include "global.h"
 #ifndef _WIN32
 #include <pthread.h>
@@ -31,11 +30,12 @@
 #include <getopt.h>
 #include <sys/time.h>
 #include <sys/resource.h>
-#include "forwin32.h"
+#include <sys/wait.h>
+#include "kforwin32.h"
 #else
 #include <direct.h>
 #include <stdlib.h>
-#include "forwin32.h"
+#include "kforwin32.h"
 #include <Mswsock.h>
 #define _WIN32_SERVICE
 #endif
@@ -49,17 +49,15 @@
 #include "utils.h" 
 #include "do_config.h"
 #include "log.h"
-#include "server.h"
+#include "kserver.h"
 #include "extern.h"
 //#define OPEN_FILE
 #include "http.h"
 #include "cache.h"
 #include "KListenConfigParser.h"
-#include "KThreadPool.h"
+#include "kthread.h"
 #include "KAcserverManager.h"
 #include "KWriteBackManager.h"
-#include "KSelectorManager.h"
-#include "malloc_debug.h"
 #include "KXml.h"
 #include "KVirtualHostManage.h"
 #include "KHttpServerParser.h"
@@ -69,7 +67,6 @@
 #include "KProcessManage.h"
 #include "KGzip.h"
 #include "KLogElement.h"
-#include "KSSIProcess.h"
 #include "api_child.h"
 #include "time_utils.h"
 #include "directory.h"
@@ -80,9 +77,12 @@
 #include "KCdnContainer.h"
 #include "KWriteBackManager.h"
 #include "KDynamicListen.h"
-#include "KAddr.h"
-#include "KMemPool.h"
+#include "kaddr.h"
+#include "kmalloc.h"
 #include "KLogDrill.h"
+#include "ssl_utils.h"
+#include "KSSLSniContext.h"
+#include "WhmPackageManage.h"
 
 
 #ifndef HAVE_DAEMON
@@ -104,9 +104,6 @@ int worker_index = 0;
 bool nodaemon = false;
 bool nofork = false;
 int open_file_limit = 0;
-/*
- * 定义是否以一个cmd扩展运行
- */
 bool cmd_extend = false;
 bool test();
 int GetNumberOfProcessors();
@@ -171,23 +168,17 @@ void checkMemoryLeak()
 	}
 	my_msleep(1000);
 	printf("free all know memory\n");
-	selectorManager.close();
+	selector_manager_close();
 #ifndef HTTP_PROXY
 	conf.gam->killAllProcess();
 #endif
 #ifdef ENABLE_VH_FLOW
 	conf.gvm->dumpFlow();
 #endif
-	int i;
-	for (i = 0; i < 2; i++) {
-		kaccess[i].destroy();
-	}
-	for (size_t j=0;j<conf.service.size();j++) {
-		delete conf.service[j];
-	}
-	conf.service.clear();
+	clean_config();
 	delete conf.sysHost;
 	conf.sysHost = NULL;
+	packageManage.clean();
 	
 #ifndef HTTP_PROXY
 	delete conf.gvm;
@@ -200,28 +191,30 @@ void checkMemoryLeak()
 #ifdef ENABLE_DIGEST_AUTH
 	KHttpDigestAuth::flushSession(kgl_current_sec + 172800);
 #endif
-	cdnContainer.flush(kgl_current_sec + 172800);
+	server_container->Clean();
 	klang.clear();
 	conf.admin_ips.clear();
 	if (conf.dnsWorker) {
-		conf.dnsWorker->release();
+		kasync_worker_release(conf.dnsWorker);
 		conf.dnsWorker = NULL;
 	}
 	if (conf.ioWorker) {
-		conf.ioWorker->release();
+		kasync_worker_release(conf.ioWorker);
 		conf.ioWorker = NULL;
 	}
 	printf("wait for all thread close\n");
+	int work_count, free_count;
 	for (;;) {
-		if (m_thread.get_work_thread_count() == 0) {
+		kthread_get_count(&work_count, &free_count);
+		if (work_count == 0) {
 			break;
 		}
 		my_msleep(100);
 	}
-	selectorManager.destroy();
-	m_thread.closeAllFreeThread();
+	kthread_close_all_free();
 	my_msleep(1500);
-	dump_memory(0, -1);	
+	int leak_count = dump_memory_leak(0, -1);
+	printf("total memory leak count=[%d]\n", leak_count);
 #ifndef _WIN32
 	__libc_freeres();
 #endif
@@ -262,9 +255,6 @@ void shutdown_signal(int sig)
 {
 #ifndef _WIN32
 	if (workerProcess.size() > 0) {
-		/*
-		* 如果是主进程则立即退出。
-		*/
 		killworker(sig);
 		if (sig!=SIGHUP) {
 			quit_program_flag = PROGRAM_QUIT_IMMEDIATE;
@@ -357,8 +347,6 @@ void sigcatch(int sig) {
 		if(workerProcess.size()>0){
 			killworker(sig);
 		} else {
-			//这里不能直接调用do_config，否则会导致死锁.
-			//比如某锁(KThreadPool)在已经lock情况下，收到信号，直接调用do_config会导致二次lock，从而死锁
 			configReload = true;
 		}
 		break;
@@ -440,7 +428,7 @@ bool create_file_path(char *argv0) {
 #ifdef _WIN32
 	conf.extworker += ".exe";
 #endif
-	int p = conf.path.find_last_of(PATH_SPLIT_CHAR);
+	int p = (int)conf.path.find_last_of(PATH_SPLIT_CHAR);
 	if (p > 0) {
 		conf.path = conf.path.substr(0, p + 1);
 	}
@@ -490,7 +478,7 @@ int clean_process_handle(const char *file,void *param)
 	char unix_file[512];
 	FILE *fp = fopen(s.str().c_str(),"rb");
 	if(fp){
-		int len = fread(unix_file,1,sizeof(unix_file)-1,fp);
+		int len = (int)fread(unix_file,1,sizeof(unix_file)-1,fp);
 		if(len>0){
 			unix_file[len] = '\0';
 			unlink(unix_file);
@@ -545,14 +533,11 @@ static int Usage(bool only_version = false) {
 #ifdef ENABLE_SQLITE_DISK_INDEX
 			" sqlite-disk-index"
 #endif
-#ifdef MALLOCDEBUG
-			" malloc-debug"
-#endif
-#ifdef ENABLE_KSAPI_FILTER
-			" ksapi-filter"
-#endif
 #ifndef NDEBUG
 		" debug"
+#endif
+#ifdef MALLOCDEBUG
+		" malloc-debug"
 #endif
 			"\n", getServerType());
 	printf("pcre version: %s\n",pcre_version());
@@ -747,31 +732,21 @@ void init_signal() {
 #ifndef _WIN32
 	umask(0022);
 	signal(SIGPIPE, SIG_IGN);
-	/*
-	 * SIGHUP   用来reload config
-	 */
+
 	signal(SIGHUP, sigcatch);
-	/*
-	 * SIGINT SIGTERM 用来退出程序.
-	 */
+
 	signal(SIGINT, sigcatch);
 	signal(SIGTERM, sigcatch);
-	/*
-	 * SIGUSR1  重新加载vh.xml
-	 */
+
 	signal(SIGUSR1, sigcatch);
-	/*
-	 * SIGUSR2 用来flush flux,用来dump memory
-	 */
+
 	signal(SIGUSR2, sigcatch);
-	/*
-	 * SIGQUIT  用来reboot的。
-	 */
+
 	signal(SIGQUIT, sigcatch);
 	signal(SIGCHLD, SIG_DFL);
 #endif
 }
-//初始化安全进程
+
 void init_safe_process()
 {
 #ifdef KANGLE_ETC_DIR
@@ -805,6 +780,13 @@ bool init_resource_limit(int numcpu)
 	if (open_file_limited < 65536) {
 		open_file_limited = 65536;
 	}
+#ifndef NDEBUG
+	//turn on coredump
+	rlim.rlim_cur = RLIM_INFINITY;	
+	rlim.rlim_max = RLIM_INFINITY;
+	int ret = setrlimit(RLIMIT_CORE,&rlim);
+	klog(KLOG_ERR,"set core dump unlimited ret=[%d]\n",ret);
+#endif
 	if (0==getrlimit(RLIMIT_NOFILE,&rlim)) {
 		if (rlim.rlim_max < open_file_limited) {
 			rlim.rlim_cur = open_file_limited;
@@ -832,7 +814,8 @@ unsigned getpagesize() {
 	return si.dwPageSize;
 }
 #endif
-void init_program() {
+void init_program()
+{
 	//printf("sizeof (rq) = %d\n",sizeof(KHttpRequest));
 #ifdef ENABLE_LOG_DRILL
 	init_log_drill();
@@ -841,7 +824,7 @@ void init_program() {
 	spProcessManage.setName("api:sp");
 	initFastcgiData();
 	kgl_pagesize = getpagesize();
-	init_addr_worker();
+	server_container = new KCdnContainer;
 	int select_count = conf.select_count;
 	if(select_count<=0){
 		select_count = numberCpu;
@@ -850,7 +833,8 @@ void init_program() {
 		}
 	}
 	
-	selectorManager.init(select_count);
+	kgl_addr_init();
+	selector_manager_init(select_count,false);
 }
 
 #ifndef _WIN32
@@ -938,7 +922,7 @@ void StartAll() {
 	init_signal();
 #ifndef _WIN32
 	if (!nodaemon && m_debug == 0) {
-		daemon(0, 0);
+		daemon(1, 0);
 	}
 	save_pid();
 	if (!nofork) {
@@ -947,27 +931,26 @@ void StartAll() {
 	}
 	signal(SIGCHLD, SIG_IGN);
 #endif
-
 #ifdef _WIN32
 	if (worker_index==0) {
 		create_signal_pipe();
 	}
 	if (kflike(shutdown_event) || kflike(signal_pipe)) {
-		m_thread.start(NULL,signal_thread);
+		kthread_start(signal_thread, NULL);
 	}
 	if (worker_index==0) {
 		save_pid();
 	}
 #endif
+	kselector_update_time();
 	updateTime();
 #ifdef KSOCKET_SSL
-	init_ssl();
+	kssl_init(kgl_ssl_npn, kgl_create_ssl_sni, kgl_free_ssl_sni);
 #endif
 	do_config(true);
 	klog_start();
 	m_pid = getpid();
 	parse_config(true);
-	init_program();
 	if (cmd_extend) {
 		//forcmdextend();
 		fprintf(stderr,"don't support cmd extend model\n");
@@ -979,6 +962,9 @@ void StartAll() {
 			break;
 		}
 	}
+#ifndef NDEBUG
+	chdir(conf.path.c_str());
+#endif
 	set_user();
 #ifndef _WIN32
 	my_uid = getuid();
@@ -993,16 +979,16 @@ void StartAll() {
 #endif
 #ifdef ENABLE_TF_EXCHANGE
 	if (worker_index==0) {
-		m_thread.start(NULL,clean_tempfile_thread);
+		kthread_pool_start(clean_tempfile_thread, NULL);
 	}
 #endif
 	dlisten.delayStart();
-	selectorManager.start();
+	selector_manager_start(updateTime);
 	time_thread(NULL);
 #ifdef MALLOCDEBUG
 	checkMemoryLeak();
 #endif
-	KSocket::clean_socket();
+	ksocket_clean();
 }
 void StopAll() {
 	shutdown_signal(0);
@@ -1012,8 +998,9 @@ int main(int argc, char **argv) {
 
 	srand((unsigned) time(NULL));
 	program_rand_value = rand();
-	KSocket::init_socket();
-	KSSIProcess::init();
+	ksocket_startup();
+	kthread_init();
+	//kassert(check_server_size(sizeof(ktest_struct)));
 
 	if (!create_path(argv)) {
 		fprintf(stderr,

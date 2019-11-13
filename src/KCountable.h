@@ -19,7 +19,6 @@
 #define KCOUNTABLE_H_
 #include "global.h"
 #include "KMutex.h"
-#include "malloc_debug.h"
 
 #define KAtomCountable KCountableEx
 

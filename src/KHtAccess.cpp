@@ -14,9 +14,9 @@
 #include "KXml.h"
 #include "KHtRewriteModule.h"
 #include "directory.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KApacheVirtualHost.h"
-#include "KFile.h"
+#include "kfile.h"
 
 struct KApacheConfigFileInclude
 {

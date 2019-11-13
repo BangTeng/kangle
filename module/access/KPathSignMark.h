@@ -13,6 +13,11 @@ public:
 	{
 
 	}
+	bool ReturnWithRewriteParam(KHttpRequest *rq, KStringBuf &np, bool result)
+	{
+		set_url_param(np, rq->url);
+		return result;
+	}
 	bool mark(KHttpRequest *rq, KHttpObject *obj,const int chainJumpType, int &jumpType)
 	{
 		if (rq->url->param==NULL) {
@@ -52,19 +57,19 @@ public:
 			hot = p+1;
 		}
 		if (sign_value==NULL) {
-			return false;
+			return ReturnWithRewriteParam(rq, np, false);
 		}
 		INT64 expire_time =0;
 		if (expire_value==NULL) {
 			expire_value = strchr(sign_value,'-');
 			if (expire_value==NULL) {
-				return false;
+				return ReturnWithRewriteParam(rq, np, false);
 			}
 			expire_value++;
 		}
 		expire_time = string2int(expire_value);		
 		if (expire_time>0 && expire_time < kgl_current_sec) {
-			return false;
+			return ReturnWithRewriteParam(rq, np, false);
 		}
 		KStringBuf s;
 		if (file) {
@@ -72,7 +77,7 @@ public:
 		} else {
 			const char *e = strrchr(rq->raw_url.path,'/');
 			if (e==NULL) {
-				return false;
+				return ReturnWithRewriteParam(rq, np, false);
 			}
 			int len = e - rq->raw_url.path;
 			s.write_all(rq->raw_url.path,len+1);
@@ -82,12 +87,11 @@ public:
 			s << rq->getClientIp();
 		}
 		char expected_sign[33];
-		KMD5(s.getBuf(),expected_sign,s.getSize());
+		KMD5(s.getBuf(), s.getSize(), expected_sign);
 		if (strncasecmp(expected_sign,sign_value,32)!=0) {
-			return false;
+			return ReturnWithRewriteParam(rq, np, false);
 		}
-		set_url_param(np,rq->url);
-		return true;
+		return ReturnWithRewriteParam(rq, np, true);
 	}
 	const char *getName() {
 		return "path_sign";

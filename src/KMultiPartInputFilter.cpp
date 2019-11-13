@@ -1,5 +1,4 @@
 #include "KMultiPartInputFilter.h"
-#include "KHttpProtocolParser.h"
 #include "http.h"
 #include "KUrlParser.h"
 #ifdef ENABLE_INPUT_FILTER
@@ -220,7 +219,12 @@ char *get_hdr_value(KHttpHeader *header,const char *attr)
 	return NULL;
 }
 
-int KMultiPartInputFilter::check(KInputFilterContext *rq,const char *str,int len,bool isLast)
+int KMultiPartInputFilter::check(KInputFilterContext *rq, const char *str, int len, bool isLast)
+{
+	int ret = InternalCheck(rq, str, len, isLast);
+	return ret;
+}
+int KMultiPartInputFilter::InternalCheck(KInputFilterContext *rq, const char *str, int len, bool isLast)
 {
 	if (rq->mb==NULL) {
 		return JUMP_ALLOW;
@@ -228,7 +232,7 @@ int KMultiPartInputFilter::check(KInputFilterContext *rq,const char *str,int len
 	if (str) {
 		rq->mb->add(str,len);
 	}
-	while (!multipart_eof(rq->mb,isLast)) {//->bytes_in_buffer>0) {	
+	while (!multipart_eof(rq->mb,isLast)) {	
 		if (rq->mb->model==MULTIPART_BODY_MODEL) {
 			bool success;
 			if (JUMP_DENY==handleBody(rq,success)) {
@@ -257,16 +261,16 @@ int KMultiPartInputFilter::check(KInputFilterContext *rq,const char *str,int len
 			filename = NULL;
 		}
 		switch(parseHeader(rq)) {
-			case HTTP_PARSE_SUCCESS:
+			case kgl_parse_finished:
 				break;
-			case HTTP_PARSE_FAILED:
+			case kgl_parse_error:
 				delete rq->mb;
 				rq->mb = NULL;
 				return JUMP_ALLOW;
 			default:
 				return JUMP_ALLOW;
 		}
-		if ((cd = get_hdr_value(header, "Content-Disposition"))) {
+		if ((cd = get_hdr_value(hm.header, "Content-Disposition"))) {
 			char *pair = NULL;
 			while (isspace(*cd)) {
 				++cd;
@@ -304,38 +308,43 @@ int KMultiPartInputFilter::check(KInputFilterContext *rq,const char *str,int len
 			if (filename) {
 				KInputFilterHelper<KFileFilterHook> *file = file_head;
 				while (file) {
-					if (JUMP_DENY==file->t->matchFilter(rq,param,param_len,filename,filename_len,header)) {
+					if (JUMP_DENY==file->t->matchFilter(rq,param,param_len,filename,filename_len,hm.header)) {
 						return JUMP_DENY;
 					}
 					file = file->next;
 				}	
 			}
+			if (hm.header) {
+				free_header(hm.header);
+				memset(&hm, 0, sizeof(hm));
+			}
+
 		}
 	}
 	return JUMP_ALLOW;
 }
-int KMultiPartInputFilter::parseHeader(KInputFilterContext *rq)
+kgl_parse_result KMultiPartInputFilter::parseHeader(KInputFilterContext *rq)
 {
-	KHttpProtocolParser parser;
-	char *buf = (char *)malloc(rq->mb->bytes_in_buffer+1);
-	memcpy(buf,rq->mb->buf_begin,rq->mb->bytes_in_buffer);
-	buf[rq->mb->bytes_in_buffer] = '\0';
-	//printf("parse header=[%s]\n",buf);
-	int ret = parser.parse(buf,rq->mb->bytes_in_buffer,NULL);
-	if (HTTP_PARSE_SUCCESS == ret) {
-		rq->mb->model = MULTIPART_BODY_MODEL;
-		int checked = parser.body - buf;
-		rq->mb->buf_begin += checked;
-		rq->mb->bytes_in_buffer -= checked;	
-		if (header) {
-			free_header(header);
-			header = NULL;
+	khttp_parser parser;
+	khttp_parse_result rs;
+	memset(&parser, 0, sizeof(parser));
+	parser.first_same = 1;
+	while (rq->mb->bytes_in_buffer > 0) {
+		memset(&rs, 0, sizeof(rs));
+		kgl_parse_result ret = khttp_parse(&parser, &rq->mb->buf_begin, &rq->mb->bytes_in_buffer, &rs);
+		switch (ret) {
+		case kgl_parse_continue:
+		case kgl_parse_error:
+			return ret;
+		case kgl_parse_success:
+			hm.AddHeader(rs.attr, rs.attr_len, rs.val, rs.val_len);
+			continue;
+		case kgl_parse_finished:
+			rq->mb->model = MULTIPART_BODY_MODEL;
+			return ret;
 		}
-		header = parser.stealHeaders(NULL);
-
 	}
-	free(buf);
-	return ret;
+	return kgl_parse_continue;
 }
 int KMultiPartInputFilter::hookFileContent(KInputFilterContext *fc,const char *buf,int len)
 {

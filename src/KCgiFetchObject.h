@@ -27,6 +27,7 @@
 #include "global.h"
 #include "KSyncFetchObject.h"
 #include "KPipeStream.h"
+#ifdef ENABLE_CGI
 class KCgiRedirect;
 class KCgiFetchObject: public KSyncFetchObject {
 public:
@@ -45,6 +46,6 @@ private:
 	bool readPostData(KHttpRequest *rq);
 	KPipeStream stream;
 	bool cmdModel;
-
 };
+#endif
 #endif /* KCGIFETCHOBJECT_H_ */

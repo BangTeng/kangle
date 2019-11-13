@@ -20,9 +20,8 @@
 #include <string>
 #include <stdlib.h>
 #include "global.h"
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "log.h"
-#include "malloc_debug.h"
 char *base64_encode(char*);
 char *base64_decode(char*);
 char *url_encode(const char *s, size_t len, size_t *new_length);

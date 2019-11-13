@@ -6,11 +6,13 @@
 #include <map>
 #include <string>
 #ifdef ENABLE_KSAPI_FILTER
+#if 0
 typedef BOOL (WINAPI *kgl_filter_init_f)(kgl_filter_version *pVer);
 typedef DWORD (WINAPI *kgl_filter_process_f)(kgl_filter_context *pfc,
 										   DWORD notificationType,
 										   LPVOID pvNotification);
 typedef BOOL (WINAPI *kgl_filter_finit_f)(DWORD dwFlags);
+
 class KHttpFilterDso
 {
 public:
@@ -43,5 +45,6 @@ private:
 	char *orign_filename;
 	KDsoModule dso;
 };
+#endif
 #endif
 #endif

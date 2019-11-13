@@ -25,7 +25,6 @@
 #define KCONFIGBUILDER_H_
 #include<string>
 #include "do_config.h"
-#include "malloc_debug.h"
 class KConfigBuilder
 {
 public:

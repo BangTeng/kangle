@@ -17,37 +17,28 @@ class KAjpFetchObject: public KAsyncFetchObject {
 public:
 	KAjpFetchObject();
 	virtual ~KAjpFetchObject();
-	//int sendHead(KHttpRequest *rq, KHttpObject *obj, time_t lastModified);
-	//void close(KHttpRequest *rq, bool realClose);
-	//bool write(const char *buf, int len);
 protected:
 	//创建发送头到buffer中。
 	void buildHead(KHttpRequest *rq);
 	//解析head
-	Parse_Result parseHead(KHttpRequest *rq,char *data,int len);
+	kgl_parse_result ParseHeader(KHttpRequest *rq, char **data, int *len);
 	//创建post数据到buffer中。
 	void buildPost(KHttpRequest *rq);
-	//读取body数据
-	char *nextBody(KHttpRequest *rq,int &len);
 	//解析body
-	Parse_Result parseBody(KHttpRequest *rq,char *data,int len);
+	StreamState ParseBody(KHttpRequest *rq, char **data, int *len);
 	void appendPostEnd();
 	bool checkContinueReadBody(KHttpRequest *rq)
 	{
 		return !bodyEnd;
 	}
 private:
-	KAjpMessage *parse(char **str,int len);
-	unsigned char parseMessage(KHttpRequest *rq,KAjpMessage *msg);
-	unsigned char ajp_header[4];	
-	int header_len;
-	char *body;
-	char *body_hot;
+	void ReadBodyEnd(KHttpRequest *rq) {
+		bodyEnd = true;
+		expectDone(rq);
+	}
+	bool parse(char **str,int *len, KAjpMessageParser *msg);
+	unsigned char parseMessage(KHttpRequest *rq, KHttpObject *obj, KAjpMessageParser *msg);
 	int body_len;
-	int parsed_len;
-	unsigned char reuse;
-	KAjpMessage *last_msg;
-	char *end;
 	bool bodyEnd;
 };
 

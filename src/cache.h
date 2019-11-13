@@ -28,7 +28,6 @@
 #include <assert.h>
 #include "global.h"
 #include "KMutex.h"
-#include "malloc_debug.h"
 #include "KHttpObject.h"
 #include "KVirtualHost.h"
 #include "KObjectList.h"
@@ -45,7 +44,7 @@
 
 bool saveCacheIndex();
 bool loadCacheIndex();
-FUNC_TYPE FUNC_CALL load_cache_index(void *param);
+KTHREAD_FUNCTION load_cache_index(void *param);
 
 void init_cache();
 void release_obj(KHttpObject *);
@@ -76,15 +75,15 @@ inline bool objCanCache(KHttpRequest *rq,KHttpObject *obj)
 	}
 	return true;
 }
-inline KHttpObject * findHttpObject(KHttpRequest *rq, bool create_flags, bool *new_object) {
-	*new_object = false;
+inline KHttpObject * findHttpObject(KHttpRequest *rq, bool create_flags, KContext *ctx) {
+	ctx->new_object = 0;
 	u_short url_hash = cache.hash_url(rq->url);
 	KHttpObject *obj = cache.find(rq,url_hash);
 	if (obj == NULL && create_flags) {
 		obj = new KHttpObject(rq);
 		//cache the url_hash
 		obj->h = url_hash;
-		*new_object = true;		
+		ctx->new_object = 1;	
 	}
 	return obj;
 }

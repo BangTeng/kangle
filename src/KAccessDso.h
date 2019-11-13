@@ -3,25 +3,29 @@
 #include "KMark.h"
 #include "KAcl.h"
 #include "ksapi.h"
-#include "KHttpFilterDso.h"
+#include "KDsoExtend.h"
+#include "KAccessDsoSupport.h"
+#include "KBufferFetchObject.h"
+
 #ifdef ENABLE_KSAPI_FILTER
 class KAccessDso
 {
 public:
-	KAccessDso(kgl_access *access,KHttpFilterDso *dso,int notify_type)
+	KAccessDso(kgl_access *access, KDsoExtend *dso,int notify_type)
 	{
 		this->access = access;
 		this->dso = dso;
-		ctx = access->create_ctx();
+		init_access_dso_suuport(&ctx,notify_type);
+		ctx.model_ctx = access->create_ctx();
 		this->notify_type = notify_type;
 	}
 	~KAccessDso()
 	{
-		if  (ctx)  {
-			access->free_ctx(ctx);
+		if  (ctx.model_ctx)  {
+			access->free_ctx(ctx.model_ctx);
 		}
 	}
-	DWORD process(KHttpRequest *rq, KHttpObject *obj);
+	KF_STATUS_TYPE process(KAccessRequest *rq,DWORD notify);
 	KAccessDso *newInstance()
 	{
 		return new KAccessDso(access,dso,notify_type);
@@ -35,11 +39,13 @@ public:
 	void editHtml(std::map<std::string, std::string> &attribute)
 			throw (KHtmlSupportException);
 	void buildXML(std::stringstream &s);
+	friend class KAccessDsoMark;
+	friend class KAccessDsoAcl;
 private:
 	std::string build(KF_ACCESS_BUILD_TYPE type);
-	void *ctx;
+	kgl_access_context ctx;
 	kgl_access *access;
-	KHttpFilterDso *dso;
+	KDsoExtend *dso;
 	int notify_type;
 };
 class KAccessDsoMark : public KMark
@@ -55,7 +61,8 @@ public:
 	}
 	bool mark(KHttpRequest *rq, KHttpObject *obj,const int chainJumpType, int &jumpType)
 	{
-		switch (ad->process(rq,obj)) {
+		KAccessRequest ar(rq);
+		switch (ad->process(&ar,obj? KF_NOTIFY_RESPONSE_MARK:KF_NOTIFY_REQUEST_MARK)) {
 		case KF_STATUS_REQ_ACCESS_TRUE:
 			return true;
 		case KF_STATUS_REQ_ACCESS_FALSE:
@@ -63,6 +70,16 @@ public:
 		case KF_STATUS_REQ_FINISHED:
 			SET(rq->flags, RQ_CONNECTION_CLOSE);
 		default:
+			if (ar.buffer) {
+				kassert(TEST(ad->notify_type, KF_NOTIFY_RESPONSE_MARK | KF_NOTIFY_RESPONSE_ACL ) == 0);
+				rq->closeFetchObject();				
+				rq->responseConnection();
+				rq->responseHeader(kgl_expand_string("Content-Length"), ar.buffer->getLen());
+				rq->fetchObj = new KBufferFetchObject(ar.buffer);
+				if (rq->status_code == 0) {
+					rq->responseStatus(STATUS_OK);
+				}
+			}
 			jumpType = JUMP_FINISHED;
 			return true;
 		}
@@ -108,10 +125,17 @@ public:
 	}
 	bool match(KHttpRequest *rq, KHttpObject *obj)
 	{
-		if (KF_STATUS_REQ_ACCESS_FALSE==ad->process(rq,obj)) {
+		KAccessRequest ar(rq);
+		KF_STATUS_TYPE ret = ad->process(&ar, obj ? KF_NOTIFY_RESPONSE_ACL : KF_NOTIFY_REQUEST_ACL);
+		switch (ret) {
+		case KF_STATUS_REQ_ACCESS_FALSE:
 			return false;
+		case KF_STATUS_REQ_ACCESS_TRUE:
+			return true;
+		default:
+			klog(KLOG_ERR, "access dso [%s] process result=[%d] is illegal.\n", this->getName(), ret);
 		}
-		return true;
+		return false;
 	}
 	KAcl *newInstance()
 	{

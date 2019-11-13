@@ -18,20 +18,21 @@
 #include <string.h>
 #include <stdlib.h>
 #include <vector>
-#include "KSocket.h"
+#include "ksocket.h"
 #include "KAcserver.h"
 #include "KAcserverManager.h"
 #include "KSingleAcserver.h"
-#include "KSSIRedirect.h"
 #include "KAccess.h"
 #include "utils.h"
 #include <sstream>
 #include "lang.h"
 #include <stdlib.h>
 #include <stdio.h>
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KCdnContainer.h"
-#include "KSelectorManager.h"
+#include "kselector_manager.h"
+#include "KDsoExtendManage.h"
+
 using namespace std;
 KAcserverManager::KAcserverManager() {
 #ifdef ENABLE_MULTI_SERVER
@@ -68,11 +69,13 @@ KAcserverManager::~KAcserverManager() {
 		(*it4).second->release();
 	}
 	apis.clear();
+#ifdef ENABLE_CGI
 	std::map<std::string,KCgiRedirect *>::iterator it5;
 	for(it5=cgis.begin();it5!=cgis.end();it5++){
 		(*it5).second->release();
 	}
 	cgis.clear();
+#endif
 	if (cur_mserver) {
 		cur_mserver->release();
 	}
@@ -276,6 +279,7 @@ bool KAcserverManager::cmdForm(std::map<std::string, std::string> &attribute,
 	return result;
 }
 #endif
+#ifdef ENABLE_CGI
 bool KAcserverManager::cgiForm(std::map<std::string, std::string> &attribute,
 		std::string &errMsg) {
 	string name = attribute["name"];
@@ -312,6 +316,7 @@ bool KAcserverManager::cgiForm(std::map<std::string, std::string> &attribute,
 	lock.WUnlock();
 	return result;
 }
+#endif
 bool KAcserverManager::apiForm(std::map<std::string, std::string> &attribute,
 		std::string &errMsg) {
 	string name = attribute["name"];
@@ -341,7 +346,6 @@ bool KAcserverManager::apiForm(std::map<std::string, std::string> &attribute,
 			rd->type = WORK_TYPE_AUTO;
 		}
 		if (rd->apiFile != file) {
-			rd->dso.detachProcess();
 			rd->dso.unload();
 			result = rd->load(file);
 			errMsg = "cann't load api";
@@ -477,6 +481,7 @@ std::string KAcserverManager::cmdList(std::string name) {
 		s << "checked";
 	}
 	s << ">ajp";
+#if 0
 	//uwsgi
 	s << "<input type='radio' name='proto' value='uwsgi' ";
 	if(m_a && m_a->proto == Proto_uwsgi){
@@ -495,6 +500,7 @@ std::string KAcserverManager::cmdList(std::string name) {
 		s << "checked";
 	}
 	s << ">hmux";
+#endif
 	
 	s << "<br>";
 	s << klang["lang_life_time"] << "<input name='life_time' size=5 value=" << (m_a ? m_a->lifeTime : 0) << ">";
@@ -513,6 +519,7 @@ std::string KAcserverManager::cmdList(std::string name) {
 	return s.str();
 }
 #endif
+#ifdef ENABLE_CGI
 std::string KAcserverManager::cgiList(std::string name) {
 	stringstream s;
 	s << "<table border=1><tr><td>" << LANG_OPERATOR << "</td><td>";
@@ -567,6 +574,7 @@ std::string KAcserverManager::cgiList(std::string name) {
 	lock.RUnlock();
 	return s.str();
 }
+#endif
 std::string KAcserverManager::acserverList(std::string name) {
 	stringstream s;
 	std::map<std::string,KSingleAcserver *>::iterator it;
@@ -592,7 +600,7 @@ std::string KAcserverManager::acserverList(std::string name) {
 		s << "</td><td>" << m_a->refs << "</td><td>";
 		s << m_a->sockHelper->host << "</td>";
 		s << "<td>" ;
-		if (m_a->sockHelper->isUnix) 
+		if (m_a->sockHelper->is_unix)
 			s << "-";
 		else 
 			s << m_a->sockHelper->port;
@@ -725,6 +733,7 @@ std::vector<std::string> KAcserverManager::getAllTarget() {
 		targets.push_back(s.str());
 	}
 #endif
+#ifdef ENABLE_CGI
 	std::map<std::string,KCgiRedirect *>::iterator it4;
 	for (it4 = cgis.begin(); it4 != cgis.end(); it4++) {
 		s.str("");
@@ -732,8 +741,11 @@ std::vector<std::string> KAcserverManager::getAllTarget() {
 		targets.push_back(s.str());
 	}
 	targets.push_back("cgi");
-	targets.push_back("ssi");
-
+#endif
+	if (conf.dem) {
+		conf.dem->ListTarget(targets);
+	}
+	//targets.push_back("ssi");
 	lock.RUnlock();
 	return targets;
 }
@@ -776,6 +788,41 @@ KPoolableRedirect *KAcserverManager::refsAcserver(std::string name) {
 	lock.RUnlock();
 	return ac;
 }
+#ifdef ENABLE_CGI
+bool KAcserverManager::cgiEnable(std::string name, bool enable) {
+	bool result = false;
+	lock.WLock();
+	KCgiRedirect *rd = getCgiRedirect(name);
+	if (rd) {
+		rd->enable = enable;
+		result = true;
+	}
+	lock.WUnlock();
+	return result;
+}
+bool KAcserverManager::newCgiRedirect(std::string name, std::string cmd,
+	std::string arg, std::string env, std::string env_split,
+	std::string &err_msg) {
+	if (getCgiRedirect(name)) {
+		return false;
+	}
+
+	KCgiRedirect *rd = new KCgiRedirect(cmd.c_str());
+	rd->name = name;
+	rd->setArg(arg);
+	rd->setEnv(env, env_split);
+	cgis.insert(std::pair<std::string, KCgiRedirect *>(rd->name, rd));
+	return true;
+}
+
+KCgiRedirect *KAcserverManager::getCgiRedirect(std::string name) {
+	std::map<std::string, KCgiRedirect *>::iterator it;
+	it = cgis.find(name);
+	if (it != cgis.end()) {
+		return (*it).second;
+	}
+	return NULL;
+}
 KCgiRedirect *KAcserverManager::refsCgiRedirect(std::string name) {
 	lock.RLock();
 	KCgiRedirect *ac = getCgiRedirect(name);
@@ -785,6 +832,7 @@ KCgiRedirect *KAcserverManager::refsCgiRedirect(std::string name) {
 	lock.RUnlock();
 	return ac;
 }
+#endif
 #ifdef ENABLE_MULTI_SERVER
 KMultiAcserver * KAcserverManager::getMultiAcserver(std::string table_name) {
 	std::map<std::string,KMultiAcserver *>::iterator it = mservers.find(table_name);
@@ -912,6 +960,7 @@ bool KAcserverManager::delCmd(std::string name, std::string &err_msg) {
 	return true;
 }
 #endif
+#ifdef ENABLE_CGI
 bool KAcserverManager::delCgi(std::string name, std::string &err_msg) {
 	err_msg = LANG_TABLE_NAME_ERR;
 	lock.WLock();
@@ -930,6 +979,7 @@ bool KAcserverManager::delCgi(std::string name, std::string &err_msg) {
 	lock.WUnlock();
 	return true;
 }
+#endif
 #ifdef ENABLE_MULTI_SERVER
 bool KAcserverManager::delMAcserver(std::string name, std::string &err_msg) {
 	err_msg = LANG_TABLE_NAME_ERR;
@@ -988,24 +1038,21 @@ KRedirect *KAcserverManager::refsRedirect(std::string target) {
 					*p = '\0';
 					life_time = atoi(p+1);
 				}
-				rd = cdnContainer.refsRedirect(NULL,host,port,NULL,life_time,KPoolableRedirect::parseProto(tmp));
+				rd = server_container->refsRedirect(NULL,host,port,NULL,life_time,KPoolableRedirect::parseProto(tmp));
 			}
 		}
 		free(tmp);
 		return rd;
 	}
+#ifdef ENABLE_CGI
 	if (strcasecmp(target.c_str(), "cgi") == 0 || strcasecmp(target.c_str(),
 			"cgi:") == 0) {
 		globalCgi.addRef();
 		return &globalCgi;
 	}
-	if (strcasecmp(target.c_str(), "ssi") == 0 || strcasecmp(target.c_str(),
-			"ssi:") == 0) {
-		ssi.addRef();
-		return &ssi;
-	}
+#endif
 	if (!kaccess[REQUEST].parseChainAction(target, jumpType, name)) {
-		debug("cann't parse target=[%s]\n", target.c_str());
+		klog(KLOG_ERR,"cann't parse target=[%s]\n", target.c_str());
 		return NULL;
 	}
 	switch (jumpType) {
@@ -1013,14 +1060,20 @@ KRedirect *KAcserverManager::refsRedirect(std::string target) {
 		return refsMultiAcserver(name);
 	case JUMP_SERVER:
 		return refsAcserver(name);
+#ifdef ENABLE_CGI
 	case JUMP_CGI:
 		return refsCgiRedirect(name);
+#endif
 	case JUMP_API:
 		return refsApiRedirect(name);
 #ifdef ENABLE_VH_RUN_AS
 	case JUMP_CMD:
 		return refsCmdRedirect(name);
 #endif
+	case JUMP_DSO:
+		if (conf.dem) {
+			return conf.dem->RefsRedirect(name);
+		}
 	}
 	return NULL;
 }
@@ -1052,7 +1105,7 @@ bool KAcserverManager::newApiRedirect(std::string name, std::string file,
 	}
 	apis.insert(std::pair<std::string,KApiRedirect *>(rd->name,rd));
 	rd->setFile(file);
-	if (selectorManager.isInit()) {
+	if (is_selector_manager_init()) {
 		if (!rd->load()) {
 			return false;
 		}
@@ -1096,17 +1149,7 @@ bool KAcserverManager::cmdEnable(std::string name, bool enable) {
 	return result;
 }
 #endif
-bool KAcserverManager::cgiEnable(std::string name, bool enable) {
-	bool result = false;
-	lock.WLock();
-	KCgiRedirect *rd = getCgiRedirect(name);
-	if (rd) {
-		rd->enable = enable;
-		result = true;
-	}
-	lock.WUnlock();
-	return result;
-}
+
 #ifdef ENABLE_VH_RUN_AS
 KCmdPoolableRedirect *KAcserverManager::newCmdRedirect(
 		std::map<std::string, std::string> &attribute, std::string &errMsg) {
@@ -1123,29 +1166,8 @@ KCmdPoolableRedirect *KAcserverManager::newCmdRedirect(
 	return rd;
 }
 #endif
-bool KAcserverManager::newCgiRedirect(std::string name, std::string cmd,
-		std::string arg, std::string env, std::string env_split,
-		std::string &err_msg) {
-	if (getCgiRedirect(name)) {
-		return false;
-	}
 
-	KCgiRedirect *rd = new KCgiRedirect(cmd.c_str());
-	rd->name = name;
-	rd->setArg(arg);
-	rd->setEnv(env, env_split);
-	cgis.insert(std::pair<std::string,KCgiRedirect *>(rd->name,rd));
-	return true;
-}
 
-KCgiRedirect *KAcserverManager::getCgiRedirect(std::string name) {
-	std::map<std::string,KCgiRedirect *>::iterator it;
-	it = cgis.find(name);
-	if (it!=cgis.end()) {
-		return (*it).second;
-	}
-	return NULL;
-}
 #ifdef ENABLE_VH_RUN_AS
 KCmdPoolableRedirect *KAcserverManager::getCmdRedirect(std::string name) {
 	std::map<std::string,KCmdPoolableRedirect *>::iterator it;
@@ -1224,6 +1246,7 @@ bool KAcserverManager::startElement(std::string &context, std::string &qName,
 	}
 #endif
 #ifndef HTTP_PROXY
+#ifdef ENABLE_CGI
 	if (qName == "cgi") {
 		if (!newCgiRedirect(attribute["name"], attribute["cmd"],
 				attribute["arg"], attribute["env"], attribute["env_split"],
@@ -1232,6 +1255,7 @@ bool KAcserverManager::startElement(std::string &context, std::string &qName,
 		}
 		return true;
 	}
+#endif
 	if (qName == "api") {
 		string name = attribute["name"];
 		string file = attribute["file"];
@@ -1344,6 +1368,7 @@ void KAcserverManager::buildXML(std::stringstream &s, int flag) {
 	}
 #endif
 	s << "\t<!--server end-->\n";
+#ifdef ENABLE_CGI
 	s << "\t<!--cgi start-->\n";
 	std::map<std::string,KCgiRedirect *>::iterator it3;
 	for (it3 = cgis.begin(); it3 != cgis.end(); it3++) {
@@ -1353,6 +1378,7 @@ void KAcserverManager::buildXML(std::stringstream &s, int flag) {
 		(*it3).second->buildXML(s);
 	}
 	s << "\t<!--cgi end-->\n";
+#endif
 	s << "\t<!--api start-->\n";
 	std::map<std::string,KApiRedirect *>::iterator it4;
 	for (it4 = apis.begin(); it4 != apis.end(); it4++) {
@@ -1379,63 +1405,13 @@ void KAcserverManager::copy(KAcserverManager &a)
 {
 	lock.WLock();
 	apis.swap(a.apis);
+#ifdef ENABLE_CGI
 	cgis.swap(a.cgis);
+#endif
 	mservers.swap(a.mservers);
 	acservers.swap(a.acservers);
 #ifdef ENABLE_VH_RUN_AS
 	cmds.swap(a.cmds);
 #endif
-	/*
-	std::map<std::string,KMultiAcserver *>::iterator it,it2;
-	std::map<std::string,KMultiAcserver *> tmservers = mservers;
-	mservers.clear();
-	for (it=a.mservers.begin();it!=a.mservers.end();it++) {
-		it2 = tmservers.find((*it).first);
-		if (it2!=tmservers.end() && !(*it2).second->isChanged((*it).second) ) {
-			mservers.insert(std::pair<std::string,KMultiAcserver *>((*it).first,(*it2).second));
-			(*it2).second->addRef();
-		} else {
-			mservers.insert(std::pair<std::string,KMultiAcserver *>((*it).first,(*it).second));
-			(*it).second->addRef();
-		}
-	}
-	for (it=tmservers.begin();it!=tmservers.end();it++) {
-		(*it).second->release();
-	}
-
-	std::map<std::string,KSingleAcserver *>::iterator it3,it4;
-	std::map<std::string,KSingleAcserver *> tservers = acservers;
-	acservers.clear();
-	for (it3=a.acservers.begin();it3!=a.acservers.end();it3++) {
-		it4 = tservers.find((*it3).first);
-		if (it4!=tservers.end() && !(*it4).second->isChanged((*it3).second) ) {
-			acservers.insert(std::pair<std::string,KSingleAcserver *>((*it3).first,(*it4).second));
-			(*it4).second->addRef();
-		} else {
-			acservers.insert(std::pair<std::string,KSingleAcserver *>((*it3).first,(*it3).second));
-			(*it3).second->addRef();
-		}
-	}
-	for (it3=tservers.begin();it3!=tservers.end();it3++) {
-		(*it3).second->release();
-	}
-
-	std::map<std::string,KCmdPoolableRedirect *>::iterator it5,it6;
-	std::map<std::string,KCmdPoolableRedirect *> tcmds = cmds;
-	cmds.clear();
-	for (it5=a.cmds.begin();it5!=a.cmds.end();it5++) {
-		it6 = tcmds.find((*it5).first);
-		if (it6!=tcmds.end() && !(*it6).second->isChanged((*it5).second) ) {
-			cmds.insert(std::pair<std::string,KCmdPoolableRedirect *>((*it5).first,(*it6).second));
-			(*it6).second->addRef();
-		} else {
-			cmds.insert(std::pair<std::string,KCmdPoolableRedirect *>((*it5).first,(*it5).second));
-			(*it5).second->addRef();
-		}
-	}
-	for (it5=tcmds.begin();it5!=tcmds.end();it5++) {
-		(*it5).second->release();
-	}
-	*/
 	lock.WUnlock();
 }

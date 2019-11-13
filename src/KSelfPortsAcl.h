@@ -16,7 +16,11 @@ public:
 		return "self_ports";
 	}
 	bool match(KHttpRequest *rq, KHttpObject *obj) {
-		return KMultiIntAcl::match(rq->c->socket->get_self_port());
+		sockaddr_i addr;
+		if (!rq->sink->GetSelfAddr(&addr)) {
+			return false;
+		}
+		return KMultiIntAcl::match(ksocket_addr_port(&addr));
 	}
 };
 class KListenPortsAcl: public KMultiIntAcl {
@@ -33,7 +37,7 @@ public:
 		return "listen_ports";
 	}
 	bool match(KHttpRequest *rq, KHttpObject *obj) {
-		return KMultiIntAcl::match(rq->c->ls->port);
+		return KMultiIntAcl::match(ksocket_addr_port(&rq->sink->GetBindServer()->addr));
 	}
 };
 #endif

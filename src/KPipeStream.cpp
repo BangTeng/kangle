@@ -13,9 +13,10 @@
 #include <stdio.h>
 #include "log.h"
 #include "KPipeStream.h"
-#include "forwin32.h"
+#include "kforwin32.h"
+#include "ksocket.h"
 #include "utils.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 using namespace std;
 KPipeStream::KPipeStream() {
 	fd[0] = fd[1] = INVALIDE_PIPE;
@@ -119,7 +120,7 @@ bool KPipeStream::create(PIPE_T *fd) {
 }
 int KPipeStream::read(char *buf, int len) {
 
-	if (!waitForRW(fd[READ_PIPE], false, tmo)) {
+	if (!wait_socket_event(fd[READ_PIPE], false, tmo)) {
 		killChild();
 	}
 	return ::read(fd[READ_PIPE], buf, len);
@@ -127,7 +128,7 @@ int KPipeStream::read(char *buf, int len) {
 }
 int KPipeStream::write(const char *buf, int len) {
 	
-	if (!waitForRW(fd[WRITE_PIPE], true, tmo)) {
+	if (!wait_socket_event(fd[WRITE_PIPE], true, tmo)) {
 		killChild();
 	}
 	return ::write(fd[WRITE_PIPE], buf, len);
@@ -139,7 +140,7 @@ void KPipeStream::killChild() {
 bool KPipeStream::writeString(const char *str) {
 	int len = 0;
 	if (str) {
-		len = strlen(str);
+		len = (int)strlen(str);
 	}
 	if (!write_all((char *) &len, sizeof(len))) {
 		return false;

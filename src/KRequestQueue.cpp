@@ -1,43 +1,43 @@
 #include <string.h>
 #include <string>
 #include "KRequestQueue.h"
-#include "KThreadPool.h"
-#include "KSelectable.h"
+#include "kthread.h"
+#include "kselectable.h"
 #include "http.h"
-#include "KSelector.h"
-#include "malloc_debug.h"
+#include "kselector.h"
+#include "kmalloc.h"
 #ifdef ENABLE_REQUEST_QUEUE
 KRequestQueue globalRequestQueue;
-inline void stage_async_need_queue(KHttpRequest *rq)
+inline kev_result stage_async_need_queue(KHttpRequest *rq)
 {
 	rq->begin_time_msec = kgl_current_msec;
-	rq->fetchObj->open(rq);
+	rq->sink->RemoveSync();
+	return rq->fetchObj->open(rq);
 }
-void resultQueuedRequestTimeOut(void *arg,int got)
+kev_result resultQueuedRequestTimeOut(void *arg,int got)
 {
 	KHttpRequest *rq = (KHttpRequest *)arg;
 	if (got<0) {
 		SET(rq->flags,RQ_CONNECTION_CLOSE);
-		stageEndRequest(rq);
-		return;
+		return stageEndRequest(rq);
 	}
 	rq->closeFetchObject();
-	send_error(rq,NULL,STATUS_SERVICE_UNAVAILABLE,"Server is busy");
+	return send_error(rq,NULL,STATUS_SERVICE_UNAVAILABLE,"Server is busy");
 }
 bool checkQueuedRequestTimeOut(KHttpRequest *rq)
 {
 	if (kgl_current_msec - rq->begin_time_msec > conf.time_out * 1000) {
 		CLR(rq->flags,RQ_SYNC);
-		rq->c->selector->next(resultQueuedRequestTimeOut,rq);
+		kgl_selector_module.next(rq->sink->GetSelector(),resultQueuedRequestTimeOut,rq,0);
 		return true;
 	}
 	return false;
 }
-void resultAsyncNextRequest(void *arg,int got)
+kev_result resultAsyncNextRequest(void *arg,int got)
 {
 	KHttpRequest *rq = (KHttpRequest *)arg;
 	assert(rq->fetchObj && !rq->fetchObj->isSync());
-	stage_async_need_queue(rq);
+	return stage_async_need_queue(rq);
 }
 
 void async_queue_destroy(KRequestQueue *queue)
@@ -51,18 +51,18 @@ void async_queue_destroy(KRequestQueue *queue)
 		return;
 	}
 	assert(rq->queue == queue);
-	if (TEST(rq->flags,RQ_SYNC)) {
-		if(!m_thread.start(rq,stage_sync)){
+	if (TEST(rq->flags,RQ_SYNC)) {		
+		if(!kthread_pool_start(stage_sync, rq)){
 			rq->queue = NULL;
 			SET(rq->flags,RQ_CONNECTION_CLOSE);
 			queue->decWorker();
 			stageEndRequest(rq);
 		}
 	} else {
-		rq->c->selector->next(resultAsyncNextRequest,rq);
+		kgl_selector_module.next(rq->sink->GetSelector(),resultAsyncNextRequest,rq,0);
 	}
 }
-FUNC_TYPE FUNC_CALL thread_queue(void *param)
+KTHREAD_FUNCTION thread_queue(void *param)
 {
 	//debug("thread_queue process %p...\n",param);
 	KHttpRequest *rq = (KHttpRequest *)param;	
@@ -106,7 +106,7 @@ bool KRequestQueue::startDirect(KHttpRequest *rq)
 		stage_async_need_queue(rq);
 		return true;
 	}
-	return m_thread.start(rq,thread_queue);	
+	return kthread_pool_start(thread_queue, rq);
 }
 bool KRequestQueue::start(KHttpRequest *rq)
 {
@@ -129,14 +129,14 @@ bool KRequestQueue::start(KHttpRequest *rq)
 		if(max_queue == 0 || queue.size() < max_queue){
 			//printf("add to queue..............\n");
 #ifndef NDEBUG
-			klog(KLOG_DEBUG,"add %p to queue\n",(KSelectable *)rq);
+			klog(KLOG_DEBUG,"add %p to queue\n",rq);
 #endif
 			rq->setState(STATE_QUEUE);
 			queue.push_back(rq);
 			result = true;
 			if(!TEST(rq->flags,RQ_SYNC)){
 				//in queue
-				rq->c->add_sync(rq);
+				rq->sink->AddSync();
 			}
 		}
 	}

@@ -2,7 +2,7 @@
 #ifdef ENABLE_LOG_DRILL
 #include "KMutex.h"
 #include "KConfig.h"
-#include "KFile.h"
+#include "kfile.h"
 #include "KHttpRequest.h"
 #include "KVirtualHost.h"
 /*

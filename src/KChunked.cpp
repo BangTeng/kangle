@@ -1,7 +1,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "KChunked.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 KChunked::KChunked(KWStream *st,bool autoDelete) : KHttpStream(st,autoDelete)
 {
 	firstPackage = true;

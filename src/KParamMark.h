@@ -32,8 +32,7 @@ public:
 	{
 		release();
 	}
-	 bool mark(KHttpRequest *rq, KHttpObject *obj,
-			const int chainJumpType, int &jumpType)
+	 bool mark(KHttpRequest *rq, KHttpObject *obj,const int chainJumpType, int &jumpType)
 	{
 		KInputFilterContext *if_ctx = rq->getInputFilterContext();
 		if (if_ctx) {

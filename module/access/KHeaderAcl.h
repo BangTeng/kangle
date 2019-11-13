@@ -20,10 +20,11 @@
 #include "KAcl.h"
 #include "KReg.h"
 #include "KXml.h"
+#include "KMultiAcl.h"
 class KHeaderAcl: public KAcl {
 public:
 	KHeaderAcl() {
-		usereg = true;
+		nc = true;
 	}
 	virtual ~KHeaderAcl() {
 	}
@@ -39,11 +40,11 @@ public:
 		if (urlAcl) {
 			s << urlAcl->reg.getModel();
 		}
-		s << "'>\n<input type=checkbox name='regex' value='1' ";
-		if (urlAcl == NULL || urlAcl->usereg) {
+		s << "'>\n<input type=checkbox name='nc' value='1' ";
+		if (urlAcl == NULL || urlAcl->nc) {
 			s << "checked";
 		}
-		s << ">regex";
+		s << ">nc";
 		return s.str();
 	}
 	const char *getName() {
@@ -51,19 +52,10 @@ public:
 	}
 	bool matchHeader(KHttpHeader *next) {
 		while (next) {
-			if (strcasecmp(next->attr, header.c_str()) == 0) {
-				if (usereg) {
-					if (reg.match(next->val, strlen(next->val), 0) >= 0) {
-						return true;
-					}
-					return false;
-				} else {
-					if (strncasecmp(next->val, reg.getModel(), regLen) == 0) {
-						return true;
-					} else {
-						return false;
-					}
-				}
+			if (strcasecmp(next->attr, header.c_str()) == 0) {				
+				if (reg.match(next->val, next->val_len, 0) >= 0) {
+					return true;
+				}		
 			}
 			next = next->next;
 		}
@@ -72,54 +64,89 @@ public:
 	std::string getDisplay() {
 		std::stringstream s;
 		s << header << "/" << reg.getModel();
-		if (usereg) {
-			s << " [regex]";
+		if (nc) {
+			s << " [nc]";
 		}
 		return s.str();
 	}
 	void editHtml(std::map<std::string, std::string> &attribute)
 			throw (KHtmlSupportException) {
 		header = attribute["header"];
-		if (attribute["regex"] == "1") {
-			usereg = true;
-		} else {
-			usereg = false;
-		}
-		reg.setModel(attribute["val"].c_str(), 0);
-
+		nc = attribute["nc"] == "1";
+		reg.setModel(attribute["val"].c_str(), nc ? PCRE_CASELESS : 0);
 		regLen = strlen(reg.getModel());
-
-	}
-	bool startElement(KXmlContext *context,
-			std::map<std::string, std::string> &attribute) {
-		header = attribute["header"];
-		if (attribute["regex"] == "1") {
-			usereg = true;
-		} else {
-			usereg = false;
-		}
-		return true;
 	}
 	bool startCharacter(KXmlContext *context, char *character, int len) {
-		//	printf("character=%s\n",character);
-		if(len>0){
-			reg.setModel(character, 0);
+		if (len>0) {
+			reg.setModel(character, nc?PCRE_CASELESS:0);
 			regLen = strlen(reg.getModel());
 		}
 		return true;
 	}
 	void buildXML(std::stringstream &s) {
-		s << "header='" << KXml::param(header.c_str()) << "' ";
-		if (usereg) {
-			s << "regex='1'";
-		}
+		s << "header='" << KXml::param(header.c_str()) << "' nc='" << (nc?1:0) << "'";
 		s << ">" << CDATA_START << reg.getModel() << CDATA_END;
 	}
 private:
 	std::string header;
 	KReg reg;
 	int regLen;
-	bool usereg;
+	bool nc;
 };
-
+class KHeaderMapAcl : public KMultiAcl {
+public:
+	KHeaderMapAcl() {
+		
+	}
+	virtual ~KHeaderMapAcl() {
+	}
+	std::string getHtml(KModel *model) {
+		std::stringstream s;
+		s << "name:<input name=name value='";
+		KHeaderMapAcl *urlAcl = (KHeaderMapAcl *)(model);
+		if (urlAcl) {
+			s << urlAcl->name;
+		}
+		s << "'>value:" << KMultiAcl::getHtml(model);
+		return s.str();
+	}
+	KAcl *newInstance()
+	{
+		return new KHeaderMapAcl;
+	}
+	const char *getName() {
+		return "header_map";
+	}
+	bool match(KHttpRequest *rq, KHttpObject *obj) {
+		KHttpHeader *header = rq->GetHeader();
+		std::map<std::string, bool>::iterator it;
+		while (header) {
+			if (strcasecmp(header->attr, name.c_str()) == 0) {
+				if (KMultiAcl::match(header->val)) {
+					return true;
+				}
+			}
+			header = header->next;
+		}
+		return false;
+	}
+	std::string getDisplay() {
+		std::stringstream s;
+		s << name << ":" << KMultiAcl::getDisplay();
+		return s.str();
+	}
+	void editHtml(std::map<std::string, std::string> &attribute)
+		throw (KHtmlSupportException) {
+		name = attribute["name"];
+		KMultiAcl::editHtml(attribute);
+	}
+	
+	void buildXML(std::stringstream &s) {
+		s << "name='" << KXml::param(name.c_str()) << "' ";
+		KMultiAcl::buildXML(s);
+	}
+private:
+	std::string name;
+	
+};
 #endif /*KHEADERACL_H_*/

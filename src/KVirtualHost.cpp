@@ -37,12 +37,12 @@
 #include "cache.h"
 #include "lib.h"
 #include "utils.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KApiRedirect.h"
 #include "KApiPipeStream.h"
 #include "KTempleteVirtualHost.h"
 #include "KHttpFilterManage.h"
-#include "server.h"
+#include "extern.h"
 volatile bool cur_config_vh_db = false;
 using namespace std;
 const std::string slashString(const std::string &str)
@@ -51,7 +51,7 @@ const std::string slashString(const std::string &str)
 	if(str.size()==0){
 		return "";
 	}
-	int length = str.size();
+	int length = (int)str.size();
 	if(str[length-1]=='\\'){
 		s << str << "\\";
 		return s.str();
@@ -60,7 +60,6 @@ const std::string slashString(const std::string &str)
 }
 KVirtualHost::KVirtualHost() {
 	browse = false;
-	concat = false;
 	db = cur_config_vh_db;
 #ifdef ENABLE_USER_ACCESS
 	access_file_loaded = false;
@@ -137,7 +136,7 @@ KVirtualHost::~KVirtualHost() {
 		sl->release();
 	}
 	if(cur_connect){
-		cur_connect->destroy();
+		cur_connect->release();
 	}
 #endif
 #ifdef ENABLE_VH_FLOW
@@ -155,7 +154,7 @@ KVirtualHost::~KVirtualHost() {
 	}
 #ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
 	if(ssl_ctx){
-		KSSLSocket::clean_ctx(ssl_ctx);
+		SSL_CTX_free(ssl_ctx);
 	}
 	if (cipher) {
 		xfree(cipher);
@@ -222,9 +221,8 @@ KFetchObject *KVirtualHost::findPathRedirect(KHttpRequest *rq, KFileName *file,c
 	lock.Lock();
 	list<KPathRedirect *>::iterator it2;
 	for (it2 = pathRedirects.begin(); it2 != pathRedirects.end(); it2++) {
-		if ((*it2)->match(path,path_len) && (*it2)->allowMethod.matchMethod(
-				rq->meth)) {
-			if (!(*it2)->confirmFile || fileExsit) {
+		if ((*it2)->match(path,path_len) && (*it2)->allowMethod.matchMethod(rq->meth)) {
+			if ((*it2)->MatchConfirmFile(fileExsit)) {
 				result = true;
 				if ((*it2)->rd) {
 					fo = (*it2)->rd->makeFetchObject(rq, file);
@@ -243,11 +241,9 @@ KFetchObject *KVirtualHost::findFileExtRedirect(KHttpRequest *rq,
 	char *file_ext = (char *) file->getExt();
 	lock.Lock();
 	if (file_ext) {
-		std::map<char *, KBaseRedirect *, lessf>::iterator it = redirects.find(
-				(char *) file->getExt());
-		if (it != redirects.end() && (*it).second->allowMethod.matchMethod(
-				rq->meth)) {
-			if (!(*it).second->confirmFile || fileExsit) {
+		std::map<char *, KBaseRedirect *, lessf>::iterator it = redirects.find((char *) file->getExt());
+		if (it != redirects.end() && (*it).second->allowMethod.matchMethod(rq->meth)) {
+			if ((*it).second->MatchConfirmFile(fileExsit)) {
 				result = true;
 				if ((*it).second->rd) {
 					fo = (*it).second->rd->makeFetchObject(rq, file);
@@ -531,11 +527,6 @@ bool KVirtualHost::saveAccess()
 	return true;
 }
 int KVirtualHost::checkRequest(KHttpRequest *rq) {
-#ifdef ENABLE_KSAPI_FILTER
-	if (hfm && !hfm->check_request(rq)) {
-		return JUMP_DENY;
-	}
-#endif
 	if (!loadAccess()) {
 		return JUMP_ALLOW;
 	}
@@ -667,9 +658,6 @@ void KVirtualHost::buildXML(std::stringstream &s) {
 #endif
 	if(htaccess.size()>0){
 		s << " htaccess='" << htaccess << "'";
-	}
-	if (concat) {
-		s << " concat='1'";
 	}
 #ifdef ENABLE_VH_RS_LIMIT
 	if (max_connect > 0) {
@@ -821,11 +809,11 @@ void KVirtualHost::setSpeedLimit(int speed_limit,KVirtualHost *ov) {
 void KVirtualHost::setSpeedLimit(const char * speed_limit_str,KVirtualHost *ov) {
 	setSpeedLimit((int) get_size(speed_limit_str),ov);
 }
-int KVirtualHost::getConnectCount() {
+int KVirtualHost::GetConnectionCount() {
 	if(cur_connect){
 		return cur_connect->getConnectionCount();
 	}
-	return refs - 1;
+	return refs - VH_REFS_CONNECT_DELTA;
 }
 #endif
 #ifdef ENABLE_VH_QUEUE
@@ -899,7 +887,7 @@ std::string KVirtualHost::getApp(KHttpRequest *rq)
 	}
 	kassert((int)apps.size() == app);
 	//todo:以后根据ip做hash
-	int index = (ip_hash?rq->c->socket->addr.get_hash():rand()) % app;
+	int index = (ip_hash? ksocket_addr_hash(rq->sink->GetAddr()):rand()) % app;
 	//printf("get vh=[%p] app=[%s]\n",this,apps[index].c_str());
 	return apps[index];
 }
@@ -989,39 +977,27 @@ bool KVirtualHost::setSSLInfo(std::string certfile,std::string keyfile,std::stri
 			keyfile = doc_root + keyfile;
 		}
 	}
-	ssl_ctx = KSSLSocket::init_server(
-		certfile.empty()?NULL:certfile.c_str(),
+	void *ssl_ctx_data = NULL;
+#ifdef ENABLE_HTTP2
+	ssl_ctx_data = &http2;
+#endif
+	ssl_ctx = kgl_ssl_ctx_new_server(certfile.empty()?NULL:certfile.c_str(),
 		keyfile.empty()?NULL:keyfile.c_str(),
-		NULL);
+		NULL,NULL, ssl_ctx_data);
 	if (ssl_ctx == NULL) {
 		klog(KLOG_ERR,
-				"Cann't init ssl context certificate=[%s],certificate_key=[%s]\n",
-				certfile.c_str(), keyfile.c_str());
+			"Cann't init ssl context certificate=[%s],certificate_key=[%s]\n",
+			certfile.c_str(),
+			keyfile.c_str());
 		return false;
 	}
-
-	if (0 == SSL_CTX_set_tlsext_servername_callback(ssl_ctx,httpSSLServerName)) {
-			klog(KLOG_WARNING, "kangle was built with SNI support, however, now it is linked "
-				"dynamically to an OpenSSL library which has no tlsext support, "
-				"therefore SNI is not available");
-	}
-	
-#ifdef ENABLE_HTTP2
-	SSL_CTX_set_ex_data(ssl_ctx,kangle_ssl_ctx_index, &http2);
-#ifdef TLSEXT_TYPE_application_layer_protocol_negotiation
-	SSL_CTX_set_alpn_select_cb(ssl_ctx, httpSSLNpnSelected, NULL);
-#endif
-#ifdef TLSEXT_TYPE_next_proto_neg
-	SSL_CTX_set_next_protos_advertised_cb(ssl_ctx,httpSSLNpnAdvertised,NULL);
-#endif
-#endif
 	if (this->cipher) {
-		if (SSL_CTX_set_cipher_list(ssl_ctx, this->cipher) != 1) {
+		if (!kgl_ssl_ctx_set_cipher_list(ssl_ctx, this->cipher)) {
 			klog(KLOG_WARNING, "cipher [%s] is not support\n", this->cipher);
 		}
 	}
 	if (this->protocols) {
-		KSSLSocket::set_ssl_protocols(ssl_ctx, this->protocols);
+		kgl_ssl_ctx_set_protocols(ssl_ctx, this->protocols);
 	}	
 	return true;
 }

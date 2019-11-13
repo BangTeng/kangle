@@ -23,7 +23,7 @@
 #include "KMultiAcserver.h"
 #include "global.h"
 #include "lang.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KAsyncFetchObject.h"
 #include "KAcserverManager.h"
 #include "KConfig.h"
@@ -129,7 +129,7 @@ unsigned short KMultiAcserver::getNodeIndex(KHttpRequest *rq)
 		if (*cookie_stick_name=='\0') {
 			cookie_stick_name = DEFAULT_COOKIE_STICK_NAME;
 		}
-		KHttpHeader *av = rq->parser.getHeaders();
+		KHttpHeader *av = rq->GetHeader();
 		while (av) {
 			if (strcasecmp(av->attr,"Cookie")==0) {
 				int cookie_stick_value = getCookieStick(av->val,cookie_stick_name);
@@ -148,7 +148,7 @@ unsigned short KMultiAcserver::getNodeIndex(KHttpRequest *rq)
 		index = string_hash(rq->url->host,8,1);
 		index = string_hash(rq->url->path,16,index);
 	} else if (ip_hash) {
-		index = rq->c->socket->addr.get_hash();
+		index = ksocket_addr_hash(rq->sink->GetAddr());
 	} else {
 		index = rand();
 	}
@@ -158,8 +158,9 @@ unsigned short KMultiAcserver::getNodeIndex(KHttpRequest *rq)
 	}
 	return (unsigned short)index;
 }
-void KMultiAcserver::connect(KHttpRequest *rq)
+kev_result KMultiAcserver::connect(KHttpRequest *rq)
 {
+	kev_result ret;
 	KSockPoolHelper *sockHelper = NULL;
 	lock.Lock();
 	if (!vnodes.empty()) {
@@ -170,9 +171,9 @@ void KMultiAcserver::connect(KHttpRequest *rq)
 			sockHelper->addRef();
 			sockHelper->hit++;
 			lock.Unlock();
-			sockHelper->connect(rq);
+			ret = sockHelper->connect(rq);
 			sockHelper->release();
-			return;
+			return ret;
 		}
 		//look for next active node
 		KSockPoolHelper *na = nextActiveNode(sockHelper, index);
@@ -184,9 +185,9 @@ void KMultiAcserver::connect(KHttpRequest *rq)
 			na->addRef();
 			na->hit++;
 			lock.Unlock();
-			na->connect(rq);
+			ret = na->connect(rq);
 			na->release();
-			return;
+			return ret;
 		}
 	}
 	KSockPoolHelper *fast_node = NULL;
@@ -204,9 +205,9 @@ void KMultiAcserver::connect(KHttpRequest *rq)
 		fast_node->addRef();
 		fast_node->hit++;
 		lock.Unlock();
-		fast_node->connect(rq);
+		ret = fast_node->connect(rq);
 		fast_node->release();
-		return;
+		return ret;
 	}
 	
 	//reset all node
@@ -215,13 +216,12 @@ void KMultiAcserver::connect(KHttpRequest *rq)
 		sockHelper->addRef();
 		sockHelper->hit++;
 		lock.Unlock();
-		sockHelper->connect(rq);
+		ret = sockHelper->connect(rq);
 		sockHelper->release();
-	} else {
-		lock.Unlock();
-		static_cast<KAsyncFetchObject *>(rq->fetchObj)->connectCallBack(rq,NULL);
+		return ret;
 	}
-	return;	
+	lock.Unlock();
+	return	static_cast<KAsyncFetchObject *>(rq->fetchObj)->connectCallBack(rq,NULL);	
 }
 KSockPoolHelper *KMultiAcserver::nextActiveNode(KSockPoolHelper *node,unsigned short &index)
 {
@@ -280,10 +280,11 @@ bool KMultiAcserver::addNode(std::map<std::string, std::string> &attr, char *sel
 		to_ip++;
 		sockaddr_i min_addr;
 		sockaddr_i max_addr;
-		if (!KSocket::getaddr(self_ip, 0, &min_addr, AF_INET, AI_NUMERICHOST)) {			
+		if (!ksocket_getaddr(self_ip,0,AF_INET,AI_NUMERICHOST,&min_addr)) {
+		//if (!KSocket::getaddr(self_ip, 0, &min_addr, AF_INET, AI_NUMERICHOST)) {			
 			return false;
 		}
-		if (!KSocket::getaddr(to_ip, 0, &max_addr, AF_INET, AI_NUMERICHOST)) {			
+		if (!ksocket_getaddr(to_ip, 0, AF_INET, AI_NUMERICHOST, &max_addr)) {
 			return false;
 		}
 		uint32_t min_ip = ntohl(min_addr.v4.sin_addr.s_addr);
@@ -291,7 +292,8 @@ bool KMultiAcserver::addNode(std::map<std::string, std::string> &attr, char *sel
 		for (uint32_t ip = min_ip; ip <= max_ip; ip++) {
 			min_addr.v4.sin_addr.s_addr = htonl(ip);
 			char ips[MAXIPLEN];
-			KSocket::make_ip(&min_addr, ips, MAXIPLEN);
+			ksocket_sockaddr_ip(&min_addr, ips, sizeof(ips));
+			//KSocket::make_ip(&min_addr, ips, MAXIPLEN);
 			attr["self_ip"] = ips;
 			addNode(attr);
 		}
@@ -405,7 +407,7 @@ void KMultiAcserver::getNodeInfo(std::stringstream &s)
 			s << "\n";
 		}
 		s << node->host;
-		if (!node->isUnix) {
+		if (!node->is_unix) {
 			s << ":" << node->port;
 		}
 		s << "\t" << node->total_connect << "/" << node->hit << "\t" << (node->isEnable()?"OK":"FAILED");
@@ -455,7 +457,7 @@ void KMultiAcserver::getHtml(std::stringstream &s) {
 				<< "&action=edit'>" << LANG_EDIT << "</a>]"
 				<< node->host << "</td>";
 		s << "<td>" ;
-		if(node->isUnix)
+		if(node->is_unix)
 			s << "-";
 		else 
 			s << node->port ;

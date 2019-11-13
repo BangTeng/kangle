@@ -1,6 +1,7 @@
 #include "KAsyncWorker.h"
-#include "KThreadPool.h"
-FUNC_TYPE FUNC_CALL kasyncWorkerThread(void *param)
+#include "kthread.h"
+#if 0
+KTHREAD_FUNCTION kasyncWorkerThread(void *param)
 {
 	KAsyncWorker *worker = (KAsyncWorker *)param;
 	worker->workThread();
@@ -10,7 +11,7 @@ struct thread_start_worker_param {
 	void *param;
 	asyncWorkerCallBack callback;
 };
-FUNC_TYPE FUNC_CALL thread_start_worker_thread(void *param)
+KTHREAD_FUNCTION thread_start_worker_thread(void *param)
 {
 	thread_start_worker_param *p = (thread_start_worker_param *)param;
 	p->callback(p->param, 0);
@@ -123,3 +124,4 @@ void KAsyncWorker::workThread()
 	}
 	release();
 }
+#endif

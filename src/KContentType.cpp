@@ -20,7 +20,7 @@
 #include <vector>
 #include "KContentType.h"
 #include "KXml.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KVirtualHostManage.h"
 KContentType contentType;
 using namespace std;

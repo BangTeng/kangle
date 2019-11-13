@@ -25,9 +25,9 @@
 #include <vector>
 #include <stdio.h>
 #include "KRewriteMark.h"
-#include "KString.h"
+#include "KStringBuf.h"
 #include "http.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 using namespace std;
 KRewriteMark::KRewriteMark() {
 }

@@ -2,14 +2,14 @@
 #ifndef _WIN32
 #include <sys/uio.h>
 #endif
-void KReadWriteBuffer::getReadBuffer(LPWSABUF buffer,int &bufferCount)
+#if 0
+int KReadWriteBuffer::getReadBuffer(LPWSABUF buffer,int bufferCount)
 {
 	if (read_hot==NULL) {
-		bufferCount = 0;
-		return;
+		return 0;
 	}
 	assert(head);
-	buff *tmp = head;
+	kbuf *tmp = head;
 	buffer[0].iov_base = read_hot;
 	buffer[0].iov_len = head->used - (read_hot - head->data);
 	int i;
@@ -21,7 +21,7 @@ void KReadWriteBuffer::getReadBuffer(LPWSABUF buffer,int &bufferCount)
 		buffer[i].iov_base = tmp->data;
 		buffer[i].iov_len = tmp->used;
 	}
-	bufferCount = i;
+	return i;
 }
 void KReadWriteBuffer::writeSuccess(int got)
 {
@@ -41,7 +41,7 @@ char *KReadWriteBuffer::getWriteBuffer(int &len)
 	}
 	len = chunk_size - write_hot_buf->used;
 	if (len == 0) {
-		buff *nbuf = newbuff();
+		kbuf *nbuf = newbuff();
 		assert(write_hot_buf->next==NULL);
 		write_hot_buf->next = nbuf;
 		write_hot_buf = nbuf;
@@ -55,8 +55,7 @@ char *KReadWriteBuffer::getWriteBuffer(int &len)
 char *KReadWriteBuffer::getReadBuffer(int &len)
 {
 	WSABUF buffer;
-	int bufferCount = 1;
-	getReadBuffer(&buffer,bufferCount);
+	int bufferCount = getReadBuffer(&buffer,1);
 	if (bufferCount==0) {
 		return NULL;
 	}
@@ -73,7 +72,7 @@ bool KReadWriteBuffer::readSuccess(int got)
 		got -= this_len;
 		totalLen -= this_len;
 		if (head->used == read_hot - head->data) {
-			buff *next = head->next;
+			kbuf *next = head->next;
 			xfree(head->data);
 			xfree(head);
 			head = next;
@@ -87,19 +86,15 @@ bool KReadWriteBuffer::readSuccess(int got)
 	}
 	return true;
 }
-void KReadWriteBuffer::write_all(const char *buf, int len)
+int KReadWriteBuffer::write(const char *buf, int len)
 {	
-	while (len>0) {
-		int wlen;
-		char *t = getWriteBuffer(wlen);
-		assert(t);
-		wlen = MIN(len,wlen);
-		memcpy(t,buf,wlen);
-		buf += wlen;
-		len -= wlen;
-		writeSuccess(wlen);
-	}
-	return;
+	int wlen;
+	char *t = getWriteBuffer(wlen);
+	assert(t);
+	wlen = MIN(len,wlen);
+	memcpy(t,buf,wlen);
+	writeSuccess(wlen);	
+	return wlen;
 }
 int KReadWriteBuffer::read(char *buf,int len)
 {
@@ -125,3 +120,4 @@ int KReadWriteBuffer::read(char *buf,int len)
 	}
 	return got;
 }
+#endif

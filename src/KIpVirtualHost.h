@@ -11,7 +11,7 @@
 #include "KVirtualHostContainer.h"
 #include "global.h"
 #include "KMutex.h"
-#include "KSocket.h"
+#include "ksocket.h"
 #ifdef ENABLE_BASED_IP_VH
 class KVirtualHost;
 class KIpVirtualHost {

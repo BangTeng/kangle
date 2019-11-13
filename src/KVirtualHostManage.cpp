@@ -24,7 +24,7 @@
 #include "do_config.h"
 #include "KVirtualHostManage.h"
 #include "KLineFile.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "lib.h"
 #include "lang.h"
 #include "KHttpServerParser.h"
@@ -67,17 +67,17 @@ void KVirtualHostManage::copy(KVirtualHostManage *vm)
 	globalVh.swap(&vm->globalVh);
 	avh.swap(vm->avh);
 	gtvhs.swap(vm->gtvhs);
-	std::map<KListenKey,KServer *>::iterator it;
+	std::map<KListenKey,kserver *>::iterator it;
 	for (it=dlisten.listens.begin();it!=dlisten.listens.end();it++) {
-		(*it).second->unbindAllVirtualHost();
+		((KVirtualHostContainer *)(*it).second->ctx)->clear();
 	}
 	internalBindAllVirtualHost();
 	lock.Unlock();
 }
-KServer *KVirtualHostManage::refsServer(u_short port)
+kserver *KVirtualHostManage::refsServer(u_short port)
 {
 	lock.Lock();
-	KServer *server = dlisten.refsServer(port);
+	kserver *server = dlisten.refsServer(port);
 	lock.Unlock();
 	return server;
 }
@@ -139,7 +139,7 @@ bool KVirtualHostManage::removeTempleteVirtualHost(std::string name)
 {
 	bool result = false;
 	lock.Lock();
-	int index = name.find_first_of(':');
+	int index = (int)name.find_first_of(':');
 	string subname;
 	if(index>=0){
 		subname = name.substr(index+1);
@@ -260,11 +260,6 @@ void KVirtualHostManage::getMenuHtml(std::stringstream &s,KVirtualHost *v,std::s
 			<< "</a>] ";
 	s << "[<a href='/vhlist?" << url.str() << "id=8'>" << klang["mime_type"]
 			<< "</a>] ";
-#ifdef ENABLE_KSAPI_FILTER
-	if (vh->hfm) {
-		s << "[<a href='/vhlist?" << url.str() << "id=9'>" << klang["http_filter"] << "</a>] ";
-	}
-#endif
 #ifndef HTTP_PROXY
 	if(t==0 && v && v->user_access.size()>0){
 		s << "[<a href='/vhlist?" << url.str() << "id=6'>" << klang["lang_requestAccess"] << "</a>]";
@@ -330,12 +325,6 @@ void KVirtualHostManage::getHtml(std::stringstream &s,std::string name, int id,K
 			}
 		} else if (id==8) {
 			vh->getMimeTypeHtml(url.str(),s);
-		} else if (id==9) {
-#ifdef ENABLE_KSAPI_FILTER
-			if (vh->hfm) {
-				vh->hfm->html(s);
-			}
-#endif
 		}
 		vh->lock.Unlock();
 	}
@@ -433,13 +422,9 @@ bool KVirtualHostManage::vhBaseAction(KUrlValue &attribute, std::string &errMsg)
 			if (attribute["type"] == "file_ext") {
 				file_ext = true;
 			}
-			bool confirmFile = false;
-			if(attribute["confirm_file"] == "1"){
-				confirmFile = true;
-			}
 			result = bvh->addRedirect(file_ext, attribute["value"],
 					attribute["extend"], attribute["allow_method"],
-					confirmFile,attribute["params"]);
+					(uint8_t)atoi(attribute["confirm_file"].c_str()),attribute["params"]);
 #if 0
 			if (result && v && v->db) {
 				std::stringstream value;
@@ -812,18 +797,18 @@ bool KVirtualHostManage::internalAddVirtualHost(KVirtualHost *vh,KVirtualHost *o
 	vh->addRef();
 	return true;
 }
-void KVirtualHostManage::remove_static(KServer *server)
+void KVirtualHostManage::remove_static(kserver *server)
 {
 	std::map<std::string, KVirtualHost *>::iterator it;
 	for (it = avh.begin(); it != avh.end(); it++) {
-		server->remove_static((*it).second);
+		kserver_remove_static_vh(server,(*it).second);
 	}
 }
-void KVirtualHostManage::add_static(KServer *server)
+void KVirtualHostManage::add_static(kserver *server)
 {
 	std::map<std::string, KVirtualHost *>::iterator it;
 	for(it=avh.begin();it!=avh.end();it++){
-		server->add_static((*it).second);
+		kserver_add_static_vh(server,(*it).second);
 	}
 }
 void KVirtualHostManage::addAllVirtualHost()
@@ -871,21 +856,22 @@ int KVirtualHostManage::find_domain(const char *site, WhmContext *ctx)
 	if (!revert_hostname(site, site_len, bind_site, sizeof(bind_site))) {
 		return WHM_CALL_FAILED;
 	}
-	std::map<KListenKey, KServer *>::iterator it;
+	std::map<KListenKey, kserver *>::iterator it;
 	KSubVirtualHost *svh = NULL;
 	lock.Lock();
 	for (it = dlisten.listens.begin(); it != dlisten.listens.end(); it++) {
-		KServer *ls = (*it).second;
-		if (ls->isClosed()) {
+		kserver *ls = (*it).second;
+		if (ls->closed) {
 			continue;
 		}
-		if (TEST(ls->model, WORK_MODEL_MANAGE)) {
+		if (TEST(ls->flags, WORK_MODEL_MANAGE)) {
 			continue;
 		}
 		if (port > 0 && (*it).first.port != port) {
 			continue;
 		}
-		ls->vhc->findVirtualHost(&svh, bind_site);
+		kassert(ls->ctx != NULL);
+		((KVirtualHostContainer *)ls->ctx)->findVirtualHost(&svh, bind_site);
 		if (svh) {
 			KStringBuf s;
 			if (!(*it).first.ipv4) {
@@ -915,7 +901,7 @@ int KVirtualHostManage::find_domain(const char *site, WhmContext *ctx)
 /*
  * 查找虚拟主机并绑定在rq上。
  */
-query_vh_result KVirtualHostManage::queryVirtualHost(KServer *ls,KSubVirtualHost **rq_svh,const char *site,int site_len) {
+query_vh_result KVirtualHostManage::queryVirtualHost(kserver *ls,KSubVirtualHost **rq_svh,const char *site,int site_len) {
 	assert(ls);
 	query_vh_result result = query_vh_host_not_found;
 	if (site_len==0) {
@@ -926,8 +912,8 @@ query_vh_result KVirtualHostManage::queryVirtualHost(KServer *ls,KSubVirtualHost
 		return result;
 	}
 	lock.Lock();
-	if (ls->vhc) {
-		result = ls->vhc->findVirtualHost(rq_svh,bind_site);
+	if (ls->ctx) {
+		result = ((KVirtualHostContainer *)ls->ctx)->findVirtualHost(rq_svh,bind_site);
 	}
 	lock.Unlock();
 	return result;
@@ -1100,9 +1086,7 @@ void KVirtualHostManage::getVhDetail(std::stringstream &s, KVirtualHost *vh,bool
 	s << "<tr><td>" << klang["option"]
 			<< "</td><td>";
 	s << "<input name='browse' type='checkbox' value='on'"
-			<< ((vh && vh->browse) ? "checked" : "") << ">" << klang["browse"];
-	s << "<input name='concat' type='checkbox' value='1'"
-			<< ((vh && vh->concat) ? "checked" : "") << ">" << klang["concat"];
+			<< ((vh && vh->browse) ? "checked" : "") << ">" << klang["browse"];	
 
 #ifdef ENABLE_VH_FLOW
 	s << "<input name='fflow' type='checkbox' value='1'"
@@ -1304,11 +1288,11 @@ void KVirtualHostManage::getVhIndex(std::stringstream &s,KVirtualHost *vh,int id
 						: "&nbsp;") << "</td>";
 #endif
 #ifdef ENABLE_VH_RS_LIMIT
-		s << "<td >" << vh->getConnectCount() << "/"
+		s << "<td >" << vh->GetConnectionCount() << "/"
 				<< vh->max_connect << "</td>";
 		s << "<td >" ;
 #ifdef ENABLE_VH_FLOW
-		s << vh->getSpeed(false) << "/";
+		s << vh->get_speed(false) << "/";
 #endif
 		s << vh->speed_limit << "</td>";
 #endif		
@@ -1353,8 +1337,8 @@ void KVirtualHostManage::dumpLoad(KVirtualHostEvent *ctx,bool revers,const char 
 		if (prefix && revers == (strncmp(vh->name.c_str(),prefix,prefix_len)==0)) {
 			continue;			
 		}
-		int connect_count = vh->getConnectCount();
-		int speed = vh->getSpeed(true);
+		int connect_count = vh->GetConnectionCount();
+		INT64 speed = vh->get_speed(true);
 		if (connect_count==0 && speed==0) {
 			continue;
 		}
@@ -1505,7 +1489,7 @@ void KVirtualHostManage::getAllVhHtml(std::stringstream &s,int t) {
 void KVirtualHostManage::flush_static_listens(std::vector<KListenHost *> &services)
 {
 	lock.Lock();
-	std::map<KListenKey,KServer *>::iterator it;
+	std::map<KListenKey,kserver *>::iterator it;
 	for (it=dlisten.listens.begin();it!=dlisten.listens.end();it++) {
 		(*it).second->remove_static_flag = true;
 	}

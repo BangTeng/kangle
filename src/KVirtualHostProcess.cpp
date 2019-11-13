@@ -9,48 +9,49 @@
 #include "KVirtualHostProcess.h"
 #include "KAsyncFetchObject.h"
 #include "lang.h"
-
 using namespace std;
 //启动进程失败的情况的处理
-void handleVProcessPower(VProcessPowerParam *vpp,std::list<KHttpRequest *> &queue,bool success,KUpstreamSelectable *socket,bool half_connect)
+void handleVProcessPower(VProcessPowerParam *vpp,std::list<KHttpRequest *> &queue,bool success,KTcpUpstream *socket,bool half_connect)
 {
 	if (vpp->rq) {
 		//如果有第一个请求，把首次连接给他
 		if (socket) {
-			vpp->rq->c->selector->bindSelectable(socket);
+			socket->BindSelector(vpp->rq->sink->GetSelector());
 		}
+		KUpstream *us = socket;
 		if (success){
-			if (socket==NULL) {
+			if (us==NULL) {
 				half_connect = false;
-				socket = vpp->process->connect(vpp->rq,vpp->rd,half_connect);
+				us = vpp->process->connect(vpp->rq,vpp->rd,half_connect);
 			}
 		} else {
 			assert(socket==NULL);
 			//socket cann't be NULL.but is socket is not NULL.we also can handle it.
-			if (socket) {
-				socket->destroy();
-				socket = NULL;
+			if (us) {
+				us->Destroy();
+				us = NULL;
 			}
 		}
 		assert(vpp->rq && vpp->process && vpp->rd);
-		static_cast<KAsyncFetchObject *>(vpp->rq->fetchObj)->connectCallBack(vpp->rq,socket,half_connect);
+		static_cast<KAsyncFetchObject *>(vpp->rq->fetchObj)->connectCallBack(vpp->rq, us,half_connect);
 	} else {
 		//没有第一个请求，把首次连接删除
 		if (socket) {
-			socket->destroy();
+			socket->Destroy();
 			socket = NULL;
 		}
 	}
 	list<KHttpRequest *>::iterator it;
 	for (it = queue.begin(); it!=queue.end(); it++) {
+		KUpstream *us = NULL;
 		if (success) {
-			socket = vpp->process->connect((*it),vpp->rd,half_connect);
+			us = vpp->process->connect((*it),vpp->rd,half_connect);
 		}
-		static_cast<KAsyncFetchObject *>((*it)->fetchObj)->connectCallBack((*it),socket,half_connect);
+		static_cast<KAsyncFetchObject *>((*it)->fetchObj)->connectCallBack((*it),us,half_connect);
 	}
 }
 //启动进程工作线程
-FUNC_TYPE FUNC_CALL VProcessPowerWorker(void *param)
+KTHREAD_FUNCTION VProcessPowerWorker(void *param)
 {
 	VProcessPowerParam *vpp = (VProcessPowerParam *)param;
 	assert(vpp);
@@ -61,11 +62,11 @@ FUNC_TYPE FUNC_CALL VProcessPowerWorker(void *param)
 	if (vh==NULL && vpp->rq) {
 		vh = vpp->rq->svh->vh;
 	}
-	KUpstreamSelectable *socket = process->poweron(vh,vpp->rd,success);
+	KTcpUpstream *socket = process->poweron(vh,vpp->rd,success);
 
 	if (socket) {
 		//废弃第一条连接，目前不稳定.
-		socket->destroy();
+		socket->Destroy();
 		socket = NULL;
 	}
 	std::list<KHttpRequest *> queue;
@@ -97,13 +98,12 @@ void getProcessInfo(const USER_T &user,const std::string &name,KProcess *process
 	s << "</tr>\n";
 
 }
-void KVirtualHostProcess::handleRequest(KHttpRequest *rq,KExtendProgram *rd)
+kev_result KVirtualHostProcess::handleRequest(KHttpRequest *rq,KExtendProgram *rd)
 {
 	bool isHalf;
 	if (status == VProcess_Poweron) {
-		KUpstreamSelectable *socket = connect(rq,rd,isHalf);
-		static_cast<KAsyncFetchObject *>(rq->fetchObj)->connectCallBack(rq,socket,isHalf);
-		return;
+		KUpstream *socket = connect(rq,rd,isHalf);
+		return static_cast<KAsyncFetchObject *>(rq->fetchObj)->connectCallBack(rq,socket,isHalf);
 	}
 	lock.Lock();
 	switch (status) {
@@ -118,15 +118,15 @@ void KVirtualHostProcess::handleRequest(KHttpRequest *rq,KExtendProgram *rd)
 			param->rq = rq;
 			param->process = this;
 			param->rd = rd;
-			status = VProcess_Inprogress;
-			if(!m_thread.start(param,VProcessPowerWorker)){
+			status = VProcess_Inprogress;			
+			if(!kthread_pool_start(VProcessPowerWorker, param)){
 				std::list<KHttpRequest *> tq;
 				tq.swap(this->queue);
 				lock.Unlock();
 				handleVProcessPower(param,tq,false,NULL,false);
 				delete param;
 				this->release();
-				return;
+				return kev_ok;
 			}
 			break;
 		}
@@ -139,10 +139,10 @@ void KVirtualHostProcess::handleRequest(KHttpRequest *rq,KExtendProgram *rd)
 	case VProcess_Poweron:
 		{
 			lock.Unlock();
-			KUpstreamSelectable *socket = connect(rq,rd,isHalf);
-			static_cast<KAsyncFetchObject *>(rq->fetchObj)->connectCallBack(rq,socket,isHalf);
-			return;
+			KUpstream *socket = connect(rq,rd,isHalf);
+			return static_cast<KAsyncFetchObject *>(rq->fetchObj)->connectCallBack(rq,socket,isHalf);
 		}
 	}
 	lock.Unlock();
+	return kev_ok;
 }

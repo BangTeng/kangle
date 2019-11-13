@@ -16,7 +16,7 @@ public:
 	KSingleAcserver();
 	KSingleAcserver(KSockPoolHelper *nodes);
 	virtual ~KSingleAcserver();
-	void connect(KHttpRequest *rq);
+	kev_result connect(KHttpRequest *rq);
 	unsigned getPoolSize() {
 		return sockHelper->getSize();
 	}

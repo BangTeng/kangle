@@ -5,7 +5,7 @@
 #ifdef ENABLE_TCMALLOC
 #include "google/heap-checker.h"
 #endif
-KCdnContainer cdnContainer;
+KCdnContainer *server_container = NULL;
 using namespace std;
 static int redirect_node_cmp(void *k1, void *k2)
 {
@@ -24,6 +24,8 @@ KCdnContainer::KCdnContainer()
 }
 KCdnContainer::~KCdnContainer()
 {
+	Clean();
+	rbtree_destroy(rd_map);
 }
 KRedirect *KCdnContainer::refsRedirect(const char *ip, const char *host, int port, const char *ssl, int life_time, Proto_t proto)
 {
@@ -168,7 +170,7 @@ KRedirect *KCdnContainer::refsRedirect(const char *name)
 KFetchObject *KCdnContainer::get(const char *ip,const char *host,int port,const char *ssl,int life_time,Proto_t proto)
 {
 	KRedirect *server = refsRedirect(ip,host,port,ssl,life_time,proto);
-	KBaseRedirect *brd = new KBaseRedirect(server,false);
+	KBaseRedirect *brd = new KBaseRedirect(server, KGL_CONFIRM_FILE_NEVER);
 	KFetchObject *fo = new KHttpProxyFetchObject();
 	fo->bindBaseRedirect(brd);
 	brd->release();	
@@ -180,11 +182,22 @@ KFetchObject *KCdnContainer::get(const char *name)
 	if (server==NULL) {
 		return NULL;
 	}
-	KBaseRedirect *brd = new KBaseRedirect(server,false);
+	KBaseRedirect *brd = new KBaseRedirect(server, KGL_CONFIRM_FILE_NEVER);
 	KFetchObject *fo = new KHttpProxyFetchObject();
 	fo->bindBaseRedirect(brd);
 	brd->release();	
 	return fo;
+}
+void KCdnContainer::Clean()
+{
+	lock.Lock();
+	KRedirectNode *rn = rd_list.next;
+	while (rn != &rd_list) {
+		KRedirectNode *next = rn->next;
+		Remove(rn);
+		rn = next;
+	}
+	lock.Unlock();
 }
 void KCdnContainer::flush(time_t nowTime)
 {
@@ -194,22 +207,23 @@ void KCdnContainer::flush(time_t nowTime)
 		if (nowTime - rn->lastActive < 300) {
 			break;
 		}
-		//if (rn->rd->getRefFast()<=1) {
-		rn->rd->release();
 		KRedirectNode *next = rn->next;
-		klist_remove(rn);
-		rbtree_remove(rd_map, rn->node);
-		free(rn->name);
-		delete rn;
+		Remove(rn);
 		rn = next;
-		//}
-		//rn = rn->next;
 	}
 	lock.Unlock();
 }
+void KCdnContainer::Remove(KRedirectNode *rn)
+{
+	rn->rd->release();
+	klist_remove(rn);
+	rbtree_remove(rd_map, rn->node);
+	xfree(rn->name);
+	delete rn;
+}
 KRedirect *KCdnContainer::findRedirect(const char *name)
 {
-	rb_node *node = rbtree_find(rd_map, (void *)name, redirect_node_cmp);
+	krb_node *node = rbtree_find(rd_map, (void *)name, redirect_node_cmp);
 	if (node == NULL) {
 		return NULL;
 	}

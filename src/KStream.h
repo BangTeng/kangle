@@ -30,7 +30,8 @@
 #include <stdlib.h>
 #include "global.h"
 #ifdef _WIN32
-#include "forwin32.h"
+#include "kforwin32.h"
+#include "kstring.h"
 #define INT64_FORMAT     "%I64d"
 #define INT64_FORMAT_HEX "%I64x"
 #else
@@ -41,13 +42,7 @@
 #define WSTR(x) write_all(x,sizeof(x)-1)
 
 #define INT2STRING_LEN	32
-inline INT64 string2int(const char *buf) {
-#ifdef _WIN32
-	return _atoi64(buf);
-#else
-	return atoll(buf);
-#endif
-}
+
 inline const char * int2string(INT64 value, char *buf,bool hex=false) {
 	const char *formatString = INT64_FORMAT;
 	if (hex) {
@@ -86,7 +81,7 @@ public:
 
 	}
 	KWStream() {
-		preventWriteEnd = false;
+		
 	}
 	virtual bool support_sendfile()
 	{
@@ -178,7 +173,6 @@ public:
 		return *this;
 	}
 	friend class KHttpStream;
-	bool preventWriteEnd;
 protected:
 	virtual int write(const char *buf, int len) {
 		return -1;

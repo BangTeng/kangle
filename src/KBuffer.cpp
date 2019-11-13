@@ -22,9 +22,9 @@
  *  Author: KangHongjiu <keengo99@gmail.com>
  */
 #include <string.h>
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KBuffer.h"
-StreamState send_buff(KSendable *socket, buff *send_buffer , INT64 &start,INT64 &send_len)
+StreamState send_buff(KSendable *socket, kbuf *send_buffer , INT64 &start,INT64 &send_len)
 {
 	INT64 this_send_len;
 	StreamState result = STREAM_WRITE_SUCCESS;
@@ -52,6 +52,7 @@ StreamState send_buff(KSendable *socket, buff *send_buffer , INT64 &start,INT64 
 	}
 	return result;
 }
+#if 0
 KBuffer::KBuffer() {
 	init(CHUNK);
 }
@@ -67,7 +68,7 @@ void KBuffer::clean() {
 		hotData = NULL;
 	}
 	if (out_buf != NULL) {
-		destroy(out_buf);
+		destroy_kbuf(out_buf);
 		out_buf = NULL;
 	}
 	totalLen = 0;
@@ -84,7 +85,7 @@ void KBuffer::init(int chunkSize) {
 	hot_buf = NULL;
 }
 /*
- buff *KBuffer::getHotBuf() {
+ kbuf *KBuffer::getHotBuf() {
  return hot_buf;
  }
  */
@@ -103,20 +104,6 @@ StreamState KBuffer::send(KSendable *socket,INT64 start,INT64 len)
 			return STREAM_WRITE_FAILED;
 		}
 		return socket->write_all(hotData + (int)start,(int)len);
-	}
-	return result;
-}
-StreamState KBuffer::send(KClientSocket *socket)
-{
-	StreamState result = STREAM_WRITE_SUCCESS;
-	if (out_buf) {
-		result = send_buff<KClientSocket>(socket, out_buf);
-		if(result == STREAM_WRITE_FAILED) {
-			return result;
-		}
-	}
-	if (hotData) {
-		return socket->write_all(hotData, used);
 	}
 	return result;
 }
@@ -170,10 +157,10 @@ StreamState KBuffer::write_all(const char *buf, int len) {
 void KBuffer::internelEnd(char *buf, int len, int addBytes) {
 	if (len + addBytes > 0) {
 		if (hot_buf == NULL) {
-			hot_buf = (buff *) xmalloc(sizeof(buff));
+			hot_buf = (kbuf *) xmalloc(sizeof(kbuf));
 			out_buf = hot_buf;
 		} else {
-			hot_buf->next = (buff *) xmalloc(sizeof(buff));
+			hot_buf->next = (kbuf *) xmalloc(sizeof(kbuf));
 			hot_buf = hot_buf->next;
 		}
 		//      printf("addBytes=%d\n",addBytes);
@@ -190,16 +177,16 @@ void KBuffer::end(char *buf, int len, int addBytes) {
 	totalLen += len;
 	internelEnd(buf, len, addBytes);
 }
-buff *KBuffer::getAllBuf()
+kbuf *KBuffer::getAllBuf()
 {
 	if (hotData == NULL) {
 		return out_buf;
 	}
 	if (hot_buf == NULL) {
-		hot_buf = (buff *) malloc(sizeof(buff));
+		hot_buf = (kbuf *) malloc(sizeof(kbuf));
 		out_buf = hot_buf;
 	} else {
-		hot_buf->next = (buff *) malloc(sizeof(buff));
+		hot_buf->next = (kbuf *) malloc(sizeof(kbuf));
 		hot_buf = hot_buf->next;
 	}
 	hot_buf->data = hotData;
@@ -210,8 +197,8 @@ buff *KBuffer::getAllBuf()
 	hotData = NULL;
 	return out_buf;
 }
-buff *KBuffer::stealBuffFast() {
-	buff *ret_buf;
+kbuf *KBuffer::stealBuffFast() {
+	kbuf *ret_buf;
 	if (hotData == NULL) {
 		ret_buf = out_buf;
 		hot_buf = NULL;
@@ -219,12 +206,12 @@ buff *KBuffer::stealBuffFast() {
 		return ret_buf;
 	}
 	if (hot_buf == NULL) {
-		hot_buf = (buff *) malloc(sizeof(buff));
+		hot_buf = (kbuf *) malloc(sizeof(kbuf));
 		assert(out_buf == NULL);
 		out_buf = hot_buf;
 	} else {
 		assert(out_buf != NULL);
-		hot_buf->next = (buff *) malloc(sizeof(buff));
+		hot_buf->next = (kbuf *) malloc(sizeof(kbuf));
 		hot_buf = hot_buf->next;
 	}
 	hot_buf->data = hotData;
@@ -247,11 +234,11 @@ StreamState KBuffer::write_direct(char *buf, int len) {
 void KBuffer::internelAdd(char *buf, int len) {
 	if (hot_buf == NULL) {
 		assert(out_buf == NULL);
-		hot_buf = (buff *) xmalloc(sizeof(buff));
+		hot_buf = (kbuf *) xmalloc(sizeof(kbuf));
 		out_buf = hot_buf;
 	} else {
 		assert(out_buf != NULL);
-		hot_buf->next = (buff *) xmalloc(sizeof(buff));
+		hot_buf->next = (kbuf *) xmalloc(sizeof(kbuf));
 		hot_buf = hot_buf->next;
 	}
 	hot_buf->flags = 0;
@@ -259,7 +246,7 @@ void KBuffer::internelAdd(char *buf, int len) {
 	hot_buf->next = NULL;
 	hot_buf->used = len;
 }
-buff *KBuffer::stealBuff() {
+kbuf *KBuffer::stealBuff() {
 	if (chunkSize - used < 64) {
 		return stealBuffFast();
 	}
@@ -270,7 +257,7 @@ buff *KBuffer::stealBuff() {
 		hotData = NULL;
 		used = 0;
 	}
-	buff *result = out_buf;
+	kbuf *result = out_buf;
 	out_buf = NULL;
 	hot_buf = NULL;
 	totalLen = 0;
@@ -280,19 +267,10 @@ unsigned KBuffer::getLen() {
 	//printf("getLen=%d\n",totalLen);
 	return totalLen;
 }
-void KBuffer::destroy(buff *buf) {
-	buff *next;
-	while (buf) {
-		next = buf->next;
-		if (buf->data)
-			xfree(buf->data);
-		xfree(buf);
-		buf = next;
-	}
-}
+
 void KBuffer::dump(FILE *fp)
 {
-	buff *t = out_buf;
+	kbuf *t = out_buf;
 	while(t){
 		fwrite(t->data,1,t->used,fp);
 		t = t->next;
@@ -301,3 +279,4 @@ void KBuffer::dump(FILE *fp)
 		fwrite(hotData,1,used,fp);
 	}
 }
+#endif

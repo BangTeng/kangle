@@ -21,7 +21,8 @@
 *
 *  Author: KangHongjiu <keengo99@gmail.com>
 */
-#include "KString.h"
+#include <errno.h>
+#include "KStringBuf.h"
 #include "utils.h"
 #include "KPipeStream.h"
 #include "log.h"

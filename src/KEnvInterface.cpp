@@ -6,9 +6,10 @@
 */
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <stdio.h>
 #include "KEnvInterface.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 
 KEnvInterface::KEnvInterface() {
 }

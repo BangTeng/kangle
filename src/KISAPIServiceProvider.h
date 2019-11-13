@@ -11,11 +11,11 @@
 #include <vector>
 //#include "KApiFetchObject.h"
 #include "KServiceProvider.h"
-#include "httpext.h"
+#include "khttpext.h"
 #include "KHttpKeyValue.h"
 
 #include "KStream.h"
-#include "KString.h"
+#include "KStringBuf.h"
 
 class KISAPIServiceProvider: public KServiceProvider, public KStream {
 public:
@@ -57,17 +57,12 @@ public:
 	const char *getRequestUri() {
 		return pECB->lpszPathInfo;
 	}
-	unsigned getContentLength() {
+	INT64 getContentLength() {
 		return pECB->cbTotalBytes;
 	}
 	const char *getContentType() {
 		return pECB->lpszContentType;
-	}
-	char *getPreLoadedBody(int *len) {
-		*len = pECB->cbAvailable;		
-		pECB->cbAvailable = 0;
-		return (char *) pECB->lpbData;
-	}
+	}	
 	char *getHttpHeader(const char *attr) {
 		std::stringstream s;
 		s << "HTTP_";

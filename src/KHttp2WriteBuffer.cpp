@@ -7,20 +7,22 @@ kgl_http2_event::~kgl_http2_event()
 }
 http2_buff::~http2_buff()
 {
-	assert(ctx == NULL);
+	kassert(ctx == NULL);
 	if (!skip_data_free) {
-		free(data);
+		xfree(data);
 	}
 }
 void http2_buff::clean()
 {	
 	if (ctx) {
-		assert(ctx->write_wait != NULL);
-		kgl_http2_event *e = ctx->write_wait;
-		ctx->write_wait = NULL;		
-		assert(e->result);
-		e->result(e->arg, e->len);
-		delete e;
+		kassert(ctx->write_wait != NULL);
+		if (ctx->write_wait) {
+			kgl_http2_event *e = ctx->write_wait;
+			ctx->write_wait = NULL;
+			kassert(e->result);
+			e->result(e->arg, e->len);
+			delete e;
+		}
 		ctx = NULL;
 	}
 }
@@ -36,7 +38,7 @@ http2_buff *KHttp2HeaderFrame::create(uint32_t stream_id,bool no_body, size_t ma
 {
 	assert(head);
 	http2_buff *buf = new http2_buff;
-	buf->data = (char *)malloc(sizeof(http2_frame_header));
+	buf->data = (char *)xmalloc(sizeof(http2_frame_header));
 	buf->used = sizeof(http2_frame_header);
 	memset(buf->data, 0, sizeof(http2_frame_header));
 	last = buf;

@@ -3,7 +3,7 @@
 #include "KMark.h"
 #include "KRWLock.h"
 #include "KAcl.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "global.h"
 class KModelManager
 {

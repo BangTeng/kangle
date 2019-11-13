@@ -1,7 +1,10 @@
 #include <stdarg.h>
 #include <map>
 #include <stdio.h>
-#include "KSocket.h"
+#ifndef _WIN32
+#include <sys/wait.h>
+#endif
+#include "ksocket.h"
 #include "api_child.h"
 #include "extworker.h"
 #include "KListenPipeStream.h"
@@ -110,7 +113,7 @@ int main(int argc,char **argv)
 {
 	::argc = argc;
 	::argv = argv;
-	KSocket::init_socket();
+	ksocket_startup();
 
 #ifndef _WIN32
 	signal(SIGPIPE, SIG_IGN);
@@ -121,7 +124,7 @@ int main(int argc,char **argv)
 	signal(SIGUSR2, sigcatch);
 	signal(SIGQUIT, sigcatch);
 #endif
-	if (argc==1 || (argc>1 && strcmp(argv[1],"-h")==0)) {
+	if (argc>1 && strcmp(argv[1],"-h")==0) {
 		seperate_usage();
 		return 1;
 	}

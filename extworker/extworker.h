@@ -1,6 +1,6 @@
 #ifndef EXTWORKER_H
 #define EXTWORKER_H
-#include "forwin32.h"
+#include "kforwin32.h"
 extern int argc;
 extern char **argv;
 extern volatile bool program_quit;

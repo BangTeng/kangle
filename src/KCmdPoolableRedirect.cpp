@@ -25,7 +25,7 @@ KCmdPoolableRedirect::KCmdPoolableRedirect() {
 KCmdPoolableRedirect::~KCmdPoolableRedirect() {
 
 }
-void KCmdPoolableRedirect::connect(KHttpRequest *rq)
+kev_result KCmdPoolableRedirect::connect(KHttpRequest *rq)
 {
 /*	if (pm == NULL) {
 		klog(KLOG_ERR, "no init the process manage\n");
@@ -33,7 +33,7 @@ void KCmdPoolableRedirect::connect(KHttpRequest *rq)
 		return;
 	}
 */
-	pm.connect(rq, this);
+	return pm.connect(rq, this);
 }
 void KCmdPoolableRedirect::buildXML(std::stringstream &s) {
 	s << "\t<cmd name='" << name << "' proto='";
@@ -69,13 +69,13 @@ void KCmdPoolableRedirect::buildXML(std::stringstream &s) {
 	s << "\t</cmd>\n";
 }
 
-KUpstreamSelectable *KCmdPoolableRedirect::createPipeStream(KVirtualHost *vh,KListenPipeStream *st,std::string &unix_path,bool isSameRunning){
+KTcpUpstream *KCmdPoolableRedirect::createPipeStream(KVirtualHost *vh,KListenPipeStream *st,std::string &unix_path,bool isSameRunning){
 	vector<char *> args;
 	int rdst = RDSTD_NONE;
 	KExtendProgramString ds(name.c_str(),vh);
 	Token_t token = NULL;
 	bool result = false;
-	KUpstreamSelectable *socket = NULL;
+	KTcpUpstream *socket = NULL;
 	st->process.sig = sig;
 #ifdef KSOCKET_UNIX	
 	bool unix_socket = conf.unix_socket;
@@ -171,27 +171,39 @@ KUpstreamSelectable *KCmdPoolableRedirect::createPipeStream(KVirtualHost *vh,KLi
 
 			//st->portMap.swap(ds.port);
 			st->closeServer();
-			if (port2 > 0) {	
+			//printf("port2=[%d],unix_path=[%s]\n",port2,unix_path.c_str());
+			if (port2 > 0 || !unix_path.empty()) {	
 				//debug("cmd port=%d\n",port);
 				//第一次连接，要点时间(10秒)
 				for (int i = 0; i < (int)conf.time_out; i++) {
-					socket = new KUpstreamSelectable(new KClientSocket);
-					if (unix_path.size()>0) {
-#ifdef KSOCKET_UNIX	
-						if (socket->socket->connect(unix_path.c_str(),1)) {
+					//socket = new KTcpUpstream();					
+					SOCKET sockfd = INVALID_SOCKET;
+					if (!unix_path.empty()) {
+#ifdef KSOCKET_UNIX
+						struct sockaddr_un addr;
+						ksocket_unix_addr(unix_path.c_str(),&addr);
+						sockfd = ksocket_connect((sockaddr_i *)&addr, NULL,  1);
+						if(ksocket_opened(sockfd)) {
+							kconnection *cn = kconnection_new(NULL);
+							cn->st.fd = sockfd;
+							socket = new KTcpUpstream(cn);
 							debug("connect to unix socket [%s] success\n",unix_path.c_str());
 							break;
 						}
 #endif
 					} else {
-						if (socket->socket->connect("127.0.0.1", port2, 1)) {
-							//socket->set_time(60);
+						sockaddr_i addr;
+						ksocket_getaddr("127.0.0.1", port2, 0, AI_NUMERICHOST, &addr);
+						sockfd = ksocket_connect(&addr, NULL,  1);
+						if(ksocket_opened(sockfd)) {
+							kconnection *cn = kconnection_new(&addr);
+							cn->st.fd = sockfd;
+							socket = new KTcpUpstream(cn);
 							debug("connect to port %d success\n",port2);
 							break;
 						}
 					}
-					socket->destroy();
-					socket = NULL;
+
 					if (!st->process.isActive()) {
 						break;
 					}
@@ -218,7 +230,7 @@ KUpstreamSelectable *KCmdPoolableRedirect::createPipeStream(KVirtualHost *vh,KLi
 	}
 #ifndef _WIN32
 	if(socket){
-		socket->socket->setnoblock();
+		ksocket_no_block(socket->GetConnection()->st.fd);
 	}
 #endif
 	return socket;

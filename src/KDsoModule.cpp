@@ -31,7 +31,7 @@ bool KDsoModule::load(const char *file)
 		path = file;
 	}
 
-	handle = LoadLibrary(file);
+	handle = LoadLibrary(path.c_str());
 	if (handle == NULL) {
 		klog(KLOG_ERR,"cann't LoadLibrary %s %s\n", path.c_str(), getError());
 		return false;

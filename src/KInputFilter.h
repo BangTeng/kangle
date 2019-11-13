@@ -204,7 +204,9 @@ public:
 		gBuffer = NULL;
 		gParamHeader = NULL;
 		st = NULL;
+#if 0
 		dechunk = NULL;
+#endif
 	}
 	~KInputFilterContext()
 	{
@@ -230,9 +232,11 @@ public:
 		if (st) {
 			delete st;
 		}
+#if 0
 		if (dechunk) {
 			delete dechunk;
 		}
+#endif
 	}
 	void registerRawFilter(KRawInputFilter *rf)
 	{
@@ -272,7 +276,6 @@ public:
 		return raw_head==NULL && filter==NULL;
 	}
 	bool checkGetParam(KParamFilterHook *hook);
-	KDechunkEngine *dechunk;
 	KParamPair *gParamHeader;
 	char *gBuffer;
 	bool parseBoundary(char *val);
@@ -287,6 +290,6 @@ public:
 	KWStream *st;
 private:
 };
-void denyInputFilter(KHttpRequest *rq);
+kev_result denyInputFilter(KHttpRequest *rq);
 #endif
 #endif

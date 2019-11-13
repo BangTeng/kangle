@@ -20,7 +20,6 @@
 #include <string>
 #include "KXmlEvent.h"
 #include "do_config.h"
-#include "malloc_debug.h"
 class KListenConfigParser : public KXmlEvent {
 public:
 	bool parse(std::string file);
@@ -29,5 +28,11 @@ public:
 	bool startCharacter(std::string &context, std::string &qName,
 			char *character, int len);
 };
+class KWorkerConfigParser : public KXmlEvent {
+public:
+	bool parse(std::string file);
+	bool startCharacter(KXmlContext *context, char *character, int len);
+};
 extern KListenConfigParser listenConfigParser;
+extern KWorkerConfigParser worker_config_parser;
 #endif

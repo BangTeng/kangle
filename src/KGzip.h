@@ -24,7 +24,7 @@
 #ifndef KGZIP_H_
 #define KGZIP_H_
 #include "zlib.h"
-#include "KSocket.h"
+#include "ksocket.h"
 #include "KBuffer.h"
 #include "KHttpRequest.h"
 #include "KHttpObject.h"

@@ -6,6 +6,23 @@
 #include "utils.h"
 #ifdef ENABLE_REQUEST_QUEUE
 class KRequestQueue;
+class per_queue_matcher {
+public:
+	per_queue_matcher()
+	{
+		header = NULL;
+		next = NULL;
+	}
+	~per_queue_matcher()
+	{
+		if (header) {
+			free(header);
+		}
+	}
+	char *header;
+	KReg reg;
+	per_queue_matcher *next;
+};
 class KQueueMark : public KMark
 {
 public:
@@ -41,7 +58,7 @@ struct per_queue_arg
 	char *key;
 	KPerQueueMark *mark;
 };
-void WINAPI per_queue_mark_call_back(void *data);
+void per_queue_mark_call_back(void *data);
 class KPerQueueMark : public KMark
 {
 public:
@@ -49,6 +66,7 @@ public:
 	{
 		max_worker = 0;
 		max_queue = 0;
+		matcher = NULL;
 	}
 	~KPerQueueMark();
 	bool mark(KHttpRequest *rq, KHttpObject *obj,
@@ -71,6 +89,7 @@ public:
 	void editHtml(std::map<std::string, std::string> &attribute) throw (KHtmlSupportException);
 	void buildXML(std::stringstream &s);
 private:
+	void build_matcher(std::stringstream &s);
 	void addCallBack(KHttpRequest *rq, const char *key)
 	{
 		per_queue_arg *cd = new per_queue_arg;
@@ -80,7 +99,7 @@ private:
 		rq->registerRequestCleanHook(per_queue_mark_call_back, cd);
 	}
 	KMutex lock;
-	KReg reg_url;
+	per_queue_matcher *matcher;
 	std::map<char *, KRequestQueue *, lessp> queues;
 	unsigned max_worker;
 	unsigned max_queue;

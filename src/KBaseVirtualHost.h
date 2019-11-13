@@ -154,8 +154,8 @@ public:
 	//bool delIndexFile(size_t index);
 	bool delIndexFile(std::string index);
 	void getParsedFileExt(KVirtualHostEvent *ctx);
-	bool addRedirect(bool file_ext,std::string value,KRedirect *rd,std::string allowMethod,bool confirmFile,std::string params);
-	bool addRedirect(bool file_ext, std::string value, std::string target,std::string allowMethod,bool confirmFile,std::string params);
+	bool addRedirect(bool file_ext,std::string value,KRedirect *rd,std::string allowMethod, uint8_t confirmFile,std::string params);
+	bool addRedirect(bool file_ext, std::string value, std::string target,std::string allowMethod, uint8_t confirmFile,std::string params);
 	bool delRedirect(bool file_ext, std::string value);
 	bool addErrorPage(int code, std::string url);
 	bool delErrorPage(int code);
@@ -220,9 +220,6 @@ public:
 	//void buildEnvXml(std::stringstream &s);
 	KMimeType *mimeType;
 	
-#ifdef ENABLE_KSAPI_FILTER
-	KHttpFilterManage *hfm;
-#endif
 private:
 	void copyTo(KVirtualHost *vh, bool copyInherit, int changeInherit);
 	/*

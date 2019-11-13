@@ -1,4 +1,4 @@
-SUBDIRS=src extworker module/webdav 
+SUBDIRS=src extworker
 #module/vhs_mysql module/vhs_sqlite module/whm/whmdso/vhsnode
 EXTRA_DIST=module/access 
 wwwdir=$(prefix)/www

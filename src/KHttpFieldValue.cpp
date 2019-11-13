@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "KHttpFieldValue.h"
-#include "forwin32.h"
+#include "kforwin32.h"
 
 KHttpFieldValue::KHttpFieldValue(const char *val) {
 	this->val = val;

@@ -1,5 +1,5 @@
 # Process this file with autoconf to produce a configure script.
-AC_INIT([kangle],[3.5.14])
+AC_INIT([kangle],[3.5.16])
 AC_CANONICAL_SYSTEM
 AM_INIT_AUTOMAKE
 AM_CONFIG_HEADER([src/config.h])
@@ -7,6 +7,7 @@ AM_CONFIG_HEADER([src/config.h])
 # Checks for programs.
 AC_PROG_CXX
 AC_PROG_CC
+AM_PROG_CC_C_O
 AC_PROG_MAKE_SET
 
 # Checks for libraries.
@@ -210,7 +211,7 @@ AC_ARG_ENABLE([large-files],AC_HELP_STRING([--enable-large-files],[Enable suppor
 ])
 AC_ARG_ENABLE([debug],AC_HELP_STRING([--enable-debug],[Enable debug compile.]),
 [
-	CXXFLAGS="-O0 -g -Wall"
+	CXXFLAGS="-O0 -ggdb3 -Wall"
 ])
 AC_ARG_ENABLE([malloc-debug],AC_HELP_STRING([--enable-malloc-debug],[Enable malloc debug.]),
 [
@@ -298,9 +299,10 @@ hpux*)
 	;;
 esac
 CXXFLAGS="$CXXFLAGS -D_LARGE_FILE -D_FILE_OFFSET_BITS=64 -D__USE_FILE_OFFSET64"
+CFLAGS="$CXXFLAGS"
+CC="$CXX"
 AC_OUTPUT([
 	Makefile
 	src/Makefile
 	extworker/Makefile
-	module/webdav/Makefile
 	])

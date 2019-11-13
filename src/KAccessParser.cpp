@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include "KAccessParser.h"
 #include "KXml.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 
 KAccessParser::KAccessParser() {
 

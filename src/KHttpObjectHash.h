@@ -1,11 +1,10 @@
 #ifndef KHTTPOBJECTHASH_H_
 #define KHTTPOBJECTHASH_H_
 #include <map>
-#include "malloc_debug.h"
 #include "KHttpObjectNode.h"
 #include "KHttpRequest.h"
 #include "KMutex.h"
-#include "rbtree.h"
+#include "krbtree.h"
 
 typedef void (*objHandler)(KHttpObject *obj,void *param);
 
@@ -33,7 +32,7 @@ public:
 		lock.Lock();
 		if (wide) {	
 			int path_len = (int)strlen(url->path);
-			rb_node *node = findn(url,path_len);
+			krb_node *node = findn(url,path_len);
 			while (node) {
 				count += purgeObject((KHttpObject *)node->data,handle,param);
 				node = rb_next(node);
@@ -45,7 +44,7 @@ public:
 				}
 			}
 		} else {
-			rb_node *node = find(url);
+			krb_node *node = find(url);
 			if (node) {
 				count += purgeObject((KHttpObject *)node->data,handle,param);						
 			}
@@ -57,7 +56,7 @@ public:
 	inline bool find(KUrl *url,const char *filename)
 	{
 		lock.Lock();
-		rb_node *node = find(url);
+		krb_node *node = find(url);
 		if (node==NULL) {
 			lock.Unlock();
 			return false;
@@ -87,7 +86,7 @@ public:
 	inline KHttpObject *get(KUrl *url,u_char accept_encoding, bool internal,bool no_disk_cache,time_t min_obj_verified) {
 		assert(url->host);
 		lock.Lock();
-		rb_node *node = find(url);
+		krb_node *node = find(url);
 		if (node==NULL) {
 			lock.Unlock();
 			return NULL;
@@ -101,9 +100,14 @@ public:
 			}
 			if (min_obj_verified > 0 && obj->index.last_verified < min_obj_verified) {
 				//设置了最小验证时间
-				SET(obj->index.flags, FLAG_DEAD);
-				obj = obj->next;
-				continue;
+				if (TEST(min_obj_verified, 1)>0) {
+					//hard
+					SET(obj->index.flags, FLAG_DEAD);
+					obj = obj->next;
+					continue;
+				}
+				//soft
+				obj->index.last_verified = 0;
 			}
 			if ((internal == (TEST(obj->index.flags, FLAG_RQ_INTERNAL)>0)) &&
 				obj->url->match_accept_encoding(accept_encoding)) {
@@ -165,7 +169,7 @@ public:
 		//std::map<KUrl *, KHttpObjectNode *,lessurl>::iterator it;
 		//		printf("KHttpObject:try to remove obj from hash url=%s,this=%x\n",obj->url->host,this);
 		//lock.Lock(__FILE__,__LINE__);
-		rb_node *node = find(obj->url);
+		krb_node *node = find(obj->url);
 		assert(node!=NULL);
 		if (node==NULL) {
 			klog(KLOG_ERR,"BUG!!!cache system cann't find obj [%s%s%s%s] to remov\n",
@@ -265,7 +269,7 @@ private:
 	}
 	inline void insert(KHttpObject *obj)
 	{
-		struct rb_node **n = &(nodes.rb_node), *parent = NULL;
+		struct krb_node **n = &(nodes.rb_node), *parent = NULL;
 		KHttpObject *objnode = NULL;
 		/* Figure out where to put new node */
 		while (*n) {
@@ -283,17 +287,17 @@ private:
 				return;
 			}
 		}					
-		rb_node *node = new rb_node;
-		memset(node, 0, sizeof(rb_node));
+		krb_node *node = new krb_node;
+		memset(node, 0, sizeof(krb_node));
 		node->data = obj;
 		obj->next = NULL;
 		rb_link_node(node, parent, n);
 		rb_insert_color(node, &nodes);
 	}
-	inline rb_node *findn(KUrl *url,int path_len)
+	inline krb_node *findn(KUrl *url,int path_len)
 	{
-		struct rb_node *last = NULL;
-		struct rb_node *node = nodes.rb_node;
+		struct krb_node *last = NULL;
+		struct krb_node *node = nodes.rb_node;
 		while (node) {
 			KHttpObject *data = (KHttpObject *)(node->data);
 			int result;
@@ -318,9 +322,9 @@ private:
 		}
 		return NULL;
 	}
-	inline rb_node *find(KUrl *url)
+	inline krb_node *find(KUrl *url)
 	{
-		struct rb_node *node = nodes.rb_node;
+		struct krb_node *node = nodes.rb_node;
 		while (node) {
 			KHttpObject *data = (KHttpObject *)(node->data);
 			int result;
@@ -334,6 +338,6 @@ private:
 		}
 		return NULL;
 	}
-	struct rb_root nodes ;
+	struct krb_root nodes ;
 };
 #endif /*KHTTPOBJECTHASH_H_*/

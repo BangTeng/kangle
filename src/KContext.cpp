@@ -1,19 +1,18 @@
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "KHttpTransfer.h"
 #include "KCache.h"
 #include "KContext.h"
 #include <assert.h>
 void KContext::clean()
 {
+	clean_if_none_match();
 	if (st) {
 		delete st;
-		st = NULL;
 	}
-	clean_if_none_match();
+	kassert(obj == NULL);
+	kassert(old_obj == NULL);
 	memset(this,0,sizeof(KContext));
 }
-
-
 void KContext::store_obj(KHttpRequest *rq)
 {
 	if (haveStored) {

@@ -21,15 +21,15 @@
 #include "KAccess.h"
 #include "KAcserverManager.h"
 #include "KWriteBackManager.h"
-#include "malloc_debug.h"
-#include "KThreadPool.h"
+#include "kmalloc.h"
+#include "kthread.h"
 #include "KRequestQueue.h"
 #include "lib.h"
-#include "md5.h"
+#include "kmd5.h"
 #include "do_config.h"
 #include "KListenConfigParser.h"
-#include "KSelectorManager.h"
-#include "KHttpFilterDsoManage.h"
+#include "kselector_manager.h"
+#include "KDsoExtendManage.h"
 using namespace std;
 KConfigParser::KConfigParser() {
 
@@ -141,14 +141,15 @@ bool KConfigParser::startElement(KXmlContext *context, std::map<std::string,
 		std::string> &attribute) {
 	if (context->path == "config") {
 #ifdef ENABLE_KSAPI_FILTER
-		if (context->qName == "http_filter") {
-			if (conf.hfdm==NULL) {
-				conf.hfdm = new KHttpFilterDsoManage;
+		if (context->qName == "dso_extend") {
+			if (conf.dem==NULL) {
+				conf.dem = new KDsoExtendManage;
 			}
-			conf.hfdm->add(attribute);
+			conf.dem->add(attribute);
 		}
 #endif
 	}
+#if 0
 	if (context->path == "config/connect" && context->qName == "per_ip") {
 		KPerIpConnect *per_ip = new KPerIpConnect;
 		memset(per_ip,0,sizeof(KPerIpConnect));
@@ -169,6 +170,7 @@ bool KConfigParser::startElement(KXmlContext *context, std::map<std::string,
 		c->per_ip_last = per_ip;
 		return true;
 	}
+#endif
 	return false;
 }
 bool KConfigParser::startCharacter(std::string &context, std::string &qName,
@@ -213,10 +215,6 @@ bool KConfigParser::startCharacter(std::string &context, std::string &qName,
 #endif
 		if(qName == "lang"){
 			SAFE_STRCPY(cconf->lang , character);
-			return true;
-		}
-		if (qName == "worker_thread") {
-			cconf->select_count = atoi(character);
 			return true;
 		}
 		if (qName == "max_connect_info") {
@@ -299,10 +297,6 @@ bool KConfigParser::startCharacter(std::string &context, std::string &qName,
 		
 		if (qName == "read_hup") {
 			cconf->read_hup = (atoi(character) == 1);
-			return true;
-		}
-		if (qName == "mlock") {
-			cconf->mlock = (atoi(character) == 1);
 			return true;
 		}
 		if (qName == "io_buffer") {

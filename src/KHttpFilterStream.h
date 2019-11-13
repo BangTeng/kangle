@@ -5,6 +5,7 @@
 class KHttpFilterHook;
 class KHttpRequest;
 #ifdef ENABLE_KSAPI_FILTER
+#if 0
 class KHttpFilterStream : public KHttpStream
 {
 public:
@@ -22,5 +23,6 @@ private:
 	KHttpFilterHook *hook;
 	DWORD notificationType;
 };
+#endif
 #endif
 #endif

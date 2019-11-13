@@ -11,15 +11,11 @@
 #include "WhmLog.h"
 #include "WhmPackageManage.h"
 
-#include "malloc_debug.h"
+#include "kmalloc.h"
 WhmPackageManage packageManage;
-static FUNC_TYPE FUNC_CALL flushThread(void *param)
+static void flushThread(void *arg,time_t now_time)
 {
-	for (;;) {
-		sleep(2);
-		packageManage.flush();
-	}
-	KTHREAD_RETURN;
+	packageManage.flush();
 }
 WhmPackageManage::WhmPackageManage() {
 }
@@ -58,7 +54,8 @@ WhmPackage * WhmPackageManage::load(const char *file)
 {
 	lock.Lock();
 	if (!flush_thread_started) {
-		flush_thread_started = 	m_thread.start(NULL,flushThread);
+		flush_thread_started = true;
+		register_gc_service(flushThread,NULL);
 	}
 	WhmPackage *package = find(file);
 	if(package==NULL){

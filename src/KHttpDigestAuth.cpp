@@ -10,9 +10,9 @@
 #include "log.h"
 #include "KHttpField.h"
 #include "http.h"
-#include "md5.h"
+#include "kmd5.h"
 
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #ifdef ENABLE_DIGEST_AUTH
 std::map<char *, KHttpDigestSession *, lessp> KHttpDigestAuth::sessions;
 KMutex KHttpDigestAuth::lock;
@@ -64,7 +64,7 @@ bool KHttpDigestSession::verify_rq(KHttpRequest *rq) {
 	}
 	return result;
 	*/
-	if(addr == rq->c->socket->addr){
+	if(ksocket_addr_compare(rq->sink->GetAddr(),&addr)==0){
 		lastActive = time(NULL);
 		return true;
 	}
@@ -270,7 +270,7 @@ bool KHttpDigestAuth::verify(KHttpRequest *rq, const char *password,
 		KStringBuf a1;
 		a1 << user << ":" << realm << ":" << password;
 		//		printf("a1=[%s]\n", a1.getString());
-		KMD5(a1.getString(), ha1, a1.getSize());
+		KMD5(a1.getString(), a1.getSize(), ha1);
 	} else {
 		strncpy(ha1, password, sizeof(ha1));
 		ha1[32] = '\0';
@@ -279,13 +279,12 @@ bool KHttpDigestAuth::verify(KHttpRequest *rq, const char *password,
 	a2 << rq->getMethod() << ":" << uri;
 	//	printf("a2=[%s]\n", a2.getString());
 	char ha2[33];
-	KMD5(a2.getString(), ha2, a2.getSize());
+	KMD5(a2.getString(), a2.getSize(), ha2);
 	KStringBuf ar;
-	ar << ha1 << ":" << nonce << ":" << nc << ":" << cnonce << ":" << qop
-			<< ":" << ha2;
+	ar << ha1 << ":" << nonce << ":" << nc << ":" << cnonce << ":" << qop << ":" << ha2;
 	//	printf("response=[%s]\n", ar.getString());
 	char hresponse[33];
-	KMD5(ar.getString(), hresponse, ar.getSize());
+	KMD5(ar.getString(), ar.getSize(), hresponse);
 	if (this->response && strcmp(this->response, hresponse) == 0) {
 		//		debug("verified success\n");
 		return true;
@@ -340,7 +339,7 @@ void KHttpDigestAuth::init(KHttpRequest *rq,const char *realm) {
 	s.add(rand(), "%x");
 	this->nonce = s.stealString();
 	KHttpDigestSession *session = new KHttpDigestSession(realm);
-	memcpy(&session->addr,&rq->c->socket->addr,sizeof(sockaddr_i));
+	memcpy(&session->addr,rq->sink->GetAddr(),sizeof(sockaddr_i));
 	lock.Lock();
 	//debug("add nonce[%s] to session\n",this->nonce);
 	sessions.insert(pair<char *, KHttpDigestSession *> (

@@ -1,7 +1,7 @@
 #include "KWriteBack.h"
 #include "KHttpObject.h"
-#include "KHttpObjectParserHook.h"
-#include "malloc_debug.h"
+#include "KBufferFetchObject.h"
+#include "kmalloc.h"
 using namespace std;
 
 std::string KWriteBack::getMsg()
@@ -14,6 +14,9 @@ std::string KWriteBack::getMsg()
 	while (h) {
 		s << h->attr << ": " << h->val << "\r\n";
 		h = h->next;
+	}
+	if (keep_alive) {
+		s << "Connection: keep-alive\r\n";
 	}
 	s << "\r\n";
 	if (body.getSize()) {
@@ -31,17 +34,18 @@ void KWriteBack::setMsg(std::string msg)
 	if (msg.empty()) {
 		return;
 	}
-	KWriteBackParserHook hook;
-	KHttpProtocolParser parser;
 	char *buf = strdup(msg.c_str());
-	parser.parse(buf,msg.size(),&hook);
-	status_code = hook.status_code;
-	keep_alive = hook.keep_alive;
-	header = parser.stealHeaders(NULL);
-	if (parser.bodyLen>0) {
-		body.write_all(parser.body,parser.bodyLen);
+	KWriteBackParser parser;
+	int len = (int)msg.size();
+	char *data = buf;
+	parser.Parse(&data,&len);
+	status_code = parser.status_code;
+	keep_alive = parser.keep_alive;
+	header = parser.StealHeader();
+	if (len>0) {
+		body.write_all(data,len);
 	}
-	free(buf);
+	xfree(buf);
 }
 void KWriteBack::buildRequest(KHttpRequest *rq)
 {
@@ -57,6 +61,11 @@ void KWriteBack::buildRequest(KHttpRequest *rq)
 	}
 	rq->responseConnection();
 	if (rq->meth!=METH_HEAD) {
-		rq->buffer.write_all(body.getBuf(),body.getSize());
+		KAutoBuffer buffer(rq->pool);
+		buffer.write_all(body.getBuf(),body.getSize());
+		if (rq->fetchObj) {
+			rq->closeFetchObject();
+		}
+		rq->fetchObj = new KBufferFetchObject(buffer.getHead(), 0, buffer.getLen(), NULL);
 	}
 }

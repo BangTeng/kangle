@@ -29,10 +29,10 @@
 #include <assert.h>
 #include "KXml.h"
 #include "log.h"
-//#include "KString.h"
+//#include "KStringBuf.h"
 //#include "utils.h"
-#include "KFile.h"
-#include "malloc_debug.h"
+#include "KFileName.h"
+#include "kmalloc.h"
 using namespace std;
 
 std::string replace(const char *str, map<string, string> &replaceMap,

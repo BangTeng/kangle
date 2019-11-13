@@ -1,5 +1,6 @@
 #include "KChildApiService.h"
 #include "export.h"
+
 KChildApiService::KChildApiService(KApiDso *dso) : KApiService(dso)
 {
 	st = NULL;
@@ -11,7 +12,7 @@ KChildApiService::~KChildApiService()
 		xfree(post_data);
 	}
 }
-bool KChildApiService::start(KFastcgiStream<KClientSocket> *st)
+bool KChildApiService::start(KFastcgiStream<KSocketStream> *st)
 {
 	this->st = st;
 	if (!st->readParams(&env)) {
@@ -85,8 +86,10 @@ bool KChildApiService::initECB(EXTENSION_CONTROL_BLOCK *ecb)
 	ecb->lpszPathInfo = (char *) env.getEnv("PATH_INFO");
 	ecb->lpszPathTranslated = (char *) env.getEnv("PATH_TRANSLATED");
 	ecb->cbTotalBytes = env.contentLength;
+	ecb->cbLeft = ecb->cbTotalBytes;
+#if 0
 	if (env.contentLength>0 && env.contentLength < 33554432) {
-		leftRead = env.contentLength;
+		INT64 leftRead = env.contentLength;
 		post_data = (char *)malloc(env.contentLength);
 		char *hot_data = post_data;
 		while(leftRead>0){
@@ -100,6 +103,7 @@ bool KChildApiService::initECB(EXTENSION_CONTROL_BLOCK *ecb)
 		ecb->cbAvailable = env.contentLength;
 		ecb->lpbData = (LPBYTE)post_data;
 	}
+#endif
 	ecb->lpszContentType = (env.contentType ? env.contentType : (char *) "");
 	ecb->dwHttpStatusCode = STATUS_OK;
 	ecb->lpszQueryString = (char *) env.getEnv("QUERY_STRING");

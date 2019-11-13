@@ -3,12 +3,12 @@
 #include <stdlib.h>
 #include "global.h"
 #include "KFetchObject.h"
-#include "KAsyncFile.h"
-#include "KFile.h"
+#include "kasync_file.h"
+#include "kfile.h"
 class KAsyncData
 {
 public:
-	KAsyncData(KAsyncFile *fp,int buf_size)
+	KAsyncData(kasync_file *fp,int buf_size)
 	{
 		memset(this,0,sizeof(KAsyncData));
 		this->aio_fp = fp;
@@ -18,7 +18,7 @@ public:
 	~KAsyncData()
 	{
 		if (aio_fp) {
-			delete aio_fp;
+			kasync_file_close(aio_fp);
 		}
 		if (buf) {
 			aio_free_buffer(buf);
@@ -27,7 +27,7 @@ public:
 	INT64 offset;
 	int buf_size;
 	char *buf;
-	KAsyncFile *aio_fp;
+	kasync_file *aio_fp;
 };
 class KStaticFetchObject : public KFetchObject 
 {
@@ -35,22 +35,26 @@ public:
 	KStaticFetchObject()
 	{
 		ad = NULL;
+		kfinit(fp);
 	}
 	~KStaticFetchObject()
 	{
 		if (ad) {
 			delete ad;
 		}
+		if (kflike(fp)) {
+			::kfclose(fp);
+		}
 	}
 	bool needTempFile()
 	{
 		return false;
 	}
-	void open(KHttpRequest *rq);
-	void readBody(KHttpRequest *rq);
-	void handleAsyncReadBody(KHttpRequest *rq,char *buf,int got);	
-	void asyncReadBody(KHttpRequest *rq);
-	void syncReadBody(KHttpRequest *rq);
+	kev_result open(KHttpRequest *rq);
+	kev_result readBody(KHttpRequest *rq);
+	kev_result handleAsyncReadBody(KHttpRequest *rq,char *buf,int got);
+	kev_result asyncReadBody(KHttpRequest *rq);
+	kev_result syncReadBody(KHttpRequest *rq);
 	void getAsyncBuffer(KHttpRequest *rq,iovec *buf,int &bufCount)
 	{
 		assert(ad);
@@ -58,8 +62,7 @@ public:
 		buf[0].iov_len = (int) MIN(rq->file->fileSize,(INT64)sizeof(ad->buf));
 	}
 private:
-	KFile fp;
+	FILE_HANDLE fp;
 	KAsyncData *ad;
-	
 };
 #endif

@@ -16,7 +16,7 @@
  * See COPYING file for detail.
  */
 #include "KHtmlSupport.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 KHtmlSupport::KHtmlSupport()
 {
 }

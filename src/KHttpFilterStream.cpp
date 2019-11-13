@@ -4,6 +4,7 @@
 #include "KHttpRequest.h"
 #include "KHttpFilterContext.h"
 #ifdef ENABLE_KSAPI_FILTER
+#if 0
 struct KMemoryBlock
 {
 	char *buf;
@@ -100,4 +101,5 @@ StreamState KHttpFilterStream::write_end()
 	}
 	return st->write_end();
 }
+#endif
 #endif

@@ -5,16 +5,16 @@
 #include <direct.h>
 #endif
 #include "lib.h"
-#include "KString.h"
-#include "forwin32.h"
-#include "md5.h"
-#define KGL_URL_SSL       1
+#include "KStringBuf.h"
+#include "kforwin32.h"
+#include "kmalloc.h"
+#define KGL_URL_SSL       1   //根据端口判断是否是ssl
 #define KGL_URL_IPV6      2
 #define KGL_URL_VARIED    4
 #define KGL_URL_REWRITED  8
 #define KGL_URL_RANGED    0x10
 #define KGL_URL_ENCODE    0x20
-#define KGL_URL_ORIG_SSL  0x40
+#define KGL_URL_ORIG_SSL  0x40  //源建议的ssl
 #define KGL_URL_BAD       0x80
 
 #define KGL_ENCODING_DEFLATE  1
@@ -189,7 +189,7 @@ public:
 		}
 		return ret;
 	}
-	void getPath(KStringBuf &s, bool urlEncode = false) {
+	void GetPath(KStringBuf &s, bool urlEncode = false) {
 		if (urlEncode) {
 			size_t len = strlen(path);
 			char *newPath = url_encode(path, len, &len);
@@ -215,26 +215,33 @@ public:
 			}
 		}
 	}
+	void GetHost(KStringBuf &s)
+	{
+		int default_port = 80;
+		if (TEST(flags, KGL_URL_SSL)) {
+			default_port = 443;
+		}
+		if (unlikely(TEST(flags, KGL_URL_IPV6))) {
+			s << "[" << host << "]";
+		} else {
+			s << host;
+		}
+		if (unlikely(port != default_port)) {
+			s << ":" << port;
+		}
+		return;
+	}
 	bool getUrl(KStringBuf &s,bool urlEncode=false) {
-		if (host == NULL || path == NULL) {
+		if (unlikely(host == NULL || path == NULL)) {
 			return false;
 		}
-		int defaultPort = 80;
 		if(TEST(flags,KGL_URL_SSL)){
 			s << "https://";
-			defaultPort = 443;
 		} else {
 			s << "http://";
 		}
-		if (TEST(flags, KGL_URL_IPV6)){
-			s << "[" << host << "]";
-		}else{
-			s << host;
-		}
-		if (port != defaultPort) {
-			s << ":" << port;
-		}
-		getPath(s, urlEncode);
+		GetHost(s);
+		GetPath(s, urlEncode);
 		return true;
 	}	
 	char *host;

@@ -2,6 +2,8 @@
 #define KMULTIPARTINPUTFILTER_H
 #include "KInputFilter.h"
 #include "KHttpHeader.h"
+#include "KHttpParser.h"
+
 #ifdef ENABLE_INPUT_FILTER
 class KFileContentFilterHelper
 {
@@ -42,8 +44,8 @@ class KMultiPartInputFilter : public KInputFilter
 public:
 	KMultiPartInputFilter()
 	{
-		isFileContent = false;
-		header = NULL;
+		//isFileContent = false;
+		memset(&hm, 0, sizeof(hm));
 		param = NULL;
 		filename = NULL;
 		file_head = file_last = NULL;
@@ -51,8 +53,8 @@ public:
 	}
 	~KMultiPartInputFilter()
 	{
-		if (header) {
-			free_header(header);
+		if (hm.header) {
+			free_header(hm.header);
 		}
 		if (param) {
 			free(param);
@@ -87,9 +89,10 @@ public:
 		return true;
 	}
 private:
+	int InternalCheck(KInputFilterContext *rq, const char *str, int len, bool isLast);
 	int handleBody(KInputFilterContext *fc,bool &success);
 	char *parseBody(KInputFilterContext *fc,int *len,bool &all);
-	int parseHeader(KInputFilterContext *rq);
+	kgl_parse_result parseHeader(KInputFilterContext *rq);
 	int hookFileContent(KInputFilterContext *fc,const char *buf,int len);
 	void cleanFileContentHook()
 	{
@@ -109,8 +112,8 @@ private:
 		}
 		file_last = NULL;
 	}
-	bool isFileContent;
-	KHttpHeader *header;
+	KHttpHeaderManager hm;
+	//bool isFileContent;
 	char *param;
 	int param_len;
 	char *filename;

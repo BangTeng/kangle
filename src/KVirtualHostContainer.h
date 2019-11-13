@@ -1,6 +1,6 @@
 #ifndef KVIRTUALHOSTCONTAINER_H
 #define KVIRTUALHOSTCONTAINER_H
-#include "rbtree.h"
+#include "krbtree.h"
 #include <string.h>
 #include "KHttpHeader.h"
 
@@ -142,7 +142,7 @@ private:
 	bool add(domain_t name,bool wide,kgl_bind_level high,void *vh);
 	kgl_del_result del(domain_t name,bool wide,void *vh);
 	void *find(domain_t name);
-	rb_tree *tree;
+	krb_tree *tree;
 	KBindVirtualHost *wide_list;
 	KBindVirtualHost *list;
 };

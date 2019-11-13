@@ -42,7 +42,7 @@ public:
 		return STREAM_WRITE_FAILED;
 	}
 	virtual StreamState write_end() {
-		if (!preventWriteEnd && st) {
+		if (st) {
 			return st->write_end();
 		}
 		return STREAM_WRITE_SUCCESS;

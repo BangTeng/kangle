@@ -6,7 +6,7 @@
  */
 #include <string.h>
 #include "KAjpMessage.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 KAjpMessage::KAjpMessage()
 {
 	buf = NULL;

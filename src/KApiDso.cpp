@@ -24,6 +24,7 @@
 #ifndef _WIN32
 #include <dlfcn.h>
 #endif
+#include <errno.h>
 #include "log.h"
 #include "utils.h"
 #include "KApiDso.h"
@@ -31,9 +32,6 @@ using namespace std;
 
 KApiDso::KApiDso()
 {
-#ifndef _WIN32
-	DllMain = NULL;
-#endif
 	handle = NULL;
 	GetExtensionVersion = NULL;
 	HttpExtensionProc = NULL;
@@ -70,7 +68,6 @@ void KApiDso::unload() {
 	if (handle) {
 		debug("unload api [%s]\n",path.c_str());
 		if (terminate) {
-			detachProcess();
 			FreeLibrary(handle);
 		}
 		handle = NULL;
@@ -119,9 +116,6 @@ bool KApiDso::load() {
 		return false;
 	}
 
-	DllMain = (DllMainf) GetProcAddress(handle, "DllMain");
-	attachProcess();
-
 	GetExtensionVersion = (GetExtensionVersionf) GetProcAddress(handle,
 			"GetExtensionVersion");
 	if (GetExtensionVersion == NULL) {
@@ -139,35 +133,4 @@ bool KApiDso::load() {
 	TerminateExtension = (TerminateExtensionf) GetProcAddress(handle,
 			"TerminateExtension");
 	return init();
-}
-
-void KApiDso::attachProcess() {
-#ifndef _WIN32
-	if (DllMain) {
-		DllMain(handle, DLL_PROCESS_ATTACH, 0);
-	}
-#endif
-}
-void KApiDso::detachProcess() {
-#ifndef _WIN32
-	if (DllMain) {
-		DllMain(handle, DLL_PROCESS_DETACH, 0);
-		DllMain = NULL;
-	}
-#endif
-}
-void KApiDso::attachThread() {
-#ifndef _WIN32
-	if (DllMain) {
-		DllMain(handle, DLL_THREAD_ATTACH, NULL);
-	}
-#endif
-}
-
-void KApiDso::detachThread() {
-#ifndef _WIN32
-	if (DllMain) {
-		DllMain(handle, DLL_THREAD_DETACH, NULL);
-	}
-#endif
 }

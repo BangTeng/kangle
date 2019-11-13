@@ -17,7 +17,7 @@
  */
 #ifndef KIPACLBASE_H_
 #define KIPACLBASE_H_
-#include "KSocket.h"
+#include "ksocket.h"
 #include "KAcl.h"
 #include "KTable.h"
 #include "utils.h"
@@ -28,14 +28,15 @@ struct IP_MODEL {
 };
 class KIpAclBase: public KAcl {
 public:
-
-
 	static bool matchIpModel(IP_MODEL &ip,ip_addr &ipaddr)
 	{
-		if (ip.mask_num > 0)
-			return ip.addr == (ipaddr & ip.mask);
-		else
-			return ip.addr == ipaddr;
+		if (ip.mask_num > 0) {
+			ip_addr ret;
+			ksocket_ipaddr_and(&ipaddr, &ip.mask, &ret);
+			return ksocket_ipaddr_compare(&ip.addr, &ret) == 0;
+		} else {
+			return ksocket_ipaddr_compare(&ip.addr, &ipaddr) == 0;
+		}
 	}
 	static bool addIpModel(const char *ip_model, IP_MODEL &m_ip) {
 		memset(&m_ip, 0, sizeof(m_ip));
@@ -49,8 +50,8 @@ public:
 		bool result;
 		if (ip_mask[0].size() > 0){
 			sockaddr_i a;
-			result = KSocket::getaddr(ip_mask[0].c_str(), 0, &a,0,AI_NUMERICHOST);
-			KSocket::get_addr(&a,&m_ip.addr);
+			result = ksocket_getaddr(ip_mask[0].c_str(), 0,AF_UNSPEC,AI_NUMERICHOST,&a);
+			ksocket_ipaddr(&a,&m_ip.addr);
 		}
 		if (ip_mask.size() > 1) {
 			unsigned long default_mask = (unsigned long) 0xffffffff;
@@ -86,7 +87,7 @@ public:
 #ifdef KSOCKET_IPV6
 				}
 #endif
-				m_ip.addr = (m_ip.addr & m_ip.mask);
+				ksocket_ipaddr_and(&m_ip.addr, &m_ip.mask, &m_ip.addr);
 			}
 		}
 		return result;
@@ -103,7 +104,7 @@ public:
 	std::string getDisplay() {
 		std::stringstream s;
 		char ips[MAXIPLEN];
-		KSocket::make_ip(&ip.addr,ips,sizeof(ips));
+		ksocket_ipaddr_ip(&ip.addr,ips,sizeof(ips));
 		s << ips;
 		if (ip.mask_num > 0) {
 			s << "/" << (int) ip.mask_num;

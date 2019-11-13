@@ -7,9 +7,9 @@
 #include <vector>
 #include <string.h>
 #include "KApiProcess.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "lang.h"
-KUpstreamSelectable *KApiProcess::poweron(KVirtualHost *vh,KExtendProgram *erd,bool &success)
+KTcpUpstream *KApiProcess::poweron(KVirtualHost *vh,KExtendProgram *erd,bool &success)
 {
 	bool unix_socket = false;
 #ifdef KSOCKET_UNIX
@@ -37,7 +37,7 @@ KUpstreamSelectable *KApiProcess::poweron(KVirtualHost *vh,KExtendProgram *erd,b
 		s.str().swap(unix_path);
 	} else {
 #endif
-		if(!KSocket::getaddr("127.0.0.1",pi.port,&addr)){
+		if(!ksocket_getaddr("127.0.0.1", pi.port, AF_UNSPEC, AI_NUMERICHOST, &addr)){
 			klog(KLOG_ERR,"cann't get 127.0.0.1 addr\n");
 			success = false;
 			return NULL;

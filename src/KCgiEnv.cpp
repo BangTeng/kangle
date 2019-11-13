@@ -6,9 +6,9 @@
  */
 #include <string.h>
 #include <stdio.h>
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "KCgiEnv.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 using namespace std;
 KCgiEnv::KCgiEnv() {
 	env = NULL;
@@ -43,7 +43,7 @@ char **KCgiEnv::dump_env() {
 }
 bool KCgiEnv::addEnvEnd() 
 {
-	assert(env==NULL);
+	kassert(env==NULL);
 	if(env){
 		xfree(env);
 	}

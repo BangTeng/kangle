@@ -23,15 +23,9 @@
  */
 #ifndef GLOBAL_H_asdfkjl23kj4234
 #define GLOBAL_H_asdfkjl23kj4234
-#ifndef _WIN32
-#include "config.h"
-#endif
-#ifndef _WIN32
-#define INT64  long long
-#else
-#define HAVE_SOCKLEN_T 1
-#define ENABLE_DETECT_WORKER_LOCK    1
-#endif
+#include "kfeature.h"
+
+ 
 
 #ifndef PROGRAM_NAME
 #ifdef HTTP_PROXY
@@ -41,7 +35,7 @@
 #endif
 #endif
 #ifndef VERSION
-#define VERSION         "3.5.14"
+#define VERSION         "3.5.16"
 #endif
 #define VER_ID   VERSION
 #ifndef MAX
@@ -50,7 +44,7 @@
 #ifndef MIN
 #define MIN(a,b)  ((a)>(b)?(b):(a))
 #endif
-#define	 GC_SLEEP_TIME	5
+#define	 GC_SLEEP_MSEC	5000
 
 #define  NBUFF_SIZE     8192
 
@@ -71,25 +65,21 @@
 #define  JUMP_MSERVER   14
 #define  JUMP_DROP      16
 #define  JUMP_FINISHED  17
+#define  JUMP_DSO       18
 #define  JUMP_UNKNOW    100
 
 #define  REQUEST          0
 #define  RESPONSE         1
 #define  REQUEST_RESPONSE 2
 /***********************************/
-#define WORK_MODEL_KA        (1)
 #define WORK_MODEL_MANAGE    (1<<1)
 #define WORK_MODEL_SSL       (1<<2)
-#define WORK_MODEL_INTERNAL  (1<<3)
-#define WORK_MODEL_REPLACE   (1<<5)
-#ifdef ENABLE_PROXY_PROTOCOL
+
+#ifdef  ENABLE_PROXY_PROTOCOL
 #define WORK_MODEL_PROXY     (1<<6)
 #endif
 #define WORK_MODEL_TPROXY    (1<<7)
 
-#define WORK_MODEL_SIMULATE  (1<<9)
-#define WORK_MODEL_UNIX_SOCKET (1<<11)
-#define WORK_MODEL_SKIP_ACCESS (1<<12)
 /************************************/
 
 #ifdef _WIN32
@@ -111,14 +101,6 @@
 #endif
 #endif
 #define PID_FILE   "/kangle.pid"
-
-#include <assert.h>
-
-#ifndef _WIN32
-#include "environment.h"
-#else
-#pragma warning(disable: 4290 4996)
-#endif
 #define forever() for(;;)
 
 #define IF_FREE(p) {if ( p ) xfree(p);p=NULL;}
@@ -139,9 +121,7 @@
 #define ENABLE_VH_FLOW             1
 #define ENABLE_ATOM                1
 
-#ifdef  KSOCKET_SSL
-#define ENABLE_UPSTREAM_SSL        1
-#endif
+
 ///////////////////////////////////////////////////////////////////
 /**
 * obj->index.flags
@@ -278,20 +258,6 @@
 #define  RQF_CC_PASS         (1<<30)
 #define  RQF_CC_HIT          (1<<31)
 
-
-#define KGL_LIST_CONNECT          0
-#define KGL_LIST_RW               1
-#define KGL_LIST_SYNC             2
-#define KGL_LIST_READY            3
-#define KGL_LIST_BLOCK            4
-#define KGL_LIST_NONE             5
-
-
-#define ANSW_SIZE  (4*1024)
-#define SET(a,b)   ((a)|=(b))
-#define CLR(a,b)   ((a)&=~(b))
-#define TEST(a,b)  ((a)&(b))
-
 #define        IS_SPACE(a)     isspace((unsigned char)a)
 #define        IS_DIGIT(a)     isdigit((unsigned char)a)
 #define  CONNECT_TIME_OUT    20
@@ -305,6 +271,7 @@
 #define WHM_MODULE                 1
 #endif
 #define ENABLE_STAT_STUB           1
+#define ENABLE_INPUT_FILTER        1
 #define ENABLE_MULTI_TABLE         1
 #define ENABLE_DIGEST_AUTH         1
 #define ENABLE_MULTI_SERVER        1
@@ -319,7 +286,6 @@
 	#define ENABLE_TF_EXCHANGE         1
 	#define ENABLE_SUBDIR_PROXY        1
 #endif
-#define ENABLE_INPUT_FILTER        1
 #define ENABLE_FORCE_CACHE         1
 #define ENABLE_REQUEST_QUEUE       1
 #define ENABLE_USER_ACCESS         1
@@ -340,7 +306,11 @@
 #define X_REAL_IP_SIGN             "x-real-ip-sign"
 #define VARY_URL_KEY               1
 enum Proto_t {
-	Proto_http, Proto_fcgi, Proto_ajp,Proto_uwsgi,Proto_scgi,Proto_hmux,Proto_spdy,Proto_tcp,Proto_proxy
+	Proto_http, Proto_fcgi, Proto_ajp,
+#if 0
+	Proto_uwsgi,Proto_scgi,Proto_hmux,
+#endif
+	Proto_spdy,Proto_tcp,Proto_proxy
 };
 /**
 * 
@@ -349,7 +319,7 @@ enum Proto_t {
 #define	HASH_MASK	(HASH_SIZE-1)
 #define MULTI_HASH      1
 #ifdef  LINUX
-	#define ENABLE_SENDFILE      1
+	//#define ENABLE_SENDFILE      1
 #endif
 
 //define likely and unlikely
@@ -367,4 +337,21 @@ enum Proto_t {
 #endif //DISABLE_KSAPI_FILTER
 //for test
 //#define ENABLE_KSSL_BIO            1
+
+#define MAX_HTTP_HEAD_SIZE	4194304
+
+#ifdef  __cplusplus
+#define KBEGIN_DECLS  extern "C" {
+#define KEND_DECLS    }
+#define	INLINE	inline
+#else
+#define KBEGIN_DECLS
+#define KEND_DECLS
+#ifdef _WIN32
+#define INLINE __forceinline
+#else
+#define INLINE	inline __attribute__((always_inline))
+#endif
+#endif
+
 #endif //global.h

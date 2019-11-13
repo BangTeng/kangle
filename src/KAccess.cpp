@@ -28,7 +28,7 @@
 #include "http.h"
 #include "do_config.h"
 #include "KTable.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "cache.h"
 #include "KSrcAcl.h"
 #include "KModelManager.h"
@@ -66,12 +66,11 @@
 #include "KAuthMark.h"
 #include "KMultiHostAcl.h"
 #include "KSSLSerialAcl.h"
-#include "KCdnMysqlMark.h"
 #include "KCdnRewriteMark.h"
 #include "KAuthUserAcl.h"
 #include "KRefererAcl.h"
 #include "KRegFileAcl.h"
-#include "KSelector.h"
+#include "kselector.h"
 #include "KAddHeaderMark.h"
 #include "KRemoveHeaderMark.h"
 #include "KReplaceHeaderMark.h"
@@ -114,7 +113,7 @@
 #include "KMinObjVerifiedMark.h"
 #include "KTryFileAcl.h"
 #include "KMapRedirectMark.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #ifdef ENABLE_TCMALLOC
 #include "google/heap-checker.h"
 #endif
@@ -209,6 +208,7 @@ void KAccess::loadModel() {
 
 	addAclModel(REQUEST,new KRequestHeaderAcl());
 	addAclModel(REQUEST,new KHostAcl());
+	addAclModel(REQUEST,new KHeaderMapAcl());
 	addAclModel(REQUEST,new KWideHostAcl());
 	addAclModel(REQUEST,new KMultiHostAcl());
 #ifdef ENABLE_SIMULATE_HTTP
@@ -320,7 +320,6 @@ void KAccess::loadModel() {
 	
 	addMarkModel(REQUEST,new KPathSignMark());
 	addAclModel(REQUEST_RESPONSE,new KListenPortsAcl());
-	addAclModel(REQUEST_RESPONSE,new KKeepConnectionAcl());
 	addMarkModel(REQUEST,new KFlowMark());
 	addMarkModel(REQUEST,new KVaryMark());	
 	addMarkModel(REQUEST,new KIpSpeedLimitMark());
@@ -387,17 +386,13 @@ int KAccess::check(KHttpRequest *rq, KHttpObject *obj) {
 	{
 		assert(rq->fetchObj == NULL);
 		as = (KPoolableRedirect *)jump;
-		//if (as->proto != Proto_http && as->proto!=Proto_ajp && as->proto!=Proto_tcp) {
-		//	jumpType = JUMP_DENY;
-		//} else {
 		assert(rq->fetchObj == NULL);
 		rq->fetchObj = as->makeFetchObject(rq, NULL);
 		as->addRef();
-		KBaseRedirect *brd = new KBaseRedirect(as, 0);
+		KBaseRedirect *brd = new KBaseRedirect(as, KGL_CONFIRM_FILE_NEVER);
 		rq->fetchObj->bindBaseRedirect(brd);
 		brd->release();
-		jumpType = JUMP_ALLOW;
-		//}
+		jumpType = JUMP_ALLOW;	
 		break;
 	}
 #ifdef ENABLE_WRITE_BACK
@@ -531,7 +526,9 @@ bool KAccess::startElement(KXmlContext *context, std::map<std::string,
 		}
 	}
 	if (context->getParentName() == qName && context->qName == "table") {
-		assert(curTable==NULL);
+		if (curTable != NULL) {
+			klog(KLOG_ERR, "warning! xml config file format may be wrong? table element not closed.\n");
+		}
 		curTable = getTable(attribute["name"]);
 		if (curTable == NULL) {
 			curTable = new KTable();
@@ -718,6 +715,10 @@ bool KAccess::parseChainAction(std::string action, int &jumpType,
 		}
 		if (strncasecmp(action.c_str(), "cmd:", 4) == 0) {
 			jumpType = JUMP_CMD;
+			jumpName = action.substr(4);
+		}
+		if (strncasecmp(action.c_str(), "dso:", 4) == 0) {
+			jumpType = JUMP_DSO;
 			jumpName = action.substr(4);
 		}
 	}

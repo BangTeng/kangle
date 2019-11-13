@@ -28,7 +28,6 @@ public:
 	~KContext()
 	{
 		assert(obj==NULL && old_obj==NULL);
-		assert(st == NULL);
 		assert(if_none_match == NULL);
 	}
 	void pushObj(KHttpObject *obj);
@@ -56,43 +55,46 @@ public:
 		if_none_match->len = len;
 		memcpy(if_none_match->data,etag,len+1);		
 	}
+	KWStream *st;
 	KHttpObject *obj;
 	KHttpObject *old_obj;
 	
 #ifdef ENABLE_REQUEST_QUEUE
-	bool queue_handled;
+	uint32_t queue_handled :1;
 #endif
-	bool cache_hit;
-	bool cache_hit_part;
-	bool haveStored;
-	bool new_object;
-	bool know_length;
-	bool upstream_connection_keep_alive;
-	bool connection_upgrade;
-	bool connection_connect_proxy;
-	bool always_on_model;
-	bool upstream_chunked;
-	bool response_checked;
-	bool no_body;
-	bool upstream_sign;
-	bool parent_signed;
-	bool read_huped;
-#ifndef NDEBUG
-	bool upstream_expected_done;
-	//用于调试，跟踪上流socket
-	SOCKET upstream_socket;
-#endif
+	uint32_t internal:1;
+	uint32_t replace : 1;
+	uint32_t simulate : 1;
+	uint32_t skip_access : 1;
+	uint32_t cache_hit : 1;
+	uint32_t cache_hit_part : 1;
+	uint32_t haveStored : 1;
+	uint32_t new_object : 1;
+	uint32_t know_length : 1;
+	uint32_t upstream_connection_keep_alive : 1;
+	//中转模式,双通道
+	uint32_t connection_upgrade : 1;
+	//connect代理
+	uint32_t connection_connect_proxy : 1;
+	uint32_t always_on_model : 1;
+	uint32_t upstream_chunked : 1;
+	uint32_t response_checked : 1;
+	uint32_t no_body : 1;
+	uint32_t upstream_sign : 1;
+	uint32_t parent_signed : 1;
+	//client主动关闭
+	uint32_t read_huped : 1;
+	//rq进入write timer
+	uint32_t write_timer : 1;
+	uint32_t expected_done : 1;
+	uint32_t upstream_expected_done : 1;
 	//lastModified类型
 	modified_type mt;
-	u_short us_code;
 	time_t lastModified;
 	kgl_str_t *if_none_match;
 	INT64 content_range_length;
-	int keepAlive;
 	//异步读文件时需要的数据
 	INT64 left_read;
-
-	KWStream *st;
 	void clean();
 	void store_obj(KHttpRequest *rq);
 	void clean_obj(KHttpRequest *rq,bool store_flag = true);

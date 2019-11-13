@@ -21,7 +21,7 @@
 #include <map>
 #include "KMark.h"
 #include "do_config.h"
-#include "KSocket.h"
+#include "ksocket.h"
 #include "lang.h"
 class KFlagMark: public KMark {
 public:

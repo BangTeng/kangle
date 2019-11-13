@@ -7,6 +7,7 @@
 
 #ifndef KSAPI_H_
 #define KSAPI_H_
+#include "kfeature.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -90,8 +91,11 @@ typedef void * KTHREAD_FUNCTION;
 #define   KGL_REQ_SERVER_VAR                       (KGL_REQ_RESERV_COMMAND+5)
 #define   KGL_REQ_TIMER                            (KGL_REQ_RESERV_COMMAND+6)
 #define   KGL_REQ_ASYNC_HTTP                       (KGL_REQ_RESERV_COMMAND+7)
-#define   KGL_REQ_REGISTER_ACCESS                  (KGL_REQ_RESERV_COMMAND+8)
-#define   KGL_REQ_ONREADY                          (KGL_REQ_RESERV_COMMAND+9)
+#define   KGL_REQ_ONREADY                          (KGL_REQ_RESERV_COMMAND+8)
+#define   KGL_REQ_REGISTER_ACCESS                  (KGL_REQ_RESERV_COMMAND+9)
+#define   KGL_REQ_REGISTER_SYNC_UPSTREAM           (KGL_REQ_RESERV_COMMAND+10)
+#define   KGL_REQ_REGISTER_ASYNC_UPSTREAM          (KGL_REQ_RESERV_COMMAND+11)
+
 typedef struct _kgl_command_env
 {
 	char *name;
@@ -117,7 +121,7 @@ typedef struct _kgl_command
 } kgl_command;
 typedef struct _kgl_thread
 {
-	KTHREAD_FUNCTION (* thread_function)(void *param,int msec);
+	kev_result (*thread_function)(void *param,int msec);
 	void *param;
 	void *worker;
 } kgl_thread;
@@ -132,9 +136,9 @@ typedef struct _kgl_timer
 #define ASYNC_HOOK_ERROR       1
 /* todo:读入post回调 */
 typedef int (WINAPI *http_post_hook) (void *arg,char *buf,int len);
-/* http头回调,code>1000，为kangle内部产生的错误代码 */
+/* 返回0成功，其他错误*/
 typedef int (WINAPI *http_header_hook)(void *arg,int code,struct KHttpHeader *header);
-/* http内容回调 data=NULL 结束 */
+/* http内容回调 data=NULL 结束 ,返回0成功，其他错误*/
 typedef int (WINAPI *http_body_hook)(void *arg,const char *data,int len);
 #define KF_SIMULATE_CACHE 1
 #define KF_SIMULATE_DELTA 2
@@ -167,7 +171,7 @@ typedef struct _kgl_async_http
 
 #define KF_MAX_FILTER_DESC_LEN  (256+1)
 
-enum KF_REQ_TYPE
+typedef enum _KF_REQ_TYPE
 {
 	KF_REQ_DISABLE_NOTIFICATIONS = 8,
 	KF_REQ_CONNECT_CLEAN         = 9,
@@ -175,18 +179,18 @@ enum KF_REQ_TYPE
 	KF_REQ_REWRITE_URL           = 11,
 	KF_REQ_SAVE_POST             = 12,
 	KF_REQ_RESTORE_POST          = 13,
-} ;
-enum KF_STATUS_TYPE
+} KF_REQ_TYPE;
+
+typedef enum _KF_STATUS_TYPE
 {
 	KF_STATUS_REQ_FINISHED             = 0x8000000,
 	KF_STATUS_REQ_FINISHED_KEEP_CONN   = 0x8000001,
-	KF_STATUS_REQ_NEXT_NOTIFICATION    = 0x8000002,
-	KF_STATUS_REQ_HANDLED_NOTIFICATION = 0x8000003,
+	KF_STATUS_REQ_HANDLED              = 0x8000003,
 	KF_STATUS_REQ_ERROR                = 0x8000004,
-	KF_STATUS_REQ_READ_NEXT            = 0x8000005,
 	KF_STATUS_REQ_ACCESS_TRUE          = 0x8000006,
 	KF_STATUS_REQ_ACCESS_FALSE         = 0x8000007,
-};
+} KF_STATUS_TYPE;
+
 typedef enum _KGL_RESULT
 {
 	KGL_OK                         = 0,
@@ -197,51 +201,123 @@ typedef enum _KGL_RESULT
 	KGL_ENOT_READY                 = 5,
 	KGL_EUNKNOW                    = 10,
 	KGL_EHAS_SEND_HEADER           = 11,
+	KGL_ENOT_SUPPORT               = 12
 } KGL_RESULT;
+
+typedef enum {
+	KGL_VAR_HEADER = 0
+} KGL_VAR;
+
+typedef   LPVOID          KCONN;
+
 typedef enum _KF_ALLOC_MEMORY_TYPE
 {
 	KF_ALLOC_CONNECT = 0,
 	KF_ALLOC_REQUEST = 1
 } KF_ALLOC_MEMORY_TYPE;
-typedef struct _kgl_filter_context
+
+typedef struct _kgl_access_context
 {
-	DWORD          cbSize;
-	DWORD          Revision;
-	PVOID          ServerContext;
-	DWORD          ulReserved;
-	PVOID          pModelContext;
-	PVOID          pFilterContext;
-	KGL_RESULT (WINAPI * get_variable) (
-		struct _kgl_filter_context * pfc,
+	DWORD          size;
+	DWORD          ver;
+	KCONN          cn;
+	PVOID          model_ctx;
+	KGL_RESULT(*get_variable) (
+		KCONN cn,
 		LPSTR                        lpszVariableName,
 		LPVOID                       lpvBuffer,
 		LPDWORD                      lpdwSize
-	);
-	KGL_RESULT (WINAPI * add_headers) (
-		struct _kgl_filter_context * pfc,
-		LPSTR                        attr,
-		LPSTR                        val,
-		DWORD                        dwReserved
-	);
-	KGL_RESULT (WINAPI * write_client) (
-		struct _kgl_filter_context * pfc,
-		LPVOID                       Buffer,
-		LPDWORD                      lpdwBytes,
-		DWORD                        dwReserved
-	);
-	VOID * (WINAPI * alloc_memory) (
-		struct _kgl_filter_context * pfc,
-		DWORD                        cbSize,
-		KF_ALLOC_MEMORY_TYPE         memory_type
-	);
-	KGL_RESULT (WINAPI * support_function) (
-		struct _kgl_filter_context * pfc,
-		enum KF_REQ_TYPE             kfReq,
+		);
+
+	KGL_RESULT(*support_function) (
+		KCONN cn,
+		KF_REQ_TYPE             kfReq,		
 		PVOID                        pData,
 		DWORD                        ul1,
 		DWORD                        ul2
-	);
-}  kgl_filter_context;
+		);
+
+	KGL_RESULT (*write_client) (
+		KCONN cn,
+		LPVOID                       lpvBuffer,
+		LPDWORD                      lpdwSize);
+	VOID * (*alloc_memory) (
+		KCONN cn,
+		DWORD                        cbSize,
+		KF_ALLOC_MEMORY_TYPE         memory_type
+		);
+	KGL_RESULT(*get_header) (
+		KCONN cn,
+		LPSTR                         lpszName,
+		LPVOID                        lpvBuffer,
+		LPDWORD                       lpdwSize
+		);
+	KGL_RESULT(*set_header) (
+		KCONN cn,
+		LPSTR                         lpszName,
+		LPSTR                         lpszValue
+		);
+	KGL_RESULT(*add_header) (
+		KCONN cn,
+		LPSTR                         lpszName,
+		LPSTR                         lpszValue
+		);
+	KGL_RESULT(*response_header) (
+		KCONN cn,
+		const char *attr,
+		hlen_t attr_len,
+		const char *val,
+		hlen_t val_len);
+}  kgl_access_context;
+
+
+typedef struct _kgl_async_context {
+	DWORD          size;
+	DWORD          ver;
+	KCONN          cn;
+	PVOID          model_ctx;
+	INT64  	   content_length;
+	INT64        *left;
+	KGL_RESULT(*get_variable) (
+		KCONN       cn,
+		KGL_VAR     var,
+		LPVOID      buffer,
+		LPDWORD     size);
+
+	KGL_RESULT(*response_header) (
+		KCONN cn,
+		const char *attr,
+		hlen_t attr_len,
+		const char *val,
+		hlen_t val_len);
+
+	kev_result(*start_response_body)(KCONN cn);
+
+	KGL_RESULT(*push_data) (
+		KCONN    cn,
+		LPVOID   Buffer,
+		DWORD    lpdwBytes);
+
+	kev_result (*try_write) (
+		KCONN    cn);
+
+	kev_result (*read)  (
+		KCONN    cn,
+		LPVOID   lpvBuffer,
+		DWORD    lpdwSize);
+
+	kev_result(*end_request) (
+		KCONN    cn,
+		BOOL expected_end);
+
+	KGL_RESULT (*support_function) (
+		KCONN      cn,
+		DWORD      dwHSERequest,
+		LPVOID     lpvBuffer,
+		LPDWORD    lpdwSize,
+		LPDWORD    lpdwDataType);
+
+}kgl_async_context;
 
 typedef struct _kgl_filter_data
 {
@@ -249,32 +325,8 @@ typedef struct _kgl_filter_data
 	DWORD       length;
 	DWORD       reserved;
 	PVOID       stack_ctx;
-	PVOID       (WINAPI *stack_alloc)(PVOID stack_ctx,DWORD size);
+	PVOID       (*stack_alloc)(PVOID stack_ctx,DWORD size);
 } kgl_filter_data;
-
-typedef struct _kgl_filter_request
-{
-	KGL_RESULT (WINAPI * get_header) (
-		kgl_filter_context * pfc,
-		LPSTR                         lpszName,
-		LPVOID                        lpvBuffer,
-		LPDWORD                       lpdwSize
-	);
-	KGL_RESULT (WINAPI * set_header) (
-		kgl_filter_context* pfc,
-		LPSTR                         lpszName,
-		LPSTR                         lpszValue
-	);
-	KGL_RESULT (WINAPI * add_header) (
-		kgl_filter_context * pfc,
-		LPSTR                         lpszName,
-		LPSTR                         lpszValue
-	);
-	DWORD HttpStatus;              
-	DWORD dwReserved;
-} kgl_filter_request;
-
-typedef kgl_filter_request kgl_filter_response;
 
 
 typedef struct _kgl_filter_url_map
@@ -283,9 +335,10 @@ typedef struct _kgl_filter_url_map
 	CHAR *       pszPhysicalPath;
 	DWORD        cbPathBuff;
 } kgl_filter_url_map;
+
 typedef struct _kgl_call_back
 {
-	void (WINAPI * call_back)(void *arg);
+	void (*call_back)(void *arg);
 	void *arg;
 } kgl_call_back;
 #define KF_NOTIFY_READ_DATA                 0x00008000
@@ -302,32 +355,12 @@ typedef struct _kgl_call_back
 #define KF_NOTIFY_REQUEST_ACL             0x00400000
 #define KF_NOTIFY_RESPONSE_ACL            0x00800000
 
-typedef struct _kgl_filter_version
-{
-	DWORD  server_filter_version;
-	DWORD  filter_version;
-	CHAR   filter_desc[KF_MAX_FILTER_DESC_LEN];
-	DWORD  flags;
-	PVOID   ctx;
-	KGL_RESULT (WINAPI * global_support_function) (
-		PVOID                        ctx,
-		DWORD                        req,
-		PVOID                        data,
-		PVOID                        *ret
-	);
-	KGL_RESULT (WINAPI * get_variable) (
-		PVOID                        ctx,
-		LPSTR                        lpszVariableName,
-		LPVOID                       lpvBuffer,
-		LPDWORD                      lpdwSize
-	);
-} kgl_filter_version;
 #define KGL_BUILD_HTML_ENCODE   1
 typedef struct _kgl_access_build
 {
 	void *server_ctx;
 	void *model_ctx;
-	int (WINAPI * write_string) (
+	int (* write_string) (
 		void *server_ctx,
 		const char *str,
 		int len,
@@ -338,30 +371,85 @@ typedef struct _kgl_access_parse
 {
 	void *server_ctx;
 	void *model_ctx;
-	const char *(WINAPI * get_value) (
+	const char *(*get_value) (
 		void *server_ctx,
 		const char *name);
 
 } kgl_access_parse;
-enum KF_ACCESS_BUILD_TYPE
+typedef enum _KF_ACCESS_BUILD_TYPE
 {
 	KF_ACCESS_BUILD_HTML = 0,
 	KF_ACCESS_BUILD_SHORT,
 	KF_ACCESS_BUILD_XML,
-};
+} KF_ACCESS_BUILD_TYPE;
+
 typedef struct _kgl_access
 {
 	const char *name;
-	int flags;
-	void *(WINAPI * create_ctx)();
-	void (WINAPI * free_ctx)(void *ctx);
-	KGL_RESULT (WINAPI * build)(kgl_access_build *build_ctx,enum KF_ACCESS_BUILD_TYPE build_type);
-	KGL_RESULT (WINAPI * parse)(kgl_access_parse *parse_ctx);
-	DWORD (WINAPI *process)(kgl_filter_context * ctx, DWORD  type, void * data);
+	int32_t flags;
+	void *(*create_ctx)();
+	void (* free_ctx)(void *ctx);
+	KGL_RESULT (* build)(kgl_access_build *build_ctx,KF_ACCESS_BUILD_TYPE build_type);
+	KGL_RESULT (* parse)(kgl_access_parse *parse_ctx);
+	KF_STATUS_TYPE(*process)(kgl_access_context *ctx,DWORD notify);
 } kgl_access;
-DLL_PUBLIC DWORD WINAPI kgl_filter_process(kgl_filter_context * ctx,DWORD  type, void * data);
-DLL_PUBLIC BOOL  WINAPI kgl_filter_init(kgl_filter_version * ver);
-DLL_PUBLIC BOOL  WINAPI kgl_filter_finit(DWORD flag);
+
+#define KF_UPSTREAM_SYNC 1
+typedef struct {
+	const char *name;
+	int32_t flags;
+} kgl_upstream;
+
+typedef struct _kgl_sync_upstream
+{
+	const char *name;
+	int32_t flags;
+	void *(*create_ctx)();
+	void (*free_ctx)(void *ctx);
+	DWORD (*process)(kgl_access_context *ctx);
+} kgl_sync_upstream;
+
+typedef struct _kgl_async_upstream
+{
+	const char *name;
+	int32_t flags;
+	void *(*create_ctx)();
+	void (*free_ctx)(void *ctx);
+	kev_result (*open)(kgl_async_context *ctx);
+	kev_result (*read_body)(kgl_async_context *ctx);
+	void (*close)(kgl_async_context *ctx);
+	kev_result (*read_callback)(kgl_async_context *ctx,int got);	
+} kgl_async_upstream;
+
+typedef struct _kgl_dso_version
+{
+	DWORD  server_version;
+	DWORD  dso_version;
+	CHAR   dso_desc[KF_MAX_FILTER_DESC_LEN];
+	DWORD  flags;
+	PVOID   ctx;	
+	KGL_RESULT (*global_support_function) (
+		PVOID                        ctx,
+		DWORD                        req,
+		PVOID                        data,
+		PVOID                        *ret
+		);
+	KGL_RESULT(*get_variable) (
+		PVOID                        ctx,
+		LPSTR                        lpszVariableName,
+		LPVOID                       lpvBuffer,
+		LPDWORD                      lpdwSize
+		);
+	int(*get_selector_count)();
+	int(*get_selector_index)();
+} kgl_dso_version;
+
+#define KGL_REGISTER_ACCESS(dso_version,access) dso_version->global_support_function(dso_version->ctx,KGL_REQ_REGISTER_ACCESS,access,NULL)
+#define KGL_REGISTER_SYNC_UPSTREAM(dso_version,us) dso_version->global_support_function(dso_version->ctx,KGL_REQ_REGISTER_SYNC_UPSTREAM,us,NULL)
+#define KGL_REGISTER_ASYNC_UPSTREAM(dso_version,us) dso_version->global_support_function(dso_version->ctx,KGL_REQ_REGISTER_ASYNC_UPSTREAM,us,NULL)
+
+DLL_PUBLIC BOOL kgl_dso_init(kgl_dso_version * ver);
+DLL_PUBLIC BOOL kgl_dso_finit(DWORD flag);
 #ifdef __cplusplus
  }
 #endif

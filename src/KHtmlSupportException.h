@@ -19,7 +19,6 @@
 #define KHTMLSUPPORTEXCEPTION_H_
 #include <exception>
 #include<string>
-#include "malloc_debug.h"
 /**
  * KHtmlSupport 异常类，发生异常时抛出
  */

@@ -22,16 +22,16 @@
 #include "KReg.h"
 #include "KXml.h"
 #include "KHttpKeyValue.h"
+#include "KPathRedirect.h"
 class KMethodAcl: public KAcl {
 public:
 	KMethodAcl() {
-		meth = -1;
 	}
 	virtual ~KMethodAcl() {
 	}
 	std::string getHtml(KModel *model) {
 		std::stringstream s;
-		s << "<input name=meth value='";
+		s << "<input name=meth placeholder='GET,POST,PUT,...' value='";
 		KMethodAcl *urlAcl = (KMethodAcl *) (model);
 		if (urlAcl) {
 			s << urlAcl->getDisplay();
@@ -46,32 +46,30 @@ public:
 		return "meth";
 	}
 	bool match(KHttpRequest *rq, KHttpObject *obj) {
-		if (rq->meth == meth)
-			return true;
-		return false;
+		return meth.matchMethod(rq->meth);
 	}
 	std::string getDisplay() {
 		std::stringstream s;
-		s << KHttpKeyValue::getMethod(meth);
+		s << meth.getMethod();
 		return s.str();
 	}
 	void editHtml(std::map<std::string, std::string> &attibute)
 			throw (KHtmlSupportException) {
-		if(attibute["meth"].size()>0){
-			meth = KHttpKeyValue::getMethod(attibute["meth"].c_str());
+		if(!attibute["meth"].empty()){
+			meth.setMethod(attibute["meth"].c_str());
 		}
 	}
 	bool startCharacter(KXmlContext *context, char *character, int len) {
 		if(len>0){
-			meth = KHttpKeyValue::getMethod(character);
+			meth.setMethod(character);
 		}
 		return true;
 	}
 	void buildXML(std::stringstream &s) {
-		s << ">" << KHttpKeyValue::getMethod(meth);
+		s << ">" << meth.getMethod();
 	}
 private:
-	char meth;
+	KRedirectMethods meth;
 };
 
 #endif /*KHOSTACL_H_*/

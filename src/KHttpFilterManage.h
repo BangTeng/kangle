@@ -1,12 +1,13 @@
 #ifndef KHTTPFILTERMANAGE_H
 #define KHTTPFILTERMANAGE_H
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "utils.h"
 #include "KHttpFilterHook.h"
 #include "KHttpFilterHookCollectRequest.h"
 #include "KHttpFilterHookCollectResponse.h"
 #include <map>
 #ifdef ENABLE_KSAPI_FILTER
+#if 0
 class KHttpFilterDso;
 class KHttpStream;
 struct KHttpFilterHookPoint
@@ -43,5 +44,6 @@ private:
 	bool global_flag;
 	std::map<const char *,KHttpFilterDso *,lessp> filters;
 };
+#endif
 #endif
 #endif

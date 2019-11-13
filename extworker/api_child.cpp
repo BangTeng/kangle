@@ -9,6 +9,7 @@
 #include <vector>
 #include <map>
 #include <sstream>
+#include <string.h>
 //#include "KApiRedirect.h"
 #include "KStream.h"
 #include "KFastcgiUtils.h"
@@ -16,8 +17,7 @@
 #include "KChildListen.h"
 //#include "KSelectorManager.h"
 
-#include "KThreadPool.h"
-
+#include "kthread.h"
 #include "api_child.h"
 #include "KChildApiService.h"
 #include "KApiDso.h"
@@ -68,10 +68,13 @@ void restart_child_process(pid_t pid)
 	return;	
 }
 
-FUNC_TYPE FUNC_CALL api_listen_thread(void *param) {
+KTHREAD_FUNCTION api_listen_thread(void *param) {
 	KChildListen *cl = (KChildListen *) param;
 	for (;;) {
 		cl->canRead();
+		if (!ksocket_opened(cl->sockfd)) {
+			break;
+		}
 	}
 	KTHREAD_RETURN;
 }
@@ -114,7 +117,7 @@ static bool api_child_load(KStream *st, char *msg,u_short id, u_short content_le
 			== STREAM_WRITE_SUCCESS;
 }
 #ifndef _WIN32
-static bool api_child_setuid(KPoolableStream *st, char *msg,
+static bool api_child_setuid(KStream *st, char *msg,
 		u_short content_len) {
 	if (content_len != sizeof(api_child_t_uidgid)) {
 		return false;
@@ -135,7 +138,7 @@ static bool api_child_setuid(KPoolableStream *st, char *msg,
 	}
 	return header.id == 0;
 }
-static bool api_child_chroot(KPoolableStream *st, char *msg,
+static bool api_child_chroot(KStream *st, char *msg,
 		u_short content_len) {
 	FCGI_Header header;
 	memset(&header, 0, sizeof(header));
@@ -150,8 +153,7 @@ static bool api_child_shutdown(KStream *st) {
 
 	return true; 
 }
-bool api_child_begin_request(KClientSocket *st, char *msg,
-		u_short content_len) {
+bool api_child_begin_request(KSocketStream *st, char *msg,u_short content_len) {
 	debug("begin_request\n");
 	st->set_delay();
 	FCGI_BeginRequestBody *body = (FCGI_BeginRequestBody *) msg;
@@ -170,7 +172,7 @@ bool api_child_begin_request(KClientSocket *st, char *msg,
 		debug("cann't get dso id=%d\n",body->id);
 		return false;
 	}
-	KFastcgiStream<KClientSocket> client;
+	KFastcgiStream<KSocketStream> client;
 	client.extend = true;
 	client.setStream(st);
 	KChildApiService *fo = new KChildApiService(rd);
@@ -245,7 +247,7 @@ void seperate_work_model()
 		}
 		total_successed ++;
 		pid_t pid = ls.process.stealPid();
-		printf("succss create child pid=%d\n",pid);
+		//printf("succss create child pid=%d\n",pid);
 		processes.insert(pair<pid_t,bool>(pid,true));
 	}
 	if (total_successed==0) {
@@ -262,9 +264,8 @@ void seperate_work_model()
 	}
 #endif
 }
-bool cmd_create_process(KPoolableStream *st,FCGI_Header *header,bool unix_socket)
+bool cmd_create_process(KWStream *st,FCGI_Header *header,bool unix_socket)
 {
-
 	FCGI_Header rh;
 	memset(&rh,0,sizeof(FCGI_Header));
 	bool result = false;
@@ -299,14 +300,14 @@ bool cmd_create_process(KPoolableStream *st,FCGI_Header *header,bool unix_socket
 	result = true;
 #ifdef _WIN32
 	sleep(1);
-	m_thread.start(NULL,watch_process);
+	kthread_start(watch_process, NULL);
 #endif
 done:
 	rh.type = CMD_CREATE_PROCESS_RESULT;
 	st->write_all((char *)&rh,sizeof(FCGI_Header));
 	return result;
 }
-bool api_child_request(KClientSocket *st) {
+bool api_child_request(KSocketStream *st) {
 	FCGI_Header header;
 	bool result = true;
 	char *msg = NULL;
@@ -315,6 +316,7 @@ bool api_child_request(KClientSocket *st) {
 		return false;
 	}
 	unsigned short content_len = ntohs(header.contentLength);
+	//debug("************api_child_request recv a cmd=[%d] content_len=[%d]\n", header.type,content_len);
 	if (content_len > 0) {
 		msg = (char *) xmalloc(content_len);
 		if (msg == NULL) {
@@ -325,8 +327,7 @@ bool api_child_request(KClientSocket *st) {
 			xfree(msg);
 			return false;
 		}
-	}
-	debug("recv a cmd=[%d]\n", header.type);
+	}	
 	switch (header.type) {
 	case FCGI_STDIN:
 		//the stdin end
@@ -346,7 +347,7 @@ bool api_child_request(KClientSocket *st) {
 	}
 	return result;
 }
-bool api_child_process(KPoolableStream *st) {
+bool api_child_process(KStream *st) {
 	FCGI_Header header;
 	bool result = true;
 	char *msg = NULL;
@@ -430,27 +431,32 @@ bool api_child_listen(u_short port, KPipeStream *st,bool unix_socket) {
 	pi.result = 0;
 #ifdef KSOCKET_UNIX	
 	if (unix_socket) {
-		KUnixServerSocket *server = new KUnixServerSocket;
+		struct sockaddr_un addr;
 		std::stringstream s;
 		pi.port = getpid();
 		s << "/tmp/extworker." << pi.port << ".sock";
 		s.str().swap(cl->unix_path);
-		if(!server->open(cl->unix_path.c_str())){
+		ksocket_unix_addr(cl->unix_path.c_str(),&addr);
+		cl->sockfd = ksocket_listen((sockaddr_i *)&addr,0);
+		if (!ksocket_opened(cl->sockfd)) {
 			pi.result = 1;
 		}
-		cl->server = server;
 	} else {
 #endif
-		cl->server = new KServerSocket;
-		if (!cl->server->open(0, "127.0.0.1")) {
-			if (!cl->server->open(0, "::1")) {
-				if (!cl->server->open(0)) {
-					pi.result = 1;
-				}
-			}
+		sockaddr_i addr;
+		ksocket_getaddr("127.0.0.1", 0, PF_UNSPEC, AI_NUMERICHOST, &addr);
+		cl->sockfd = ksocket_listen(&addr,0);
+		if (!ksocket_opened(cl->sockfd)) {
+			ksocket_getaddr("::1", 0, PF_UNSPEC, AI_NUMERICHOST, &addr);
+			cl->sockfd = ksocket_listen(&addr,0);
 		}
-		if (pi.result == 0) {
-			pi.port = cl->server->get_self_port();
+		if (ksocket_opened(cl->sockfd)) {
+			pi.result = 0;
+			socklen_t addr_len = sizeof(sockaddr_i);
+			getsockname(cl->sockfd, (struct sockaddr *)&addr, &addr_len);
+			pi.port = ksocket_addr_port(&addr);
+		} else {
+			pi.result = 1;
 		}
 #ifdef KSOCKET_UNIX	
 	}
@@ -460,24 +466,19 @@ bool api_child_listen(u_short port, KPipeStream *st,bool unix_socket) {
 	header.type = API_CHILD_LISTEN_RESULT;
 	header.contentLength = htons(sizeof(sp_info));
 	st->write_all((char *) &header, sizeof(header));
-	debug("child listen result=%d\n", pi.result);
+	debug("child listen result=[%d],port=[%d]\n", pi.result,pi.port);
 	if (st->write_all((char *) &pi, sizeof(pi)) != STREAM_WRITE_SUCCESS) {
 		delete cl;
+		debug("cann't write pi msg to parent.\n");
 		return false;
 	}
 	if (pi.result != 0) {
 		return false;
 	}
-
-	//KChildPipeStreamListen *pipeListen = new KChildPipeStreamListen;
-	//pipeListen->st = st;
-	return m_thread.start(cl,api_listen_thread,false);
-	//for (;;) {
-	//	cl->canRead();
-	//}
+	return kthread_start(api_listen_thread, cl);
 }
-FUNC_TYPE FUNC_CALL api_child_thread(void *param) {
-	KClientSocket *client = (KClientSocket *) param;
+KTHREAD_FUNCTION api_child_thread(void *param) {
+	KSocketStream *client = (KSocketStream *) param;
 	for(;;){
 		if(!api_child_request(client)){
 			break;

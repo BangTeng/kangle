@@ -8,7 +8,7 @@
 #include <string.h>
 #include "utils.h"
 #include "KHttpBasicAuth.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 KHttpBasicAuth::KHttpBasicAuth() :
 	KHttpAuth(AUTH_BASIC) {
 

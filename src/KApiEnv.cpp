@@ -24,7 +24,7 @@
 #include "KApiEnv.h"
 #include "lib.h"
 #include "ksapi.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 
 using namespace std;
 char *httpstrdup(const char *val)

@@ -13,8 +13,8 @@
 #ifdef ENABLE_DB_DISK_INDEX
 #include "KDiskCacheIndex.h"
 #endif
-#include "forwin32.h"
-#include "malloc_debug.h"
+#include "kforwin32.h"
+#include "kmalloc.h"
 KMutex obj_lock[HASH_SIZE+1];
 static unsigned file_index = (rand() & CACHE_DIR_MASK2);
 static KMutex indexLock;
@@ -152,7 +152,7 @@ bool KHttpObject::swapinBody(KFile *fp, KHttpObjectBody *data)
 {
 	assert(data->bodys == NULL && data->type == MEMORY_OBJECT);
 	INT64 left_read = index.content_length;
-	buff *last = NULL;
+	kbuf *last = NULL;
 	while (left_read>0) {
 		int this_read = (int)MIN(left_read, 16384);
 		char *buf = (char *)xmalloc(this_read);
@@ -163,7 +163,7 @@ bool KHttpObject::swapinBody(KFile *fp, KHttpObjectBody *data)
 			free(buf);
 			return false;
 		}
-		buff *tmp = (buff *)malloc(sizeof(buff));
+		kbuf *tmp = (kbuf *)malloc(sizeof(kbuf));
 		tmp->used = this_read;
 		tmp->data = buf;
 		tmp->flags = 0;
@@ -331,7 +331,7 @@ bool KHttpObject::save_header(KBufferFile *fp,const char *url,int url_len)
 	fp->write(NULL, pad_len);
 	return true;
 }
-bool KHttpObject::swapout(bool fast_model)
+bool KHttpObject::swapout(KBufferFile *file,bool fast_model)
 {
 
 	if (TEST(index.flags, FLAG_IN_DISK|OBJ_INDEX_UPDATE|OBJ_INDEX_SAVED) == (OBJ_INDEX_SAVED|FLAG_IN_DISK) &&
@@ -343,7 +343,7 @@ bool KHttpObject::swapout(bool fast_model)
 	if (fast_model && !TEST(index.flags, FLAG_IN_DISK)) {
 		return false;
 	}
-	buff *tmp;
+	kbuf *tmp;
 	char *filename = NULL;
 	assert(data);
 	if (!TEST(index.flags, OBJ_INDEX_SAVED)) {
@@ -374,7 +374,6 @@ bool KHttpObject::swapout(bool fast_model)
 	if (buffer_size > KGL_MAX_BUFFER_FILE_SIZE) {
 		buffer_size = KGL_MAX_BUFFER_FILE_SIZE;
 	}
-	KBufferFile file((int)buffer_size);
 	dc_index_update = 0;
 	filename = getFileName();
 	klog(KLOG_INFO, "swap out obj=[%p %x %x] url=[%s] to file [%s]\n",
@@ -383,13 +382,14 @@ bool KHttpObject::swapout(bool fast_model)
 		index.last_modified,
 		url,
 		filename);
-
-	if (!file.open(filename,fileModify, KFILE_DSYNC)) {
+	kassert(!file->opened());
+	file->init();
+	if (!file->open(filename,fileModify, KFILE_DSYNC)) {
 		int err = errno;
 		klog(KLOG_WARNING,"cann't open file [%s] to write. errno=[%d %s]\n",filename,err,strerror(err));
 		goto swap_out_failed;
 	}
-	if (!save_header(&file, url, url_len)) {
+	if (!save_header(file, url, url_len)) {
 		goto swap_out_failed;
 	}
 	
@@ -403,7 +403,7 @@ bool KHttpObject::swapout(bool fast_model)
 	}
 	tmp = data->bodys;
 	while (tmp) {
-		if (file.write(tmp->data, tmp->used)<(int)tmp->used) {
+		if (file->write(tmp->data, tmp->used)<(int)tmp->used) {
 			klog(KLOG_ERR,"cann't write cache to disk file=[%s].\n",filename);
 			goto swap_out_failed;
 		}
@@ -427,14 +427,14 @@ swap_out_success:
 	if (filename) {
 		free(filename);
 	}
-	file.close();
+	file->close();
 	return true;
 swap_out_failed:
 	if (url) {
 		free(url);
 	}
-	if (file.opened()) {
-		file.close();
+	if (file->opened()) {
+		file->close();
 		unlink(filename);
 	}
 	if (filename) {

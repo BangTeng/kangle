@@ -27,7 +27,6 @@
 #include "KAcserver.h"
 //#include "KFilter.h"
 #include "KRWLock.h"
-#include "malloc_debug.h"
 #define BEGIN_TABLE	"BEGIN"
 #define REQUEST		0
 #define RESPONSE	1
@@ -96,15 +95,13 @@ public:
 	bool emptyTable(std::string table_name, std::string &err_msg);
 	bool newTable(std::string table_name, std::string &err_msg);
 	bool delTable(std::string table_name, std::string &err_msg);
-	bool renameTable(std::string name_from, std::string name_to,
-			std::string &err_msg);
+	bool renameTable(std::string name_from, std::string name_to,std::string &err_msg);
 	void listTable(KVirtualHostEvent *ctx);
 	bool listChain(std::string table_name,const char *chain_name,KVirtualHostEvent *ctx,int flag);
 public:
 	void startXml(const std::string &encoding);
 	void endXml(bool result);
-	bool startElement(KXmlContext *context,
-			std::map<std::string, std::string> &attribute);
+	bool startElement(KXmlContext *context,std::map<std::string, std::string> &attribute);
 	bool startCharacter(KXmlContext *context, char *character, int len);
 	bool endElement(KXmlContext *context);
 	void buildXML(std::stringstream &s, int flag);	

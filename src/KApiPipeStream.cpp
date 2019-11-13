@@ -9,7 +9,7 @@
 #include "fastcgi.h"
 #include "extern.h"
 #include "KVirtualHost.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 using namespace std;
 KApiPipeStream::KApiPipeStream() {
 	chrooted = false;

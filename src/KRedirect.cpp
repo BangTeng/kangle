@@ -6,7 +6,7 @@
  */
 
 #include "KRedirect.h"
-#include "server.h"
+#include "extern.h"
 
 KRedirect::KRedirect() {
 	enable = true;

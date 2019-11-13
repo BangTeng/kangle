@@ -47,7 +47,7 @@ public:
 		refsLock.Unlock();
 		return len;
 	}
-	int getSpeed(bool reset)
+	INT64 get_speed(bool reset)
 	{
 		INT64 current_msec = kgl_current_msec;	
 		refsLock.Lock();
@@ -62,7 +62,7 @@ public:
 			last_time = current_msec;
 		}
 		refsLock.Unlock();
-		return (int)((inc_flow*1000)/inc_time);
+		return (INT64)((inc_flow*1000)/inc_time);
 	}
 	//×ÜÁ÷Á¿
 	INT64 flow;

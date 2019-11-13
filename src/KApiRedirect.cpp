@@ -30,20 +30,20 @@
 #include "KVirtualHost.h"
 #include "http.h"
 #include "KApiFastcgiFetchObject.h"
-#include "KSelectorManager.h"
+#include "kselector_manager.h"
 #include "KProcessManage.h"
 #include "KSimulateRequest.h"
 #include "KTimer.h"
 #define   MAX_CRON_THREAD   5
 #ifdef WHM_MODULE
 #include "whm.h"
-DLL_PUBLIC  BOOL  WINAPI Whm_GetExtensionVersion(HSE_VERSION_INFO *pVer);
+DLL_PUBLIC  BOOL   WINAPI Whm_GetExtensionVersion(HSE_VERSION_INFO *pVer);
 DLL_PUBLIC  DWORD WINAPI Whm_HttpExtensionProc(EXTENSION_CONTROL_BLOCK *pECB);
-DLL_PUBLIC  BOOL  WINAPI Whm_TerminateExtension( DWORD dwFlags);
+DLL_PUBLIC  BOOL   WINAPI Whm_TerminateExtension( DWORD dwFlags);
 #endif
 #include "extern.h"
 #include "ksapi.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 
 using namespace std;
 static void WINAPI apiServerFree(HCONN hConn,void *ptr) {
@@ -68,14 +68,14 @@ static BOOL WINAPI apiServerSupportFunction(HCONN hConn, DWORD dwHSERequest,
 	case KGL_REQ_CREATE_WORKER:
 		{
 			int *max_worker = (int *)lpvBuffer;
-			KAsyncWorker *worker = new KAsyncWorker(*max_worker,0);
+			kasync_worker *worker = kasync_worker_init(*max_worker,0);
 			*ret = (void *)worker;
 			return TRUE;
 		}
 	case KGL_REQ_RELEASE_WORKER:
 		{
-			KAsyncWorker *worker = (KAsyncWorker *)lpvBuffer;
-			worker->release();
+			kasync_worker *worker = (kasync_worker *)lpvBuffer;
+			kasync_worker_release(worker);
 			return TRUE;
 		}
 	case KGL_REQ_COMMAND:
@@ -121,11 +121,13 @@ static BOOL WINAPI apiServerSupportFunction(HCONN hConn, DWORD dwHSERequest,
 		{
 			kgl_thread *thread = (kgl_thread *)lpvBuffer;
 			if (thread->worker) {
-				KAsyncWorker *worker = (KAsyncWorker *)thread->worker;
-				worker->tryStart(thread->param,thread->thread_function);
-				return TRUE;
+				kasync_worker *worker = (kasync_worker *)thread->worker;
+				if (kasync_worker_try_start(worker, thread->param, thread->thread_function,false)) {
+					return TRUE;
+				}
+				return FALSE;
 			}
-			if (thread_start_worker(thread->param,thread->thread_function)) {
+			if (kasync_worker_thread_start(thread->param,thread->thread_function)) {
 				return TRUE;
 			}
 			return FALSE;
@@ -193,7 +195,7 @@ bool KApiRedirect::load()
 			bool result = dso.init();
 			if(result){
 				addRef();
-				conf.sysHost->addRedirect(true,"whm",this,"*",true,"");
+				conf.sysHost->addRedirect(true,"whm",this,"*",KGL_CONFIRM_FILE_EXSIT,"");
 			}
 			return result;
 #else
@@ -210,7 +212,7 @@ bool KApiRedirect::load()
 		if (result) {
 			if(strcmp(dso.apiInfo,"whm")==0){
 				addRef();
-				conf.sysHost->addRedirect(true,"whm",this,"*",true,"");
+				conf.sysHost->addRedirect(true,"whm",this,"*", KGL_CONFIRM_FILE_EXSIT,"");
 			}
 		}
 		return result;
@@ -231,9 +233,9 @@ KFetchObject *KApiRedirect::makeFetchObject(KHttpRequest *rq, KFileName *file) {
 	//return NULL;
 	return new KApiFetchObject(this);
 }
-void KApiRedirect::connect(KHttpRequest *rq)
+kev_result KApiRedirect::connect(KHttpRequest *rq)
 {
-	spProcessManage.connect(rq, this);
+	return spProcessManage.connect(rq, this);
 }
 void KApiRedirect::buildXML(std::stringstream &s) {
 	s << "\t<api name='" << name << "' file='" << this->apiFile << "' ";

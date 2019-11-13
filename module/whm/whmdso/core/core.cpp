@@ -27,23 +27,24 @@
 #include "whm.h"
 #include "global.h"
 
-#include "malloc_debug.h"
 #include "KVirtualHostManage.h"
 #include "KVirtualHostDatabase.h"
 #include "KHttpManage.h"
 #include "extern.h"
-#include "server.h"
+#include "kserver.h"
 #include "cache.h"
 #include "lib.h"
 #include "KConfigBuilder.h"
 #include "KAcserverManager.h"
 #include "KTempleteVirtualHost.h"
 #include "KHttpServerParser.h"
-#include "KSelectorManager.h"
+#include "kselector_manager.h"
 #include "KCdnContainer.h"
-#include "ssl_utils.h"
-#include "KAddr.h"
+#include "kaddr.h"
 #include "KLogDrill.h"
+#include "extern.h"
+#include "ssl_utils.h"
+
 enum{
 	CALL_UNKNOW,
 	CALL_INFO,
@@ -487,7 +488,7 @@ int WINAPI WhmCoreCall(const char *callName, const char *event, WHM_CONTEXT *con
 			ctx->add("update_code", UPDATE_CODE);
 #endif
 			ctx->add("open_file_limit", open_file_limit);
-			ctx->add("addr_cache", get_addr_cache_count());
+			ctx->add("addr_cache", kgl_get_addr_cache_count());
 			ctx->add("disk_cache_shutdown", (int)cache.is_disk_shutdown());
 			return WHM_OK;
 		}
@@ -543,24 +544,29 @@ int WINAPI WhmCoreCall(const char *callName, const char *event, WHM_CONTEXT *con
 					*p = '\0';
 				}
 				char *u = hot;
-				if (cmd==CALL_CACHE_PREFETCH) {
-					if (cache_prefetch(hot)) {
-						result ++;
-					}
-				} else if (cmd==CALL_CACHE_INFO) {
+
+				if (cmd == CALL_CACHE_INFO) {
 					switch (*hot) {
 					case '3':
-						{
-							result += get_cache_info(hot+1,true,&ci);
-							break;
-						}
+					{
+						result += get_cache_info(hot + 1, true, &ci);
+						break;
+					}
 					case '0':
 						u++;
 					default:
-						result += get_cache_info(u,false,&ci);
+						result += get_cache_info(u, false, &ci);
 						break;
 					}
-				} else {
+				}
+#ifdef ENABLE_SIMULATE_HTTP
+				 else if (cmd == CALL_CACHE_PREFETCH) {
+						if (cache_prefetch(hot)) {
+							result++;
+						}
+					}
+#endif
+				else {
 					switch (*hot) {
 					case '1':
 						{
@@ -641,19 +647,22 @@ int WINAPI WhmCoreCall(const char *callName, const char *event, WHM_CONTEXT *con
 				return WHM_CALL_FAILED;
 			}
 			bool reset = atoi(uv->get("reset").c_str())==1;
-			ctx->add("speed",vh->getSpeed(reset));
+			ctx->add("speed",vh->get_speed(reset));
 #ifdef ENABLE_VH_RS_LIMIT
-			ctx->add("connect",vh->getConnectCount());
+			ctx->add("connect",vh->GetConnectionCount());
 #endif
 			return WHM_OK;
 		}
 	case CALL_GET_CONNECTION:
 		{
-			//KVirtualHost *vh = ctx->getVh();
-			int totalCount = 0;
-			string connectString = selectorManager.getConnectionInfo(totalCount,0,uv->getx("vh"),false);
-			ctx->add("count",totalCount);
-			ctx->add("connection",connectString.c_str(),true);
+			KConnectionInfoContext cn_ctx;
+			cn_ctx.total_count = 0;
+			cn_ctx.debug = 0;
+			cn_ctx.vh = uv->getx("vh");
+			cn_ctx.translate = false;
+			selector_manager_iterator((void *)&cn_ctx, kconnection_info_iterator);
+			ctx->add("count", cn_ctx.total_count);
+			ctx->add("connection",cn_ctx.s.str().c_str(),true);
 			return WHM_OK;
 		}
 #endif
@@ -666,20 +675,22 @@ int WINAPI WhmCoreCall(const char *callName, const char *event, WHM_CONTEXT *con
 				return WHM_CALL_FAILED;
 			}
 #ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
-			ctx->add("ssl",vh->ssl_ctx?1:0);
-			if (vh->ssl_ctx) {
+			SSL_CTX *ssl_ctx = vh->ssl_ctx;
+			
+			ctx->add("ssl",ssl_ctx?1:0);
+			if (ssl_ctx) {
 				char *result = NULL;
-				result = ssl_ctx_var_lookup(vh->ssl_ctx,"NOTBEFORE");
+				result = ssl_ctx_var_lookup(ssl_ctx,"NOTBEFORE");
 				if (result) {
 					ctx->add("not_before", result);
 					ssl_var_free(result);
 				}
-				result = ssl_ctx_var_lookup(vh->ssl_ctx, "NOTAFTER");
+				result = ssl_ctx_var_lookup(ssl_ctx, "NOTAFTER");
 				if (result) {
 					ctx->add("not_after", result);
 					ssl_var_free(result);
 				}
-				result = ssl_ctx_var_lookup(vh->ssl_ctx, "SUBJECT");
+				result = ssl_ctx_var_lookup(ssl_ctx, "SUBJECT");
 				if (result) {
 					ctx->add("subject", result);
 					ssl_var_free(result);
@@ -706,7 +717,7 @@ int WINAPI WhmCoreCall(const char *callName, const char *event, WHM_CONTEXT *con
 			ctx->setStatus("name param is missing");
 			return WHM_PARAM_ERROR;
 		}
-		KMultiAcserver *rd = cdnContainer.refsMultiServer(name);
+		KMultiAcserver *rd = server_container->refsMultiServer(name);
 		std::stringstream s;
 		if (rd) {
 			rd->getNodeInfo(s);
@@ -906,7 +917,7 @@ int WINAPI WhmCoreCall(const char *callName, const char *event, WHM_CONTEXT *con
 										uv->get("value"),
 										uv->get("target"),
 										uv->get("method"),
-										atoi(uv->get("exsit").c_str())==1,
+										(uint8_t)atoi(uv->get("exsit").c_str()),
 										uv->get("params")
 										);
 		}else if(cmd==CALL_DEL_REDIRECT){

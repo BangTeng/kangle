@@ -1,5 +1,5 @@
 #include "KHttp2.h"
-#include "KConnectionSelectable.h"
+#include "kconnection.h"
 #ifdef ENABLE_HTTP2
 #define KGL_HTTP_V2_TABLE_SIZE  4096
 static kgl_http_v2_header_t  kgl_http_v2_static_table[] = {
@@ -210,12 +210,12 @@ bool KHttp2::add_header(kgl_http_v2_header_t *header)
 		hpack.size = KGL_HTTP_V2_TABLE_SIZE;
 		hpack.free = KGL_HTTP_V2_TABLE_SIZE;
 
-		hpack.entries = (kgl_http_v2_header_t **)kgl_palloc(c->get_pool(),sizeof(kgl_http_v2_header_t *)* hpack.allocated);
+		hpack.entries = (kgl_http_v2_header_t **)kgl_palloc(c->pool,sizeof(kgl_http_v2_header_t *)* hpack.allocated);
 		if (hpack.entries == NULL) {
 			return false;
 		}
 
-		hpack.storage = (u_char *)kgl_palloc(c->get_pool(),hpack.free);
+		hpack.storage = (u_char *)kgl_palloc(c->pool,hpack.free);
 		if (hpack.storage == NULL) {
 			return false;
 		}
@@ -227,7 +227,7 @@ bool KHttp2::add_header(kgl_http_v2_header_t *header)
 	}
 
 	if (hpack.reused == hpack.deleted) {
-		entry = (kgl_http_v2_header_t *)kgl_palloc(c->get_pool(), sizeof(kgl_http_v2_header_t));
+		entry = (kgl_http_v2_header_t *)kgl_palloc(c->pool, sizeof(kgl_http_v2_header_t));
 		if (entry == NULL) {
 			return false;
 		}
@@ -265,7 +265,7 @@ bool KHttp2::add_header(kgl_http_v2_header_t *header)
 	}
 
 	if (hpack.allocated == hpack.added - hpack.deleted) {
-		entries = (kgl_http_v2_header_t **)kgl_palloc(c->get_pool(), sizeof(kgl_http_v2_header_t *) * (hpack.allocated + 64));
+		entries = (kgl_http_v2_header_t **)kgl_palloc(c->pool, sizeof(kgl_http_v2_header_t *) * (hpack.allocated + 64));
 		if (entries == NULL) {
 			return false;
 		}

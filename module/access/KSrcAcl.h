@@ -23,7 +23,7 @@ class KSrcAcl : public KIpAclBase {
 public:
 	bool match(KHttpRequest *rq, KHttpObject *obj) {
 		ip_addr addr;
-		if (!KSocket::getaddr(rq->getClientIp(), &addr)) {
+		if (!ksocket_get_ipaddr(rq->getClientIp(), &addr)) {
 			return false;
 		}
 		return matchIP(addr);

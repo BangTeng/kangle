@@ -5,7 +5,6 @@
 #include "global.h"
 #include "KWriteBack.h"
 #include "KRWLock.h"
-#include "malloc_debug.h"
 #ifdef ENABLE_WRITE_BACK
 class KWriteBackManager: public KXmlSupport {
 public:

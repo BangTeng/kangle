@@ -24,7 +24,6 @@ public:
 	}
 	
 	const char *getValue(const char *name) {
-		
 		return interGetValue(name);
 
 	}
@@ -92,9 +91,10 @@ public:
 		if (vh==NULL) {
 			return 0;
 		}
-		if (strcasecmp(name, "host") == 0 || strcasecmp(name, "subdir") == 0
-				|| strcasecmp(name, "sub_doc_root") == 0 || strcasecmp(name,
-				"full_sub_doc_root") == 0) {
+		if (strcasecmp(name, "host") == 0 ||
+			strcasecmp(name, "subdir") == 0	||
+			strcasecmp(name, "sub_doc_root") == 0 || 
+			strcasecmp(name, "full_sub_doc_root") == 0) {
 			return (int)vh->hosts.size();
 		}
 		if (strcasecmp(name, "name") == 0) {

@@ -2,7 +2,7 @@
 #define KREQUESTQUEUE_H
 #include "KCountable.h"
 #include "KHttpRequest.h"
-#include "KThreadPool.h"
+#include "kthread.h"
 #ifdef ENABLE_REQUEST_QUEUE
 class KRequestQueue : public KCountableEx
 {

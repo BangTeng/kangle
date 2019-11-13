@@ -21,7 +21,7 @@
 #include "KAcl.h"
 #include "KReg.h"
 #include "KXml.h"
-#include "KString.h"
+#include "KStringBuf.h"
 class KRegPathAcl: public KAcl {
 public:
 	KRegPathAcl() {

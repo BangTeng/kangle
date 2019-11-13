@@ -1,5 +1,6 @@
 #ifndef KLISTENPIPESTREAM_H
 #define KLISTENPIPESTREAM_H
+#include <errno.h>
 #include "KPipeStream.h"
 #include "global.h"
 #include "KListNode.h"
@@ -10,7 +11,6 @@ public:
 	KListenPipeStream()
 	{
 		port = 0;
-		server = NULL;
 	}
 	virtual ~KListenPipeStream()
 	{
@@ -29,75 +29,56 @@ public:
 		}
 #endif
 	}
-	/*
-	KClientSocket *connect()
-	{
-		if(port == 0){
-			return NULL;
-		}
-		KClientSocket *client = new KClientSocket;
-		if(client->connect("127.0.0.1",port,10)){
-			client->set_time(60);
-			return client;
-		}
-		delete client;
-		return NULL;
-	}
-	*/
 	void closeServer()
 	{
-		if (server) {
-			assert(fd[0]);
-			//避免两次关闭
-			//fd[0]来自server,参见listen
+		if (ksocket_opened((SOCKET)fd[0])) {
+			::ksocket_close((SOCKET)fd[0]);
 			fd[0] = INVALIDE_PIPE;
-			delete server;
-			server = NULL;
-		}
+		}		
 	}
 #ifdef KSOCKET_UNIX	
 	bool listen(const char *path)
 	{
 		this->unix_path = path;
-		assert(server == NULL);
-		KUnixServerSocket *userver = new KUnixServerSocket;
-		if(!userver->open(path)){
-			delete userver;
-			unlink(path);
+		struct sockaddr_un addr;
+		ksocket_unix_addr(path,&addr);
+		SOCKET sockfd = ksocket_listen((sockaddr_i *)&addr, 0);
+		if (!ksocket_opened(sockfd)) {
 			return false;
 		}
 		assert(fd[0]==INVALIDE_PIPE);
-		server = userver;
 #ifdef _WIN32
-		fd[0] = (HANDLE)server->get_socket();
+		fd[0] = (HANDLE)sockfd;
 #else
-		fd[0] = server->get_socket();
+		fd[0] = sockfd;
 #endif
 		return true;
 	}
 #endif
 	bool listen(int port=0,const char *host="127.0.0.1")
 	{
-		assert(server == NULL);
-		server = new KServerSocket;
-		if (!server->open4(port,host)) {
-			delete server;
-			server = NULL;
+		sockaddr_i addr;
+
+		ksocket_getaddr(host, port, AF_UNSPEC, AI_NUMERICHOST,&addr);
+		SOCKET sockfd = ksocket_listen(&addr, 0);
+		if (!ksocket_opened(sockfd)) {
 			return false;
 		}
+		if (port == 0) {
+			socklen_t addr_size = (socklen_t)ksocket_addr_len(&addr);
+			getsockname(sockfd,(struct sockaddr *)&addr, &addr_size);
+		}
+		this->port = ksocket_addr_port(&addr);
 		assert(fd[0]==INVALIDE_PIPE);
 #ifdef _WIN32
-		fd[0] = (HANDLE)server->get_socket();
+		fd[0] = (HANDLE)sockfd;
 #else
-		fd[0] = server->get_socket();
+		fd[0] = sockfd;
 #endif
 		return true;
 	}
 	int getPort()
 	{
-		if (server) {
-			port = server->get_self_port();
-		}
 		return port;
 	}
 	void setPort(int port)
@@ -109,6 +90,6 @@ public:
 	std::string unix_path;
 private:
 	int port;
-	KServerSocket *server;
+
 };
 #endif

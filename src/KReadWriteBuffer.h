@@ -1,86 +1,90 @@
 #ifndef KREADWRITEBUFFER_H
 #define KREADWRITEBUFFER_H
 #include "KBuffer.h"
-#include "malloc_debug.h"
-class KReadWriteBuffer
+#include "KStream.h"
+class KReadWriteBuffer: public KWStream
 {
 public:
 	KReadWriteBuffer()
 	{
-		memset(this,0,sizeof(KReadWriteBuffer));
-		this->chunk_size = NBUFF_SIZE;
+		krw_buffer_init(&buffer, NBUFF_SIZE);	
 	}
 	KReadWriteBuffer(int chunk_size)
 	{
-		memset(this, 0, sizeof(KReadWriteBuffer));
-		this->chunk_size = chunk_size;
+		krw_buffer_init(&buffer, chunk_size);		
 	}
 	~KReadWriteBuffer()
 	{
-		while (head) {
-			buff *next = head->next;
-			xfree(head->data);
-			xfree(head);
-			head = next;
-		}
-	}	
-	inline KReadWriteBuffer & operator <<(const char *str)
+		krw_buffer_clean(&buffer);
+	}
+	void destroy()
 	{
-		write_all(str, (int)strlen(str));
-		return *this;
+		krw_buffer_clean(&buffer);
+		krw_buffer_init(&buffer, buffer.chunk_size);
 	}
-	inline KReadWriteBuffer & operator <<(const char c) {
-		write_all(&c, 1);
-		return *this;
-	}
-	inline KReadWriteBuffer & operator <<(const int value) {
-		char buf[16];
-		int len = snprintf(buf, 15, "%d", value);
-		if (len <= 0) {
-			return *this;
-		}
-		write_all(buf, len);
-		return *this;
-	}
-	inline KReadWriteBuffer & operator <<(const INT64 value) {
-		char buf[INT2STRING_LEN];
-		int len = snprintf(buf, INT2STRING_LEN - 1, INT64_FORMAT, value);
-		if (len <= 0) {
-			return *this;
-		}
-		write_all(buf, len);
-		return *this;
-	}
-	void getReadBuffer(LPWSABUF buffer,int &bufferCount);
-	char *getReadBuffer(int &len);
-	bool readSuccess(int got);
-	void writeSuccess(int got);
-	char *getWriteBuffer(int &len);
-	inline void appendBuffer(buff *buf)
+	//切换到读模式,返回总大小
+	inline unsigned startRead()
 	{
-		if (write_hot_buf==NULL) {
-			assert(head == NULL && read_hot == NULL);
-			head = buf;
-			read_hot = buf->data;
-		} else {
-			assert(read_hot && head);
-			write_hot_buf->next = buf;
-		}
-		buf->next = NULL;
-		write_hot_buf = buf;
-		totalLen += buf->used;
+		kassert((buffer.head==NULL && buffer.read_hot==NULL && buffer.write_hot==NULL 
+			&& buffer.write_hot_buf==NULL && buffer.total_len==0) 
+			|| buffer.read_hot == buffer.head->data);
+		return (unsigned)buffer.total_len;
 	}
-	int read(char *buf,int len);
+	template<typename T>
+	inline T *insert()
+	{
+		kbuf *buf = xmemory_new(kbuf);
+		memset(buf, 0, sizeof(kbuf));
+		buf->data = (char *)xmalloc(sizeof(T));
+		buf->used = sizeof(T);
+		krw_insert(&buffer, buf);	
+		return (T *)buf->data;
+	}
+	inline void insertBuffer(kbuf *buf)
+	{
+		/*
+		kassert(buffer.write_hot_buf);
+		buf->next = buffer.head;
+		buffer.head = buf;
+		buffer.total_len += buf->used;
+		buffer.read_hot = buffer.head->data;
+		*/
+		krw_insert(&this->buffer, buf);
+	}
+	int getReadBuffer(LPWSABUF buffer, int bc)
+	{
+		return krw_get_read_buffers(&this->buffer, buffer, bc);
+	}
+	char *getReadBuffer(int &len)
+	{
+		return krw_get_read_buffer(&buffer, &len);
+	}
+	bool readSuccess(int got)
+	{
+		return krw_read_success(&buffer, got);
+	}
+	void writeSuccess(int got)
+	{
+		krw_write_success(&buffer, got);
+	}
+	char *getWriteBuffer(int &len)
+	{
+		return krw_get_write_buffer(&buffer, &len);
+	}
+	inline void Append(kbuf *buf)
+	{
+		krw_append(&buffer, buf);
+	}
 	void write_byte(int ch)
 	{
 		char temp[2];
 		temp[0] = ch;
 		write_all(temp,1);
 	}
-	void write_all(const char *buf, int len);
+	
 	inline void print()
 	{
-		buff *tmp = head;
+		kbuf *tmp = buffer.head;
 		while(tmp){
 			if(tmp->used>0){
 				fwrite(tmp->data,1,tmp->used,stdout);
@@ -88,67 +92,39 @@ public:
 			tmp = tmp->next;
 		}
 	}
-	inline void destroy()
-	{
-		while (head) {
-			buff *next = head->next;
-			xfree(head->data);
-			xfree(head);
-			head = next;
-		}
-		init();
-	}
-	inline void clean()
-	{
-		destroy();
-	}
 	unsigned getLen()
 	{
-		return totalLen;
+		return buffer.total_len;
 	}
-	buff *getHead()
+	kbuf *getHead()
 	{
-		return head;
+		return buffer.head;
 	}
-	buff *stealBuff()
+	kbuf *stealBuff()
 	{
-		buff *ret = head;
-		init();
+		kbuf *ret = buffer.head;
+		krw_buffer_init(&buffer, buffer.chunk_size);
 		return ret;
 	}
 	void insert(const char *str, int len) {
-		buff *buf = (buff *)malloc(sizeof(buff));
+		kbuf *buf = (kbuf *)malloc(sizeof(kbuf));
 		buf->flags = 0;
 		buf->data = (char *)malloc(len);
 		memcpy(buf->data, str, len);
 		buf->used = len;
-		buf->next = head;
-		totalLen += len;
-		head = buf;
+		insertBuffer(buf);
 	}
-private:
-	void init()
+	krw_buffer buffer;
+protected:
+	int write(const char *buf, int len)
 	{
-		head = NULL;
-		write_hot_buf = NULL;
-		read_hot = write_hot = NULL;
-		totalLen = 0;
-		assert(chunk_size > 0);
+		int wlen;
+		char *t = getWriteBuffer(wlen);
+		assert(t);
+		wlen = MIN(len, wlen);
+		memcpy(t, buf, wlen);
+		writeSuccess(wlen);
+		return wlen;
 	}
-	inline buff *newbuff()
-	{
-		buff *buf = (buff *)malloc(sizeof(buff));
-		buf->flags = 0;
-		buf->data = (char *)malloc(chunk_size);
-		buf->used = 0;
-		buf->next = NULL;
-		return buf;
-	}
-	buff *head;
-	buff *write_hot_buf;
-	char *read_hot;
-	char *write_hot;
-	int totalLen;
-	int chunk_size;
 };
 #endif

@@ -40,7 +40,7 @@ DIST_COMMON = README $(am__configure_deps) $(dist_inc_DATA) \
 	$(dist_sysconf_DATA) $(dist_webadmin_DATA) $(dist_www_DATA) \
 	$(srcdir)/Makefile.am $(srcdir)/Makefile.in \
 	$(top_srcdir)/configure AUTHORS COPYING ChangeLog INSTALL NEWS \
-	config.guess config.sub depcomp install-sh missing \
+	compile config.guess config.sub depcomp install-sh missing \
 	mkinstalldirs
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.ac
@@ -235,7 +235,7 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = src extworker module/webdav 
+SUBDIRS = src extworker
 #module/vhs_mysql module/vhs_sqlite module/whm/whmdso/vhsnode
 EXTRA_DIST = module/access 
 wwwdir = $(prefix)/www

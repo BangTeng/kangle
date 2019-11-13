@@ -1,7 +1,7 @@
 #include "KVirtualHostContainer.h"
 #include "KSubVirtualHost.h"
 #include "KVirtualHost.h"
-#include "KList.h"
+#include "klist.h"
 
 static int vh_container_find_cmp(void *k, void *k2)
 {
@@ -163,7 +163,7 @@ bool convert(const char *domain,bool &wide,domain_t buf,int buf_size) {
 	} else {
 		wide = false;
 	}
-	return revert_hostname(domain,strlen(domain),buf,buf_size);
+	return revert_hostname(domain,(int)strlen(domain),buf,buf_size);
 }
 bool KVirtualHostContainer::bind(const char *domain,void *vh,kgl_bind_level level)
 {
@@ -206,11 +206,6 @@ query_vh_result KVirtualHostContainer::findVirtualHost(KSubVirtualHost **rq_svh,
 		}
 		svh->vh->addRef();
 		(*rq_svh) = svh;
-#ifdef ENABLE_VH_RS_LIMIT
-		if (!svh->vh->addConnection()) {
-			return query_vh_connect_limit;
-		}
-#endif
 	}
 	return query_vh_success;	
 }
@@ -233,7 +228,7 @@ void *KVirtualHostContainer::find(domain_t name)
 		return list->svh;
 	}
 	if (tree) {
-		rb_node *node = rbtree_find(tree, name, vh_container_find_cmp);
+		krb_node *node = rbtree_find(tree, name, vh_container_find_cmp);
 		if (node) {
 			//¾«È·½âÎö
 			name = name + *name + 1;
@@ -294,7 +289,7 @@ bool KVirtualHostContainer::add(domain_t name,bool wide,kgl_bind_level level,voi
 	if (tree == NULL) {
 		tree = rbtree_create();
 	}
-	rb_node *node = rbtree_insert(tree, name, &new_flag, vh_container_find_cmp);
+	krb_node *node = rbtree_insert(tree, name, &new_flag, vh_container_find_cmp);
 	assert(node);
 	if (new_flag) {
 		rn = new KVirtualHostContainer;
@@ -338,7 +333,7 @@ kgl_del_result KVirtualHostContainer::del(domain_t name,bool wide,void *svh)
 	if (tree == NULL) {
 		return kgl_del_failed;
 	}
-	rb_node *node = rbtree_find(tree, name, vh_container_find_cmp);
+	krb_node *node = rbtree_find(tree, name, vh_container_find_cmp);
 	if (node == NULL) {
 		return kgl_del_failed;
 	}

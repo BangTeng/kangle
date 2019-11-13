@@ -1,23 +1,15 @@
 #ifndef KAPIDSO_H
 #define KAPIDSO_H
 #include <string>
-#include "httpext.h"
+#include "khttpext.h"
 #ifndef HIWORD
 #define LOWORD(l)           ((WORD)(((unsigned long)(l)) & 0xffff))
 #define HIWORD(l)           ((WORD)((((unsigned long)(l)) >> 16) & 0xffff))
 #endif
-typedef BOOL (WINAPI * GetExtensionVersionf)(HSE_VERSION_INFO *pVer);
-typedef DWORD (WINAPI * HttpExtensionProcf)(EXTENSION_CONTROL_BLOCK *pECB);
-typedef BOOL (WINAPI * TerminateExtensionf)(DWORD dwFlags);
-typedef BOOL (WINAPI * DllMainf)(HINSTANCE hinstDLL, DWORD fdwReason,
-		LPVOID lpvReserved);
-typedef  void (WINAPI * ServerFreef) ( HCONN       hConn,void *ptr);
-typedef	BOOL (WINAPI * ServerSupportFunctionf)( HCONN      hConn,
-                                       DWORD      dwHSERequest,
-                                       LPVOID     lpvBuffer,
-                                       void **ret
-									   );
-
+typedef BOOL(WINAPI * GetExtensionVersionf)(HSE_VERSION_INFO *pVer);
+typedef DWORD(WINAPI * HttpExtensionProcf)(EXTENSION_CONTROL_BLOCK *pECB);
+typedef BOOL(WINAPI * TerminateExtensionf)(DWORD dwFlags);
+typedef BOOL(WINAPI * DllMainf)(HINSTANCE hinstDLL, DWORD fdwReason,LPVOID lpvReserved);
 enum {
 	STATE_LOAD_SUCCESS, STATE_LOAD_FAILED, STATE_LOAD_UNKNOW
 };
@@ -34,17 +26,9 @@ public:
 	bool reload();
 	void unload();
 
-	void attachProcess();
-	void detachProcess();
-	void attachThread();
-	void detachThread();
-
 	GetExtensionVersionf GetExtensionVersion;
 	HttpExtensionProcf HttpExtensionProc;
 	TerminateExtensionf TerminateExtension;
-#ifndef _WIN32
-	DllMainf DllMain;
-#endif
 public:
 	const char *getInfo() {
 		return apiInfo;

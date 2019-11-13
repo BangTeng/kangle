@@ -23,30 +23,31 @@
 #include "KSockPoolHelper.h"
 #include "utils.h"
 #include "KAsyncFetchObject.h"
-#include "KThreadPool.h"
-#include "KAddr.h"
+#include "kthread.h"
+#include "kaddr.h"
+#include "kselector_manager.h"
+
 struct KSockPoolDns
 {
 	KHttpRequest *rq;
-	KUpstreamSelectable *socket;
+	KUpstream *socket;
 	KSockPoolHelper *sh;
 };
 using namespace std;
-static void monitor_connect_result(void *arg, int got)
+static kev_result monitor_connect_result(void *arg, int got)
 {
-	KHttpRequest *rq = (KHttpRequest *)arg;
-	KSockPoolHelper *sph = (KSockPoolHelper *)rq->hot;
+	KUpstream *us = (KUpstream *)arg;
+	kconnection *c = us->GetConnection();
+	KSockPoolHelper *sph = static_cast<KSockPoolHelper *>(us->container);
 	if (got < 0) {
 		sph->disable();
 	} else {
-		if (rq->c->socket->write("H", 1) <= 0) {			
+		if (send(c->st.fd,"H", 1,0) <= 0) {			
 			sph->disable();
 		} else {
 			sph->enable();
 		}
 	}
-	rq->c->socket->close();
-	delete rq;
 	int monitor_tick = (int)(kgl_current_msec - sph->monitor_start_time);
 	if (monitor_tick <= 0) {
 		monitor_tick = 1;
@@ -60,108 +61,60 @@ static void monitor_connect_result(void *arg, int got)
 		sph->avg_monitor_tick = (int)(0.9 * float(sph->avg_monitor_tick) + 0.1 * float(monitor_tick));
 	}	
 	sph->monitorNextTick();
+	us->Destroy();
+	return kev_destroy;
 }
-static void start_monitor_call_back(void *arg,int got)
+static kev_result start_monitor_call_back(void *arg,int got)
 {
 	KSockPoolHelper *sph = (KSockPoolHelper *)arg;
+	if (!sph->monitor) {
+		sph->release();
+		return kev_ok;
+	}
 	sph->start_monitor_call_back();
+	return kev_ok;
 }
-void next_monitor_call_back(void *arg, int got)
+kev_result next_monitor_call_back(void *arg, int got)
 {
-	KSockPoolHelper *sph = (KSockPoolHelper *)arg;
-	sph->selector->add_timer(::start_monitor_call_back, arg, got,NULL);
+	kselector_add_timer(kgl_get_tls_selector(),::start_monitor_call_back, arg, got,NULL);
+	return kev_ok;
 }
-static void WINAPI first_start_monitor_call_back(void *arg)
-{
-	//rand start monitor request.
-	KSockPoolHelper *sph = (KSockPoolHelper *)arg;
-	sph->selector = selectorManager.getSelector();
-	sph->selector->next(next_monitor_call_back, arg, rand() % 10000);
-}
-#if 0
-static KTHREAD_FUNCTION asyncSockPoolDnsMonitorCallBack(void *data,int msec)
-{
-	KSockPoolDns *spdns = (KSockPoolDns *)data;
-	assert(spdns->socket);
-	KHttpRequest *rq = spdns->rq;
-	if (msec<0
-		|| msec > (int)conf.connect_time_out * 1000
-		|| !spdns->sh->real_connect(rq, spdns->socket,true)) {
-		spdns->sh->selector->next(next_monitor_name_resolved_call_back, spdns, 0);	
-		KTHREAD_RETURN;
-	}
-	spdns->sh->selector->next(next_monitor_name_resolved_call_back, spdns,1);	
-	KTHREAD_RETURN;
-}
-static KTHREAD_FUNCTION asyncSockPoolDnsCallBack(void *data,int msec)
-{
-	//printf("**********************************asyncSockPoolDnsCallBack\n");
-	KSockPoolDns *spdns = (KSockPoolDns *)data;
-	assert(spdns->socket);
-	KHttpRequest *rq = spdns->rq;
-	if (msec > (int)conf.connect_time_out * 1000
-		|| !spdns->sh->real_connect(rq,spdns->socket,true)) {
-		spdns->socket->isBad(BadStage_Connect);
-		spdns->socket->destroy();
-		spdns->socket = NULL;
-	}
-	KAsyncFetchObject *fo = static_cast<KAsyncFetchObject *>(rq->fetchObj);
-	fo->connectCallBack(rq,spdns->socket,true);
-	spdns->sh->release();
-	delete spdns;
-	KTHREAD_RETURN;
-}
-#endif
-static void sockpool_name_resovled_monitor_call_back(void *arg, KAddr *addr)
+static kev_result sockpool_name_resovled_monitor_call_back(void *arg, kgl_addr *addr)
 {
 	sockaddr_i a;
 	KSockPoolDns *spdns = (KSockPoolDns *)arg;
 	assert(spdns->socket);
-	KHttpRequest *rq = spdns->rq;
 	if (addr==NULL ||
-		!addr->get_addr(spdns->sh->port, a) ||
-		!spdns->sh->connect_addr(rq, spdns->socket, a)) {
-		delete rq;
-		spdns->socket->destroy();
+		!kgl_addr_build(addr,(uint16_t)spdns->sh->port, &a) ||
+		!spdns->sh->connect_addr(NULL, static_cast<KTcpUpstream *>(spdns->socket), a)) {
+		spdns->socket->Destroy();
 		spdns->sh->disable();
 		spdns->sh->monitorNextTick();
 		delete spdns;
-		return;
+		return kev_destroy;
 	}
-	spdns->sh->monitorConnectStage(rq, spdns->socket);
+	kev_result ret = spdns->socket->Connect(spdns->socket, monitor_connect_result);
 	delete spdns;
+	return ret;
 }
-static void sockpool_name_resovled_call_back(void *arg, KAddr *addr)
+static kev_result sockpool_name_resovled_call_back(void *arg, kgl_addr *addr)
 {
 	sockaddr_i a;
 	KSockPoolDns *spdns = (KSockPoolDns *)arg;
 	assert(spdns->socket);
 	KHttpRequest *rq = spdns->rq;
 	if (addr == NULL ||
-		!addr->get_addr(spdns->sh->port, a) ||
-		!spdns->sh->connect_addr(rq,spdns->socket,a)) {
-		spdns->socket->isBad(BadStage_Connect);
-		spdns->socket->destroy();
+		!kgl_addr_build(addr,(uint16_t)spdns->sh->port, &a) ||
+		!spdns->sh->connect_addr(rq,static_cast<KTcpUpstream *>(spdns->socket),a)) {
+		spdns->socket->IsBad(BadStage_Connect);
+		spdns->socket->Destroy();
 		spdns->socket = NULL;
 	}
 	KAsyncFetchObject *fo = static_cast<KAsyncFetchObject *>(rq->fetchObj);
 	fo->connectCallBack(rq, spdns->socket, true);
 	spdns->sh->release();
 	delete spdns;
-}
-FUNC_TYPE FUNC_CALL checkNodeActive(void *param)
-{
-	KSockPoolHelper *sockHelper = (KSockPoolHelper *)param;
-	sockHelper->syncCheckConnect();
-	sockHelper->release();
-	KTHREAD_RETURN;
-}
-void KSockPoolHelper::monitorConnectStage(KHttpRequest *rq, KUpstreamSelectable *us)
-{
-	rq->c = us;
-	rq->c->selector = selector;
-	rq->hot = (char *)this;
-	us->connect(rq, monitor_connect_result);
+	return kev_ok;
 }
 void KSockPoolHelper::start_monitor_call_back()
 {
@@ -170,53 +123,44 @@ void KSockPoolHelper::start_monitor_call_back()
 		return;
 	}
 #endif
-	if (!monitor) {
-		release();
-		return;
-	}
-	KHttpRequest *rq = new KHttpRequest(NULL);
-	rq->init(NULL);
 	bool need_name_resolved = false;
-	KUpstreamSelectable *us = newConnection(rq, need_name_resolved);
+	KUpstream *us = newConnection(NULL, need_name_resolved);
 	if (us == NULL) {
-		disable();
-		delete rq;
+		disable();		
 		monitorNextTick();
 		return;
 	}
+	us->BindSelector(kgl_get_tls_selector());
 	this->monitor_start_time = kgl_current_msec;
 	if (need_name_resolved) {
 		KSockPoolDns *spdns = new KSockPoolDns;
 		spdns->socket = us;
-		spdns->rq = rq;
 		spdns->sh = this;
-		find_addr(this->host.c_str(), kgl_addr_ip, sockpool_name_resovled_monitor_call_back, spdns, selector);
+		kgl_find_addr(this->host.c_str(), kgl_addr_ip, sockpool_name_resovled_monitor_call_back, spdns, kgl_get_tls_selector());
 		return;
 	}
-	monitorConnectStage(rq, us);
+	us->Connect(us, monitor_connect_result);
 }
 KSockPoolHelper::KSockPoolHelper() {
 	ip = NULL;
 	tryTime = 0;
 	error_count = 0;
-	isUnix = false;
+	flags = 0;
 	max_error_count = 5;
 	hit = 0;
 	weight = 1;
 	avg_monitor_tick = 0;
-	monitor = false;
 #ifdef ENABLE_UPSTREAM_SSL
+	
 	ssl_ctx = NULL;
 #endif
 	total_error = 0;
 	total_connect = 0;
-	sign = false;
-	selector = NULL;
 }
 KSockPoolHelper::~KSockPoolHelper() {
 #ifdef ENABLE_UPSTREAM_SSL
 	if (ssl_ctx) {
-		KSSLSocket::clean_ctx(ssl_ctx);
+		SSL_CTX_free(ssl_ctx);
 	}
 #endif
 	if (ip) {
@@ -225,7 +169,11 @@ KSockPoolHelper::~KSockPoolHelper() {
 }
 void KSockPoolHelper::monitorNextTick()
 {
-	selector->add_timer(::start_monitor_call_back,this,error_try_time*1000,NULL);
+	if (!monitor) {
+		release();
+		return;
+	}
+	kselector_add_timer(kgl_get_tls_selector(),::start_monitor_call_back,this,error_try_time*1000,NULL);
 }
 void KSockPoolHelper::startMonitor()
 {
@@ -234,54 +182,20 @@ void KSockPoolHelper::startMonitor()
 	}
 	monitor = true;
 	addRef();
-	selectorManager.onReady(::first_start_monitor_call_back,this);
+	selector_manager_add_timer(::start_monitor_call_back, this, rand() % 10000,NULL);
 }
 void KSockPoolHelper::checkActive()
 {
-	//TODO:现在采用最简单的线程去检测，以后可以加到主循环里面去检测，节省资源。
 	if (monitor) {
 		return;
 	}
 	addRef();
-	if (!m_thread.start(this,checkNodeActive)) {
-		release();
-	}
+	start_monitor_call_back();
 }
 
-void KSockPoolHelper::syncCheckConnect()
+KUpstream *KSockPoolHelper::getConnection(KHttpRequest *rq, bool &half, bool &need_name_resolved)
 {
-	KClientSocket socket;
-	bool result = false;
-	int tmo = 5;
-	sockaddr_i *bind_addr = NULL;
-	if (ip) {
-		bind_addr = new sockaddr_i;
-		if (!KSocket::getaddr(ip,0,bind_addr,AF_UNSPEC,AI_NUMERICHOST)) {
-			delete bind_addr;
-			return;
-		}
-	}
-	//TODO:已知问题,如果检测过程中对host修改，可能导致异常。所以未来一定要放到主循环中去检测
-#ifdef KSOCKET_UNIX
-	if (isUnix) {
-		result = socket.connect(host.c_str(),tmo);
-	} else {
-#endif
-		result = socket.connect(this->host.c_str(),this->port,tmo,bind_addr);
-#ifdef KSOCKET_UNIX
-	}
-#endif
-	if (bind_addr) {
-		delete bind_addr;
-	}
-	if (result) {
-		enable();
-	}
-}
-
-KUpstreamSelectable *KSockPoolHelper::getConnection(KHttpRequest *rq, bool &half, bool &need_name_resolved)
-{
-	KUpstreamSelectable *socket = NULL;
+	KUpstream *socket = NULL;
 	if (!TEST(rq->flags, RQ_UPSTREAM_ERROR|RQ_HAS_CONNECTION_UPGRADE)) {
 		//如果是发生错误重连或upgrade的连接，则排除连接池
 		socket = getPoolSocket(rq);
@@ -293,47 +207,41 @@ KUpstreamSelectable *KSockPoolHelper::getConnection(KHttpRequest *rq, bool &half
 	half = true;
 	return newConnection(rq, need_name_resolved);
 }
-KUpstreamSelectable *KSockPoolHelper::newConnection(KHttpRequest *rq, bool &need_name_resolved)
+KUpstream *KSockPoolHelper::newConnection(KHttpRequest *rq, bool &need_name_resolved)
 {
 	
-	KClientSocket *sockfd;
-	int flag = 0;
-#ifdef ENABLE_UPSTREAM_SSL
-	if (ssl.size()>0 && ssl_ctx) {
-		sockfd = new KSSLSocket(ssl_ctx);
-		flag = STF_SSL;
-	} else
-#endif
-		sockfd = new KClientSocket;
-	KUpstreamSelectable *socket = new KUpstreamSelectable(sockfd);
-	socket->set_flag(flag);
+	KTcpUpstream *socket = new KTcpUpstream(NULL);
 	bind(socket);
 #ifdef KSOCKET_UNIX
-	if (isUnix) {
-		if(!socket->socket->halfconnect(host.c_str())){
-			socket->destroy();
+	if (is_unix) {
+		struct sockaddr_un addr;
+		ksocket_unix_addr(host.c_str(),&addr);
+		SOCKET fd = ksocket_half_connect((sockaddr_i *)&addr,NULL,0);
+		if (!ksocket_opened(fd)) {
+			socket->Destroy();
 			return NULL;
 		}
+		kconnection *cn = socket->GetConnection();
+		cn->st.fd = fd;
 		return socket;
 	}
 #endif
 	if (!try_numerichost_connect(rq,socket, need_name_resolved) && !need_name_resolved) {			
-		socket->destroy();
+		socket->Destroy();
 		return NULL;
 	}
 	return socket;
 }
-void KSockPoolHelper::connect(KHttpRequest *rq)
+kev_result KSockPoolHelper::connect(KHttpRequest *rq)
 {
 	assert(rq->fetchObj);
 	rq->ctx->upstream_sign = this->sign;
 	bool half;
 	bool need_name_resolved=false;
-	KUpstreamSelectable *socket = getConnection(rq,half,need_name_resolved);
+	KUpstream *socket = getConnection(rq,half,need_name_resolved);
 	if (!need_name_resolved || socket==NULL) {
 		KAsyncFetchObject *fo = static_cast<KAsyncFetchObject *>(rq->fetchObj);
-		fo->connectCallBack(rq,socket,half);
-		return;
+		return fo->connectCallBack(rq,socket,half);
 	}
 	//异步解析
 	KSockPoolDns *spdns = new KSockPoolDns;
@@ -341,38 +249,54 @@ void KSockPoolHelper::connect(KHttpRequest *rq)
 	spdns->socket = socket;
 	spdns->rq = rq;
 	spdns->sh = this;
-	find_addr(this->host.c_str(), kgl_addr_ip, sockpool_name_resovled_call_back, spdns, rq->c->selector);
+	return kgl_find_addr(this->host.c_str(), kgl_addr_ip, sockpool_name_resovled_call_back, spdns, rq->sink->GetSelector());
 }
-bool KSockPoolHelper::connect_addr(KHttpRequest *rq, KUpstreamSelectable *socket, sockaddr_i &addr)
+bool KSockPoolHelper::connect_addr(KHttpRequest *rq, KTcpUpstream *socket, sockaddr_i &addr)
 {
 	katom_inc64((void *)&total_connect);
 	sockaddr_i *bind_addr = NULL;
-	const char *bind_ip = ip ? ip : rq->bind_ip;
+	const char *bind_ip = ip;
+	if (bind_ip==NULL && rq) {
+		bind_ip = rq->bind_ip;
+	}
 	if (bind_ip) {
 		bind_addr = new sockaddr_i;
-		if (!KSocket::getaddr(bind_ip, 0, bind_addr, AF_UNSPEC, AI_NUMERICHOST)) {
+		if (!ksocket_getaddr(bind_ip, 0, AF_UNSPEC, AI_NUMERICHOST, bind_addr)) {
 			delete bind_addr;
 			return false;
 		}
 	}
-	bool result = socket->socket->halfconnect(addr, bind_addr, TEST(rq->filter_flags, RF_TPROXY_UPSTREAM)>0);
+	kconnection *cn = socket->GetConnection();
+	memcpy(&cn->addr, &addr, sizeof(cn->addr));
+	int tproxy_mask = 0;
+#ifdef ENABLE_TPROXY
+	if (rq && TEST(rq->filter_flags, RF_TPROXY_UPSTREAM)) {
+		tproxy_mask = 9;
+	}
+#endif
+	bool result = kconnection_half_connect(cn,bind_addr, tproxy_mask);	
 	if (bind_addr) {
 		delete bind_addr;
 	}
 #ifdef ENABLE_UPSTREAM_SSL
-	if (result && socket->isSSL()) {
-		KSSLSocket *sslSocket = static_cast<KSSLSocket *>(socket->socket);
-		if (!sslSocket->ssl_connect()) {
-			klog(KLOG_ERR, "cann't bind_fd for ssl socket\n");
+	if (result && this->ssl_ctx) {
+		const char *sni_host = NULL;
+		if (!this->no_sni) {
+			if (rq && !TEST(rq->filter_flags, RF_UPSTREAM_NOSNI)) {
+				sni_host = rq->url->host;
+			}
+		}
+		if (!kconnection_ssl_connect(cn, ssl_ctx, sni_host)) {
+			klog(KLOG_ERR, "cann't bind_fd for ssl socket.\n");
 		}
 	}
 #endif
 	return result;
 }
-bool KSockPoolHelper::try_numerichost_connect(KHttpRequest *rq,KUpstreamSelectable *socket, bool &need_name_resolved)
+bool KSockPoolHelper::try_numerichost_connect(KHttpRequest *rq,KTcpUpstream *socket, bool &need_name_resolved)
 {
 	sockaddr_i addr;
-	bool is_numerichost = KSocket::getaddr(this->host.c_str(), this->port, &addr, AF_UNSPEC, AI_NUMERICHOST);
+	bool is_numerichost = ksocket_getaddr(host.c_str(), port, AF_UNSPEC, AI_NUMERICHOST,&addr);
 	need_name_resolved = !is_numerichost;
 	if (!is_numerichost) {
 		return false;
@@ -409,19 +333,21 @@ bool KSockPoolHelper::setHostPort(std::string host,int port,const char *ssl)
 		this->ssl.clear();
 	}
 	
-
+	if (ssl_buf && strchr(ssl_buf, 'n')) {
+		this->no_sni = 1;
+	}
 	if (ssl_ctx) {
-		KSSLSocket::clean_ctx(ssl_ctx);
+		SSL_CTX_free(ssl_ctx);
 		ssl_ctx = NULL;
 	}
 	if (ssl) {
-		ssl_ctx = KSSLSocket::init_client(NULL,NULL);
+		void *ssl_ctx_data = NULL;
+		
+		ssl_ctx = kgl_ssl_ctx_new_client(NULL, NULL, ssl_ctx_data);
 		if (ssl_ctx) {
-			if (protocols) {
-				KSSLSocket::set_ssl_protocols(ssl_ctx, protocols);
-			}
+			kgl_ssl_ctx_set_protocols(ssl_ctx, protocols);			
 			if (chiper) {
-				SSL_CTX_set_cipher_list(ssl_ctx, chiper);
+				kgl_ssl_ctx_set_cipher_list(ssl_ctx, chiper);
 			}
 			if (chiper == NULL || protocols == NULL) {
 				//check global
@@ -433,10 +359,9 @@ bool KSockPoolHelper::setHostPort(std::string host,int port,const char *ssl)
 					SSL_CTX_set_cipher_list(ssl_ctx, ssl_client_chiper.c_str());
 				}
 				if (protocols == NULL && !ssl_client_protocols.empty()) {
-					KSSLSocket::set_ssl_protocols(ssl_ctx, ssl_client_protocols.c_str());
+					kgl_ssl_ctx_set_protocols(ssl_ctx, ssl_client_protocols.c_str());
 				}
 			}
-			
 		}		
 	}
 #endif
@@ -444,13 +369,12 @@ bool KSockPoolHelper::setHostPort(std::string host,int port,const char *ssl)
 		//clean();
 	}
 #ifdef KSOCKET_UNIX
-	isUnix = false;
 	if(strncasecmp(this->host.c_str(),"unix:",5)==0){
-		isUnix = true;
+		is_unix = 1;
 		this->host = this->host.substr(5);
 	}
 	if (this->host[0]=='/') {
-		isUnix = true;
+		is_unix = 1;
 	}
 #endif
 	lock.Unlock();
@@ -513,5 +437,4 @@ void KSockPoolHelper::buildXML(std::stringstream &s)
 		s << "sign='1' ";
 	}
 }
-
 

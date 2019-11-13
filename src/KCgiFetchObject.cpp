@@ -7,15 +7,15 @@
 #include "http.h"
 #include "extern.h"
 #include "KCgiFetchObject.h"
-#include "KHttpObjectParserHook.h"
+#include "KHttpResponseParser.h"
 #include "KCgiEnv.h"
 #include "KWinCgiEnv.h"
 #include "KCgi.h"
 #include "KCgiRedirect.h"
-#include "KSelectorManager.h"
-#include "malloc_debug.h"
-static int loadStreamHead(KStream *stream, KHttpRequest *rq, KHttpObject *obj,
-		KHttpObjectParserHook &hook) {
+#include "kselector_manager.h"
+#include "kmalloc.h"
+#ifdef ENABLE_CGI
+static int loadStreamHead(KStream *stream, KHttpRequest *rq, KHttpObject *obj,KHttpObjectParserHook &hook) {
 	char *answer = (char *) xmalloc(ANSW_SIZE+1);
 	int cursize = ANSW_SIZE;
 	char *buf = answer;
@@ -253,6 +253,7 @@ void KCgiFetchObject::process(KHttpRequest *rq)
 }
 bool KCgiFetchObject::readPostData(KHttpRequest *rq)
 {
+#if 0
 	if (rq->pre_post_length > 0) {
 		if (!this->write(rq->parser.body, rq->pre_post_length)){
 			goto error;
@@ -262,9 +263,10 @@ bool KCgiFetchObject::readPostData(KHttpRequest *rq)
 		rq->parser.bodyLen -= rq->pre_post_length;
 		rq->pre_post_length = 0;
 	}
+#endif
 	char buf[1024];
 	for (;;) {
-		int rest = rq->read(buf, sizeof(buf));
+		int rest = rq->sink->Read(buf, sizeof(buf));
 		if (rest == 0) {
 			break;
 		}
@@ -278,3 +280,4 @@ bool KCgiFetchObject::readPostData(KHttpRequest *rq)
 	return this->writeComplete();
 	error: return false;
 }
+#endif

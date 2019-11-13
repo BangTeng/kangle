@@ -7,7 +7,7 @@
 
 #include "KHttpField.h"
 #include "utils.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 
 KHttpField::KHttpField() {
 	header = NULL;

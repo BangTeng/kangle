@@ -9,16 +9,15 @@
 #include "lang.h"
 #include "KCmdPoolableRedirect.h"
 #include "KAsyncFetchObject.h"
-
 #ifdef ENABLE_VH_RUN_AS
 //启动进程工作线程
-FUNC_TYPE FUNC_CALL MPVProcessPowerWorker(void *param)
+KTHREAD_FUNCTION MPVProcessPowerWorker(void *param)
 {
         MPVProcessPowerParam *vpp = (MPVProcessPowerParam *)param;
         bool success;
-        KUpstreamSelectable *socket = vpp->process->poweron(vpp->rq->svh->vh,vpp->rd,success);
+		KTcpUpstream *socket = vpp->process->poweron(vpp->rq->svh->vh,vpp->rd,success);
 		if(socket){
-			vpp->rq->c->selector->bindSelectable(socket);
+			socket->BindSelector(vpp->rq->sink->GetSelector());
 		}
         static_cast<KAsyncFetchObject *>(vpp->rq->fetchObj)->connectCallBack(vpp->rq,socket,false);
         vpp->process->release();
@@ -33,11 +32,11 @@ KCmdProcess::~KCmdProcess() {
 		delete st;
 	}
 }
-KUpstreamSelectable *KCmdProcess::poweron(KVirtualHost *vh,KExtendProgram *erd,bool &success)
+KTcpUpstream *KCmdProcess::poweron(KVirtualHost *vh,KExtendProgram *erd,bool &success)
 {
 	int port = 0;
 	KCmdPoolableRedirect *rd = static_cast<KCmdPoolableRedirect *> (erd);
-	KUpstreamSelectable *socket = NULL;
+	KTcpUpstream *socket = NULL;
 	KListenPipeStream *st2 = new KListenPipeStream;
 	unix_path.clear();
 	socket = rd->createPipeStream(vh,st2,unix_path,false);
@@ -53,9 +52,9 @@ KUpstreamSelectable *KCmdProcess::poweron(KVirtualHost *vh,KExtendProgram *erd,b
 	st = st2;
 	//这里把端口号保存，下次连接时就不用对stLock加锁了。
 	success = true;
-	if (unix_path.size()==0) {
-		port = st->getPort();	
-		KSocket::getaddr("127.0.0.1",port,&addr);
+	if (unix_path.empty()) {
+		port = st->getPort();
+		ksocket_getaddr("127.0.0.1", port, AF_UNSPEC, AI_NUMERICHOST, &addr);
 	}
 	stLock.Unlock();
 	return socket;
@@ -89,7 +88,7 @@ KMPCmdProcess::~KMPCmdProcess()
 	delete freeProcessList;
 	delete busyProcessList;
 }
-void KMPCmdProcess::handleRequest(KHttpRequest *rq,KExtendProgram *rd)
+kev_result KMPCmdProcess::handleRequest(KHttpRequest *rq,KExtendProgram *rd)
 {
 	KSingleListenPipeStream *sp = NULL;
     stLock.Lock();
@@ -102,32 +101,31 @@ void KMPCmdProcess::handleRequest(KHttpRequest *rq,KExtendProgram *rd)
 	if (sp) {
 		addRef();
 		bool isHalf;
-		KUpstreamSelectable *socket = sp->getConnection(rq, isHalf);
+		KUpstream *socket = sp->getConnection(rq, isHalf);
 		if (socket == NULL) {
 			sp->killChild();
 			gcProcess(sp);
 		}
-		static_cast<KAsyncFetchObject *>(rq->fetchObj)->connectCallBack(rq, socket, isHalf);
-		return;
+		return static_cast<KAsyncFetchObject *>(rq->fetchObj)->connectCallBack(rq, socket, isHalf);
 	}
-	if (sp == NULL) {
+	
 		//rq->c->removeRequest(rq, true);
-		MPVProcessPowerParam *param = new MPVProcessPowerParam;
-		param->rq = rq;
-		param->rd = rd;
-		param->process = this;
-		addRef();
-		if (!m_thread.start(param, MPVProcessPowerWorker)) {
-			static_cast<KAsyncFetchObject *>(rq->fetchObj)->connectCallBack(rq, NULL, true);
-			delete param;
-			release();
-		}
+	MPVProcessPowerParam *param = new MPVProcessPowerParam;
+	param->rq = rq;
+	param->rd = rd;
+	param->process = this;
+	addRef();		
+	if (!kthread_pool_start(MPVProcessPowerWorker, param)) {
+		static_cast<KAsyncFetchObject *>(rq->fetchObj)->connectCallBack(rq, NULL, true);
+		delete param;
+		release();
 	}
+	return kev_ok;	
 }
-KUpstreamSelectable *KMPCmdProcess::poweron(KVirtualHost *vh,KExtendProgram *erd,bool &success)
+KTcpUpstream *KMPCmdProcess::poweron(KVirtualHost *vh,KExtendProgram *erd,bool &success)
 {
 	KCmdPoolableRedirect *rd = static_cast<KCmdPoolableRedirect *> (erd);
-	KUpstreamSelectable *socket = NULL;
+	KTcpUpstream *socket = NULL;
 	KSingleListenPipeStream *st = new KSingleListenPipeStream;
 #ifdef KSOCKET_UNIX
 	if (conf.unix_socket) {
@@ -156,10 +154,6 @@ KUpstreamSelectable *KMPCmdProcess::poweron(KVirtualHost *vh,KExtendProgram *erd
 		delete st;
 		return NULL;
 	}
-#if 0
-
-	
-#endif
 	stLock.Lock();
 	klist_append(busyProcessList, st);
     stLock.Unlock();
@@ -170,7 +164,7 @@ KUpstreamSelectable *KMPCmdProcess::poweron(KVirtualHost *vh,KExtendProgram *erd
 	//这里把端口号保存，下次连接时就不用对stLock加锁了。
 	if (st->unix_path.size()==0) {
 		int port = st->getPort();
-		KSocket::getaddr("127.0.0.1",port,&st->addr);
+		ksocket_getaddr("127.0.0.1", port, AF_UNSPEC, AI_NUMERICHOST, &st->addr);
 	}
 	return socket;
 }

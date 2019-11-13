@@ -2,6 +2,8 @@
 #ifdef ENABLE_REQUEST_QUEUE
 #include "KRequestQueue.h"
 #include "KAccess.h"
+#include "http.h"
+#define PER_MATCHER_SPLIT_CHAR ','
 KQueueMark::~KQueueMark()
 {
 	if (queue) {
@@ -63,15 +65,45 @@ std::string KQueueMark::getHtml(KModel *model)
 KPerQueueMark::~KPerQueueMark()
 {
 	assert(queues.empty());
+	while (matcher) {
+		per_queue_matcher *next = matcher->next;
+		delete matcher;
+		matcher = next;
+	}
 }
 bool KPerQueueMark::mark(KHttpRequest *rq, KHttpObject *obj, const int chainJumpType, int &jumpType)
 {
 	if (rq->queue) {
 		return false;
 	}
-	KStringBuf url;
-	rq->url->getUrl(url);
-	KRegSubString *ss = reg_url.matchSubString(url.getString(), url.getSize(), 0);
+	KStringBuf *url = NULL;
+	KRegSubString *ss = NULL;
+	per_queue_matcher *matcher = this->matcher;
+	while (matcher) {
+		if (matcher->header == NULL) {
+			if (url == NULL) {
+				url = new KStringBuf;
+				rq->url->getUrl(*url);
+			}
+			ss = matcher->reg.matchSubString(url->getString(), url->getSize(), 0);
+		} else {
+			KHttpHeader *av = rq->GetHeader();
+			while (av) {
+				if (attr_casecmp(av->attr, matcher->header) == 0 && av->val) {
+					ss = matcher->reg.matchSubString(av->val, av->val_len, 0);
+					break;
+				}
+				av = av->next;
+			}
+		}
+		if (ss != NULL) {
+			break;
+		}
+		matcher = matcher->next;
+	}
+	if (url) {
+		delete url;
+	}
 	if (ss == NULL) {
 		return false;
 	}
@@ -108,12 +140,50 @@ void KPerQueueMark::editHtml(std::map<std::string, std::string> &attribute) thro
 		(*it).second->set(max_worker, max_queue);
 	}
 	lock.Unlock();
-	reg_url.setModel(attribute["url"].c_str(), PCRE_CASELESS);
+	while (this->matcher) {
+		per_queue_matcher *next = this->matcher->next;
+		delete this->matcher;
+		this->matcher = next;
+	}
+	per_queue_matcher *last = NULL;
+	char *url = strdup(attribute["url"].c_str());
+	char *hot = url;
+	while (hot) {
+		per_queue_matcher *matcher = new per_queue_matcher;
+		char *p = strchr(hot, PER_MATCHER_SPLIT_CHAR);
+		if (p) {
+			*p = '\0';
+			p++;
+		}
+		char *val = hot;
+		if (*hot == '#') {
+			hot++;
+			val = strchr(val, ':');
+			if (val == NULL) {
+				delete matcher;
+				hot = p;
+				continue;
+			}
+			*val = '\0';
+			val++;
+			matcher->header = strdup(hot);
+		}
+		matcher->reg.setModel(val, PCRE_CASELESS);
+		if (last) {
+			last->next = matcher;
+		}
+		last = matcher;
+		if (this->matcher == NULL) {
+			this->matcher = matcher;
+		}
+		hot = p;
+	}
+	free(url);
+
 }
 std::string KPerQueueMark::getDisplay()
 {
 	std::stringstream s;
-
 	s << max_worker << " " << max_queue << "/";
 	lock.Lock();
 	s << queues.size();
@@ -122,7 +192,23 @@ std::string KPerQueueMark::getDisplay()
 }
 void KPerQueueMark::buildXML(std::stringstream &s)
 {
-	s << " url='" << reg_url.getModel() << "' max_worker='" << max_worker << "' max_queue='" << max_queue  << "'>";
+	s << " url='";
+	build_matcher(s);
+	s << "' max_worker='" << max_worker << "' max_queue='" << max_queue << "'>";
+}
+void KPerQueueMark::build_matcher(std::stringstream &s)
+{
+	per_queue_matcher *matcher = this->matcher;
+	while (matcher) {
+		if (matcher->header) {
+			s << "#" << matcher->header << ":";
+		}
+		s << matcher->reg.getModel();
+		if (matcher->next) {
+			s << PER_MATCHER_SPLIT_CHAR;
+		}
+		matcher = matcher->next;
+	}
 }
 std::string KPerQueueMark::getHtml(KModel *model)
 {
@@ -130,7 +216,7 @@ std::string KPerQueueMark::getHtml(KModel *model)
 	std::stringstream s;
 	s << "url:<input name='url' value='";
 	if (mark) {
-		s << mark->reg_url.getModel();
+		mark->build_matcher(s);
 	}
 	s << "'>";
 	s << "max_worker:<input name='max_worker' value='";
@@ -158,7 +244,7 @@ void KPerQueueMark::callBack(char *key)
 	lock.Unlock();
 	KAccess::releaseRunTimeModel(this);
 }
-void WINAPI per_queue_mark_call_back(void *data)
+void per_queue_mark_call_back(void *data)
 {
 	per_queue_arg *param = (per_queue_arg *)data;
 	param->mark->callBack(param->key);

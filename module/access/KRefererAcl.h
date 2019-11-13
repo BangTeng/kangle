@@ -28,7 +28,7 @@ public:
 		return new KRefererAcl();
 	}
 	bool match(KHttpRequest *rq, KHttpObject *obj) {
-		KHttpHeader *tmp = rq->parser.getHeaders();
+		KHttpHeader *tmp = rq->GetHeader();
 		while (tmp) {
 			if (is_attr(tmp, kgl_expand_string("Referer"))) {
 				KUrl referer;

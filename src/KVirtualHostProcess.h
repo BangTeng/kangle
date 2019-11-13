@@ -10,7 +10,7 @@
 #include <sstream>
 #include "global.h"
 #include "KExtendProgram.h"
-#include "KUpstreamSelectable.h"
+#include "KTcpUpstream.h"
 #include "KPoolableSocketContainer.h"
 #include "KHttpRequest.h"
 #include "KProcess.h"
@@ -42,7 +42,7 @@ public:
 	virtual ~KVirtualHostProcess() {
 		killProcess(0);
 	}
-	void isBad(KUpstreamSelectable *st,BadStage stage)
+	void isBad(KUpstream *st,BadStage stage)
 	{
 		if (stage == BadStage_Connect || stage == BadStage_TrySend){
 			error_count++;
@@ -58,39 +58,43 @@ public:
 			}
 		}
 	}
-	void isGood(KUpstreamSelectable *st)
+	void isGood(KUpstream *st)
 	{
 		//reset the error_count
 		error_count = 0;
 	}
-	virtual void handleRequest(KHttpRequest *rq,KExtendProgram *rd);
-	KUpstreamSelectable *connect(KHttpRequest *rq,KExtendProgram *rd,bool &isHalf) {
+	virtual kev_result handleRequest(KHttpRequest *rq,KExtendProgram *rd);
+	KUpstream *connect(KHttpRequest *rq,KExtendProgram *rd,bool &isHalf) {
 		lastActive = kgl_current_sec;
-		KUpstreamSelectable *socket = getPoolSocket(rq);
-		if(socket){
+		KUpstream *ps = getPoolSocket(rq);
+		if(ps){
 			isHalf = false;
-			return socket;
+			return ps;
 		}
-		KClientSocket *sockfd = new KClientSocket;
-		socket = new KUpstreamSelectable(sockfd);
 		isHalf = true;
-		bool result;
-#ifdef KSOCKET_UNIX	
-		if (unix_path.size()>0) 
-			result = sockfd->halfconnect(unix_path.c_str());
-		else 
+#ifdef KSOCKET_UNIX
+		if (!unix_path.empty()) {
+			struct sockaddr_un un_addr;
+			ksocket_unix_addr(unix_path.c_str(),&un_addr);
+			SOCKET fd = ksocket_half_connect((sockaddr_i *)&un_addr,NULL,0);
+			if (!ksocket_opened(fd)) {
+				return NULL;
+			}
+			kconnection *cn = kconnection_new(&addr);
+			cn->st.fd = fd;
+			return new KTcpUpstream(cn);
+		}
 #endif
-			result = sockfd->halfconnect(addr);
-		
+		kconnection *cn = kconnection_new(&addr);
+		bool result = kconnection_half_connect(cn,NULL,0);		
 		if (!result) {
-			socket->destroy();
+			kconnection_destroy(cn);
 			return NULL;
 		}
-		bind(socket);
-		return socket;
+		return new KTcpUpstream(cn);
 	}
 
-	virtual KUpstreamSelectable *poweron(KVirtualHost *vh,KExtendProgram *rd,bool &success) = 0;
+	virtual KTcpUpstream *poweron(KVirtualHost *vh,KExtendProgram *rd,bool &success) = 0;
 	virtual void getProcessInfo(const USER_T &user, const std::string &name,
 			std::stringstream &s,int &count) {
 	}
@@ -141,5 +145,5 @@ struct VProcessPowerParam
 	KExtendProgram *rd;
 };
 void getProcessInfo(const USER_T &user,const std::string &name,KProcess *process,KPoolableSocketContainer *ps,std::stringstream &s);
-FUNC_TYPE FUNC_CALL VProcessPowerWorker(void *param);
+KTHREAD_FUNCTION VProcessPowerWorker(void *param);
 #endif /* KVIRTUALPROCESS_H_ */

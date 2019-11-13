@@ -133,7 +133,7 @@ KInputFilter *KInputFilterContext::getFilter()
 	}
 	if(TEST(rq->flags,RQ_POST_UPLOAD)){
 		filter = new KMultiPartInputFilter;
-	} else if (rq->content_length>0) {
+	} else if (rq->content_length!=0) {
 		filter = new KInputFilter;
 	}
 	return filter;
@@ -188,12 +188,12 @@ bool KInputFilterContext::parseBoundary(char *val)
 	mb->boundary_next[mb->boundary_next_len] = '\0';
 	return true;
 }
-void denyInputFilter(KHttpRequest *rq)
+kev_result denyInputFilter(KHttpRequest *rq)
 {
 	char *url = rq->url->getUrl();
 	klog(KLOG_ERR,"access denied by input filter. ip=%s url=%s\n",rq->getClientIp(),url);
-	free(url);
-	SET(rq->flags,RQ_CONNECTION_CLOSE);
-	send_error(rq,NULL,STATUS_BAD_REQUEST,"access denied by input filter.");
+	xfree(url);
+	//SET(rq->flags,RQ_CONNECTION_CLOSE);
+	return send_error(rq,NULL,STATUS_FORBIDEN,"access denied by input filter.");
 }
 #endif

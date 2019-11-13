@@ -2,6 +2,7 @@
 #include "KHttpRequest.h"
 #include "http.h"
 #ifdef ENABLE_KSAPI_FILTER
+#if 0
 static KGL_RESULT WINAPI  GetHeader (
     kgl_filter_context * pfc,
     LPSTR                         lpszName,
@@ -92,4 +93,5 @@ void init_kgl_filter_response(kgl_filter_response &notification)
 	notification.get_header = GetHeader;
 	notification.set_header = SetHeader;
 }
+#endif
 #endif

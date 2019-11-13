@@ -55,8 +55,7 @@ class KHttpTransfer: public KHttpStream {
 public:
 	KHttpTransfer(KHttpRequest *rq, KHttpObject *obj);
 	KHttpTransfer();
-	virtual ~KHttpTransfer();
-	bool sendUnknowHeader(char *attr, char *val);
+	~KHttpTransfer();
 	void init(KHttpRequest *rq, KHttpObject *obj);
 	bool support_sendfile();
 	/*
@@ -68,25 +67,20 @@ public:
 	 */
 	StreamState write_end();
 	StreamState sendHead(bool isEnd);
+	kev_result TryWrite();
+	bool TrySyncWrite();
 	friend class KDeChunked;
 	friend class KGzip;
-	/*
-		得到一个总的写流，可能会在前面加上dzip,unchunked
-	*/
-	KWStream *getWStream();
 public:
 	KHttpRequest *rq;
 	KHttpObject *obj;
-	KSubRequest *sr;
+	KReadWriteBuffer buffer;
 private:
 	bool loadStream();
-	KWStream *wst;
 	bool gzip_layer;
-	bool wstDelete;
 	bool isHeadSend;
-	bool responseChecked;	
+	bool responseChecked;
 	cache_model cache_layer;
-	u_short workModel;	
 };
 
 #endif /* KHTTPTRANSFER_H_ */

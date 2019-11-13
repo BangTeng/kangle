@@ -15,7 +15,7 @@
 #include "KMutex.h"
 #include "KPipeStream.h"
 #include "KExtendProgram.h"
-#include "KSocket.h"
+#include "ksocket.h"
 #include "KApiDso.h"
 #include <string>
 
@@ -29,7 +29,7 @@ public:
 		return name.c_str();
 	}
 	KFetchObject *makeFetchObject(KHttpRequest *rq, KFileName *file);
-	void connect(KHttpRequest *rq);
+	kev_result connect(KHttpRequest *rq);
 	bool load();
 	void setFile(std::string file);
 	bool load(std::string file);

@@ -24,7 +24,7 @@
 #include "KHttpRequest.h"
 #include "lang.h"
 #include <list>
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #define CHAIN_CONTEXT	"chain"
 class KAccess;
 class KChain {
@@ -33,7 +33,7 @@ public:
 	virtual ~KChain();
 	bool match(KHttpRequest *rq, KHttpObject *obj, int &jumpType,
 			KJump **jumpTable);
-	uint32 hit_count;
+	uint32_t hit_count;
 	bool addAcl(KAcl *acl);
 	KAcl *addAcl(std::string acl,std::string name,KAccess *kaccess);
 	bool delAcl(std::string acl);

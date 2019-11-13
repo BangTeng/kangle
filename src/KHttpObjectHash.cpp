@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <vector>
 #include "KHttpObjectHash.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KCache.h"
 void increase_hash_size(KHttpObjectHash* hash, INT64 size, bool mem_flag) {
 	assert(hash);

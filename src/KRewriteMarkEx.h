@@ -3,7 +3,7 @@
 #include <list>
 #include "KMark.h"
 #include "KReg.h"
-#include "KString.h"
+#include "KStringBuf.h"
 /*
  条件测试基类
  */

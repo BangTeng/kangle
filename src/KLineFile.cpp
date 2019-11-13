@@ -23,9 +23,9 @@
 #include <sys/stat.h>
 #include <stdio.h>
 #include "KLineFile.h"
-#include "forwin32.h"
-#include "KFile.h"
-#include "malloc_debug.h"
+#include "kforwin32.h"
+#include "kfile.h"
+#include "kmalloc.h"
 #define MAX_OPEN_FILE_SIZE		4*1024*1024
 KLineFile::KLineFile() {
 	hot = buf = NULL;
@@ -108,6 +108,11 @@ bool KStreamFile::open(const char *file,const char split_char) {
 	*buf = '\0';
 	hot = buf;
 	this->split_char = split_char;
+	int len = strlen(file);
+	if (len > 3 && strcasecmp(file + len - 3, ".gz") == 0) {
+		gzfp = gzopen(file, "rb");
+		return gzfp != NULL;
+	}
 	return fp.open(file, fileRead);
 }
 char *KStreamFile::read()
@@ -124,17 +129,27 @@ char *KStreamFile::read()
 	if (left_size <= 0) {
 		return NULL;
 	}
-	int len = fp.read(hot, left_size);
+	int len;
+	if (gzfp != NULL) {
+		len = gzread(gzfp, hot, left_size);
+	} else {
+		len = fp.read(hot, left_size);
+	}
 	if (len <= 0) {
 		if (hot_len == 0) {
 			return NULL;
 		}
-		hot = buf;
 		return buf;
 	}
 	hot[len] = '\0';
 	hot = buf;
-	return this->internelRead();
+	line = this->internelRead();
+	if (line != NULL) {
+		return line;
+	}
+	hot = buf + hot_len + len;
+	//end
+	return buf;
 }
 char *KStreamFile::internelRead()
 {

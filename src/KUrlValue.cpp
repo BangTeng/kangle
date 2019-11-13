@@ -20,7 +20,7 @@
 #include "http.h"
 #include "KUrlValue.h"
 #include "KUrlParser.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 
 using namespace std;
 KUrlValue::KUrlValue() {

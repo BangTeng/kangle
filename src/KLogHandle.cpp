@@ -1,5 +1,5 @@
 #include "KLogHandle.h"
-#include "KThreadPool.h"
+#include "kthread.h"
 #include "do_config.h"
 #include "directory.h"
 #include "KVirtualHost.h"
@@ -8,7 +8,7 @@ bool compFile(const KFileName * __x, const KFileName * __y) {
 	return __x->getLastModified() < __y->getLastModified();
 }
 KLogHandle logHandle;
-FUNC_TYPE FUNC_CALL log_task(void *param) {
+KTHREAD_FUNCTION log_task(void *param) {
 	KLogHandle *handle = (KLogHandle *)param;
 	handle->task();
 	KTHREAD_RETURN;
@@ -175,8 +175,8 @@ void KLogHandle::addLogTask(KLogTask *task)
 		threads++;
 	}
 	lock.Unlock();
-	if (threadStarted) {
-		if (!m_thread.start(this,log_task)) {
+	if (threadStarted) {	
+		if (!kthread_pool_start(log_task, this)) {
 			lock.Lock();
 			threads--;
 			lock.Unlock();

@@ -28,13 +28,13 @@
 #include "do_config.h"
 #include "KVirtualHost.h"
 #include "utils.h"
-#include "md5.h"
+#include "kmd5.h"
 #include "lang.h"
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "KHttpBasicAuth.h"
 #include "KHttpDigestAuth.h"
 #include "KLineFile.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #define AUTH_FILE_SIGN  "--AUTH_FILE_SIGN--"
 #ifdef ENABLE_HTPASSWD_CRYPT
 int apr_password_validate(const char *passwd,const char *hash);
@@ -59,7 +59,7 @@ bool checkPassword(const char *toCheck, const char *password, int cryptType) {
 	char buf[65];
 	switch (cryptType) {
 	case CRYPT_TYPE_KMD5:
-		KMD5(toCheck, buf);
+		KMD5(toCheck,strlen(toCheck), buf);
 		return strcasecmp(buf, password) == 0;
 	case CRYPT_TYPE_PLAIN:
 		return strcmp(toCheck, password) == 0;

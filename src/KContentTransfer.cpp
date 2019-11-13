@@ -1,6 +1,6 @@
 #include "KContentTransfer.h"
 #include "KChunked.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KGzip.h"
 #include "KFilterContext.h"
 

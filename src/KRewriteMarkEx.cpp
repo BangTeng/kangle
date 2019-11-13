@@ -8,7 +8,7 @@
 #include "KExtendProgram.h"
 #include "http.h"
 #include "KCdnContainer.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 bool check_path_info(const char *file,struct _stat64 *buf)
 {
 	bool result = false;
@@ -185,7 +185,7 @@ bool KRewriteRule::mark(KHttpRequest *rq, KHttpObject *obj,
 			if (TEST(rq->url->flags, KGL_URL_SSL)) {
 				ssl = "s";
 			}
-			rq->fetchObj = cdnContainer.get(NULL,rq->url->host,rq->url->port,ssl,0);
+			rq->fetchObj = server_container->get(NULL,rq->url->host,rq->url->port,ssl,0);
 			jumpType = JUMP_ALLOW;
 		} else {
 			bool internal_flag = internal;
@@ -210,7 +210,7 @@ bool KRewriteRule::mark(KHttpRequest *rq, KHttpObject *obj,
 						);
 					if (proxy_host) {
 						rq->closeFetchObject();
-						rq->fetchObj = cdnContainer.get(proxy_host->getString());
+						rq->fetchObj = server_container->get(proxy_host->getString());
 						jumpType = JUMP_ALLOW;
 						delete proxy_host;
 					}
@@ -405,7 +405,7 @@ void KRewriteMarkEx::getEnv(KHttpRequest *rq, char *env, KStringBuf &s) {
 		return;
 	}
 	if (strcasecmp(env, "SERVER_PORT") == 0) {
-		s << rq->c->socket->get_self_port();
+		s << rq->sink->GetSelfPort();
 		return;
 	}
 	if (strcasecmp(env, "SCHEMA") == 0) {
@@ -428,13 +428,12 @@ void KRewriteMarkEx::getEnv(KHttpRequest *rq, char *env, KStringBuf &s) {
 		s << rq->url->host;
 		return;
 	}
-	if (strcasecmp(env, "REMOTE_ADDR") == 0 || strcasecmp(env, "REMOTE_HOST")
-			== 0) {
+	if (strcasecmp(env, "REMOTE_ADDR") == 0 || strcasecmp(env, "REMOTE_HOST") == 0) {
 		s << rq->getClientIp();
 		return;
 	}
 	if (strcasecmp(env, "REMOTE_PORT") == 0) {
-		s << rq->c->socket->get_remote_port();
+		s << ksocket_addr_port(rq->sink->GetAddr());
 		return;
 	}
 	if (strcasecmp(env, "REQUEST_METHOD") == 0) {
@@ -466,11 +465,15 @@ void KRewriteMarkEx::getEnv(KHttpRequest *rq, char *env, KStringBuf &s) {
 		return;
 	}
 	if (strcasecmp(env, "HTTPS") == 0) {
-		if (TEST(rq->workModel,WORK_MODEL_SSL)) {
+		if (TEST(rq->url->flags,KGL_URL_SSL)) {
 			s << "on";
 		} else {
 			s << "off";
 		}
+		return;
+	}
+	if (strcasecmp(env, "HTTP_HOST") == 0) {
+		rq->url->GetHost(s);
 		return;
 	}
 	if (strncasecmp(env, "HTTP_", 5) == 0 || strncasecmp(env, "HTTP:", 5) == 0) {
@@ -486,7 +489,7 @@ void KRewriteMarkEx::getEnv(KHttpRequest *rq, char *env, KStringBuf &s) {
 		} else {
 			env += 5;
 		}
-		KHttpHeader *av = rq->parser.getHeaders();
+		KHttpHeader *av = rq->GetHeader();
 		while (av) {
 			if (av->attr && strcasecmp(av->attr, env) == 0) {
 				s << av->val;

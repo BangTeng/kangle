@@ -4,7 +4,7 @@
 #include <string.h>
 #include "KBaseVirtualHost.h"
 #include "lang.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KAcserverManager.h"
 #include "KVirtualHost.h"
 #include "KApiPipeStream.h"
@@ -18,9 +18,6 @@ KBaseVirtualHost::KBaseVirtualHost()
 	defaultRedirect = NULL;
 	mimeType = NULL;
 	
-#ifdef ENABLE_KSAPI_FILTER
-	hfm = NULL;
-#endif
 }
 KBaseVirtualHost::~KBaseVirtualHost() {
 	lock.Lock();
@@ -53,11 +50,6 @@ KBaseVirtualHost::~KBaseVirtualHost() {
 	
 	lock.Unlock();
 	clearEnv();
-#ifdef ENABLE_KSAPI_FILTER
-	if (hfm) {
-		delete hfm;
-	}
-#endif
 }
 void KBaseVirtualHost::swap(KBaseVirtualHost *a)
 {
@@ -298,8 +290,7 @@ void KBaseVirtualHost::getRedirectItemHtml(std::string url,std::string value,boo
 		}
 		s << "</td>";
 		s << "<td>" << brd->allowMethod.getMethod() << "</td>";
-		s << "<td>" << (brd->confirmFile ? LANG_ON : LANG_OFF)
-				<< "</td>";
+		s << "<td>" << kgl_get_confirm_file_tips(brd->confirmFile)	<< "</td>";
 		
 		s << "</tr>";
 }
@@ -344,7 +335,12 @@ void KBaseVirtualHost::getRedirectHtml(std::string url, std::stringstream &s) {
 			*p = 0;
 			p++;
 		}
-		s << klang[buf];
+		const char *type = klang[buf];
+		if (type && *type) {
+			s << type;
+		} else {
+			s << buf;
+		}
 		if (p && *p) {
 			s << ":" << p;
 		}
@@ -354,9 +350,12 @@ void KBaseVirtualHost::getRedirectHtml(std::string url, std::stringstream &s) {
 	s << "<option value='default'>" << klang["default"] << "</option>";
 	s << "</select>";
 	s << "</td></tr>";
-	s << "<tr><td>";
-	s << "<input type=checkbox name='confirm_file' value='1' checked>"
-			<< klang["confirm_file"] << "<br>";
+	s << "<tr><td>" << klang["confirm_file"];
+	s << "<select name='confirm_file'>";
+	for (int i = 0; i < 3; i++) {
+		s << "<option value='" << i << "'>" << kgl_get_confirm_file_tips(i);
+	}
+	s << "</select>";
 	s << "</td></tr>";
 	s << "<tr><td>" << klang["allow_method"] << ":<input name='allow_method' value='*'></td></tr>";
 	
@@ -423,7 +422,7 @@ bool KBaseVirtualHost::delIndexFile(size_t index) {
 	return result;
 }
 */
-bool KBaseVirtualHost::addRedirect(bool file_ext,std::string value,KRedirect *rd,std::string allowMethod,bool confirmFile,std::string params)
+bool KBaseVirtualHost::addRedirect(bool file_ext,std::string value,KRedirect *rd,std::string allowMethod, uint8_t confirmFile,std::string params)
 {
 	lock.Lock();
 	if (file_ext) {
@@ -471,8 +470,7 @@ bool KBaseVirtualHost::addRedirect(bool file_ext,std::string value,KRedirect *rd
 	lock.Unlock();
 	return true;
 }
-bool KBaseVirtualHost::addRedirect(bool file_ext, std::string value,
-								   std::string extend, std::string allowMethod, bool confirmFile,std::string params) {
+bool KBaseVirtualHost::addRedirect(bool file_ext, std::string value, std::string extend, std::string allowMethod, uint8_t confirmFile,std::string params) {
 
 	KRedirect *rd = NULL;
 	if(extend!="default"){

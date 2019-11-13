@@ -21,7 +21,7 @@ int url_decode(char *str, int len, KUrl *url,bool space2plus) {
 	char *data = str;
 	bool mem_availble = false;
 	if (len == 0) {
-		len = strlen(str);
+		len = (int)strlen(str);
 	}
 	while (len--) {
 		if (space2plus && *data == '+') {
@@ -50,14 +50,14 @@ int url_decode(char *str, int len, KUrl *url,bool space2plus) {
 	if (mem_availble) {
 		*dest = '\0';
 	}
-	return dest - str;
+	return (int)(dest - str);
 }
 bool KUrlParser::parse(const char *param)
 {
 	if (param == NULL || buf) {
 		return false;
 	}
-	buf = xstrdup(param);
+	buf = strdup(param);
 	char *name = buf;
 	char *value;
 	for (;;) {

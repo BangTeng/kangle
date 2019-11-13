@@ -9,10 +9,10 @@
 #include "lib.h"
 #include "KHttpObject.h"
 #include "KHttpObjectHash.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KObjectList.h"
 #include "http.h"
-#include "KFile.h"
+#include "kfile.h"
 #ifdef ENABLE_DB_DISK_INDEX
 #include "KDiskCacheIndex.h"
 #include "KSqliteDiskCacheIndex.h"
@@ -508,7 +508,7 @@ void init_disk_cache(bool firstTime)
 	m_thread.start(NULL,load_cache_index);
 #endif
 }
-FUNC_TYPE FUNC_CALL scan_disk_cache_thread(void *param)
+KTHREAD_FUNCTION scan_disk_cache_thread(void *param)
 {
 #if 0
 	rebuild_cache_hash = true;
@@ -532,7 +532,7 @@ FUNC_TYPE FUNC_CALL scan_disk_cache_thread(void *param)
 #endif
 	KTHREAD_RETURN;
 }
-FUNC_TYPE FUNC_CALL load_cache_index(void *param)
+KTHREAD_FUNCTION load_cache_index(void *param)
 {
 	//time_t nowTime = time(NULL);
 	//loadCacheIndex();
@@ -551,7 +551,7 @@ void scan_disk_cache()
 		return;
 	}
 	index_progress = true;
-	if (!m_thread.start(NULL,scan_disk_cache_thread)) {
+	if (!kthread_pool_start(scan_disk_cache_thread, NULL)) {
 		index_progress = false;
 	}
 }

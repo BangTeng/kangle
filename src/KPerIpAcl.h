@@ -19,7 +19,7 @@
 #define KPERIPACL_H_
 #include<string>
 #include<map>
-#include "KSocket.h"
+#include "ksocket.h"
 #include "KAcl.h"
 #include "KXml.h"
 #include "utils.h"
@@ -29,7 +29,7 @@ struct KPerIpCallBackData
 	char *ip;
 	KPerIpAcl *mark;
 };
-void WINAPI per_ip_mark_call_back(void *data);
+void per_ip_mark_call_back(void *data);
 class KPerIpAcl: public KAcl {
 public:
 	KPerIpAcl() {
@@ -50,14 +50,11 @@ public:
 		rq->registerConnectCleanHook(per_ip_mark_call_back,cd);
 	}
 	bool match(KHttpRequest *rq, KHttpObject *obj) {
-		if (TEST(rq->workModel,WORK_MODEL_KA)) {
-			return false;
-		}
-		char *ip = rq->getClientIp();
+		const char *ip = rq->getClientIp();
 		std::map<char *, unsigned,lessp>::iterator it_ip;
 		bool matched = false;
 		ip_lock.Lock();
-		it_ip = ip_map.find(ip);
+		it_ip = ip_map.find((char *)ip);
 		if (it_ip == ip_map.end()) {
 			if (1 > max_per_ip) {
 				matched = true;

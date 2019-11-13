@@ -374,4 +374,5 @@ http_filter = "篩檢程式"
 keep_alive_count="长连接数"
 return="返回"
 connect_time_out="连接超时"
+dso="dso"
 />

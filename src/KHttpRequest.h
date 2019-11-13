@@ -22,17 +22,16 @@
 #include <list>
 #include <string>
 #include "global.h"
-#include "KSocket.h"
+#include "ksocket.h"
 #include "KMutex.h"
 #include "KAcserver.h"
-#include "KHttpProtocolParserHook.h"
-#include "KHttpProtocolParser.h"
 #include "KHttpHeader.h"
 #include "KBuffer.h"
+#include "KAutoBuffer.h"
 #include "KReadWriteBuffer.h"
 #include "KDomainUser.h"
 #include "KSendable.h"
-#include "KString.h"
+#include "KStringBuf.h"
 #include "KHttpAuth.h"
 #include "do_config.h"
 #include "KContext.h"
@@ -42,11 +41,13 @@
 #include "KSpeedLimit.h"
 #include "KTempFile.h"
 #include "KInputFilter.h"
-#include "KServer.h"
+#include "kserver.h"
 #include "KFlowInfo.h"
 #include "KHttp2.h"
-#include "KMemPool.h"
-#include "KConnectionSelectable.h"
+#include "kmalloc.h"
+#include "kconnection.h"
+#include "KHttpParser.h"
+#include "KSink.h"
 #define KGL_REQUEST_POOL_SIZE 4096
 #ifdef ENABLE_STAT_STUB
 extern volatile uint64_t kgl_total_requests ;
@@ -55,19 +56,19 @@ extern volatile uint64_t kgl_total_servers;
 extern volatile uint32_t kgl_reading;
 extern volatile uint32_t kgl_writing;
 extern volatile uint32_t kgl_waiting;
-extern volatile uint32_t kgl_aio_count;
 #endif
 #define READ_BUFF_SZ	8192
 
 class KFetchObject;
 class KSubVirtualHost;
-class KSelector;
 class KFilterHelper;
 class KHttpObject;
 class KAccess;
 class KFilterKey;
 class KRequestQueue;
 class KBigObjectContext;
+class KSink;
+class KHttpTransfer;
 #define		REQUEST_EMPTY	0
 #define		REQUEST_READY	1
 #define 	MIN_SLEEP_TIME	4
@@ -81,25 +82,19 @@ public:
 	KMutex ip_lock;
 	std::map<ip_addr, unsigned> ip_map;
 };
-/**
-关于子请求，开始一个子请求调用request->beginSubRequest,函数不返回。
-带一个回调函数，和一个参数。
-回调函数只会调用一次。具体处理由action指定。
-sub_request_free 指示请求没有正常完成，无需继续，只要释放相关内存操作即可。
-sub_request_pop  指示请求正常返回。继续相关操作。
-*/
-enum sub_request_action {
-	sub_request_free,
-	sub_request_pop
-};
-typedef void (* sub_request_call_back) (KHttpRequest *rq,void *data,sub_request_action action);
 
-class KSubRequest;
 class KContext;
 class KOutputFilterContext;
 class KHttpFilterContext;
+class KHttpRequest;
 
-//void WINAPI free_auto_memory(void *arg);
+typedef struct {
+	void *arg;
+	result_callback result;
+	buffer_callback buffer;
+	KHttpRequest *rq;
+} kgl_request_stack;
+
 class KHttpRequestData
 {
 public:
@@ -113,94 +108,35 @@ public:
 	time_t min_obj_verified;
 	INT64 range_from;
 	INT64 range_to;
-	//pre_post的长度
-	int pre_post_length;
 	unsigned short status_code;
 	unsigned short cookie_stick;
 	INT64 send_size;
 	INT64 begin_time_msec;
 	INT64 first_response_time_msec;
-
+	kgl_request_stack *write_stack;
 };
-class KHttpRequest: public KHttpProtocolParserHook,public KStream,public KHttpRequestData {
+class KHttpRequest : public KHttpRequestData,public KHttpHeaderManager {
 public:
-	inline KHttpRequest(KConnectionSelectable *c)
+	inline KHttpRequest(KSink *sink, kgl_pool_t *pool)
 	{
-		stackSize = 0;
-		fetchObj = NULL;
-		readBuf = NULL;
-		readBuf = (char *) xmalloc(READ_BUFF_SZ);
-		current_size = READ_BUFF_SZ;
-		svh = NULL;
-		auth = NULL;
-		url = NULL;
-		file = NULL;
-		of_ctx = NULL;
-		client_ip = NULL;
-		bind_ip = NULL;
-#ifdef ENABLE_INPUT_FILTER
-		if_ctx = NULL;
-#endif
-		
+		memset(this, 0, sizeof(*this));
+		InitPool(pool);
 		ctx = new KContext;
-		slh = NULL;
-#ifdef ENABLE_TF_EXCHANGE
-		tf = NULL;
-#endif
-		sr = NULL;
-		meth = 0;
-		fh = NULL;
-		mark = 0;
-#ifdef ENABLE_REQUEST_QUEUE
-		queue = NULL;
-#endif
-#ifdef ENABLE_KSAPI_FILTER
-		http_filter_ctx = NULL;
-#endif
-#ifdef ENABLE_HTTP2
-		http2_ctx = NULL;
-#endif
-		state = STATE_UNKNOW;
-		this->c = c;
-		pool = NULL;
+		this->sink = sink;
+		begin_time_msec = kgl_current_msec;
 	}
-	inline ~KHttpRequest()
-	{		
-		close();
-#ifdef ENABLE_REQUEST_QUEUE
-		assert(queue == NULL);
-#endif
-		setState(STATE_UNKNOW);
-		if (c) {
-			c->release(this);
-		}
-	}
-	void close();
-	void clean(bool keep_alive=true);
+	~KHttpRequest();	
+	void clean();
 	void init(kgl_pool_t *pool);
 	bool isBad();
-	char *get_read_buf(int &size);
-	char *get_write_buf(int &size);
-	void get_write_buf(LPWSABUF buffer,int &bufferCount);
 	void set_url_param(char *param);
 	//判断是否还有post数据可读
 	bool has_post_data();
-	/*
-	 读post数据时调用这个,而不要直接调用server->read了。
-	 */
-	int read(char *buf, int len);
+
 	std::string getInfo();
 	char *getUrl();
 	void beginRequest();
-	ReadState canRead(int aio_got=0);
-	WriteState canWrite(int aio_got=0);
-	SOCKET getSockfd() {
-		return c->socket->get_socket();
-	}
-	bool getPeerAddr(ip_addr *addr) {
-		c->socket->get_remote_addr(addr);
-		return true;
-	}
+	void endRequest();
 	int getFollowLink()
 	{
 		int follow_link = 0;
@@ -217,69 +153,22 @@ public:
 		return follow_link;
 	}
 	void startParse();
-	void endParse();
-	//bool closeConnection();
 	void closeFetchObject(bool destroy=true);
 	void resetFetchObject();
-
-	void freeUrl();
+	void FreeLazyMemory();
 	bool rewriteUrl(const char *newUrl, int errorCode = 0,const char *prefix = NULL);
-	u_char http_major;
-	u_char http_minor;
-	u_char meth;
-	u_char state;
-	char *hot;
-	char *readBuf;
-	size_t current_size;
-	void setState(u_char state) {
-#ifdef ENABLE_STAT_STUB
-		if (this->state==state) {
-			return;
-		}
-		switch (this->state) {
-		case STATE_IDLE:
-		case STATE_QUEUE:
-			katom_dec((void *)&kgl_waiting);
-			break;
-		case STATE_RECV:
-			katom_dec((void *)&kgl_reading);
-			break;
-		case STATE_SEND:
-			katom_dec((void *)&kgl_writing);
-			break;
-		}
-#endif
-		this->state = state;
-#ifdef ENABLE_STAT_STUB
-		switch (state) {
-		case STATE_IDLE:
-		case STATE_QUEUE:
-			katom_inc((void *)&kgl_waiting);
-			break;
-		case STATE_RECV:
-			katom_inc((void *)&kgl_reading);
-			break;
-		case STATE_SEND:
-			katom_inc((void *)&kgl_writing);
-			break;
-		}
-#endif		
-	}
-	const char *getState() {
-		switch (state) {
-		case STATE_IDLE:
-			return "idle";
-		case STATE_SEND:
-			return "send";
-		case STATE_RECV:
-			return "recv";
-		case STATE_QUEUE:
-			return "queue";
-		}
-		return "unknow";
-	}
-	KConnectionSelectable *c;
+	const char *getState();
+	void setState(uint8_t state);
+
+	uint8_t http_major : 4;
+	uint8_t http_minor : 4;
+	uint8_t state;
+	uint8_t meth;
+	uint8_t mark;
+
+	KSink *sink;
 #ifdef ENABLE_TF_EXCHANGE
+	friend class KTempFile;
 	//临时文件
 	KTempFile *tf;
 	void closeTempFile()
@@ -291,8 +180,6 @@ public:
 		SET(flags,RQ_TEMPFILE_HANDLED);
 	}
 #endif
-	//输出缓冲
-	KReadWriteBuffer buffer;
 	//数据源
 	KFetchObject *fetchObj;
 	//物理文件映射
@@ -300,21 +187,17 @@ public:
 	//虚拟主机
 	KSubVirtualHost *svh;
 	void releaseVirtualHost();
-	//子请求
-	KSubRequest *sr;
 	/*
 	 * 原始url
 	 */
 	KUrl raw_url;
 	KUrl *url;
+	KHttpTransfer *tr;
 	//http认证
 	KHttpAuth *auth;
-	//输入http协议解析
-	KHttpProtocolParser parser;
 	//有关object及缓存上下文
-	KContext *ctx;
+	KContext *ctx;	
 	//发送上下文
-	KResponseContext send_ctx;
 #ifdef ENABLE_INPUT_FILTER
 	bool hasInputFilter()
 	{
@@ -322,15 +205,6 @@ public:
 			return false;
 		}
 		return !if_ctx->isEmpty();
-	}
-	KDechunkEngine *getDechunkEngine() {
-		if (if_ctx==NULL) {
-			if_ctx = new KInputFilterContext(this);
-		}
-		if (if_ctx->dechunk==NULL) {
-			if_ctx->dechunk = new KDechunkEngine;
-		}
-		return if_ctx->dechunk;
 	}
 	/************
 	* 输入过滤
@@ -350,30 +224,18 @@ public:
 	KOutputFilterContext *of_ctx;
 	KOutputFilterContext *getOutputFilterContext();
 	void addFilter(KFilterHelper *chain);
-
 	inline bool responseStatus(uint16_t status_code)
 	{
-		if (left_read>0 || TEST(c->st_flags,STF_NO_KA)) {
-			//还有post数据没有读完,必须关闭连接
-			SET(flags,RQ_CONNECTION_CLOSE);
+		if (this->status_code > 0) {
+			//status_code只能发送一次
+			return false;
 		}
 		setState(STATE_SEND);
 		this->status_code = status_code;
-		first_response_time_msec = kgl_current_msec;
-#ifdef ENABLE_HTTP2
-		if (http2_ctx) {
-			return c->http2->add_status(http2_ctx,status_code);
-		}
-#endif
-		return true;
+		return sink->ResponseStatus(status_code);
 	}
 	inline bool responseHeader(know_http_header name,const char *val,hlen_t val_len)
 	{
-#ifdef ENABLE_HTTP2
-		if (http2_ctx != NULL) {
-			return c->http2->add_header(http2_ctx,name, val, val_len);
-		}
-#endif
 		return this->responseHeader(know_http_headers[name].data, (hlen_t)know_http_headers[name].len,val,val_len);
 	}
 	inline bool responseHeader(KHttpHeader *header)
@@ -401,46 +263,30 @@ public:
 			return false;
 		}
 #endif
-#ifdef ENABLE_HTTP2
-		if (http2_ctx !=NULL ) {
-			return false;
-		}
-#endif
 		if (ctx->connection_upgrade) {
-			responseHeader(kgl_expand_string("Connection"), kgl_expand_string("upgrade"));
-			return false;
+			return sink->ResponseConnection(kgl_expand_string("upgrade"));
 		} else if (TEST(flags, RQ_CONNECTION_CLOSE) || !TEST(flags, RQ_HAS_KEEP_CONNECTION)) {
-			responseHeader(kgl_expand_string("Connection"), kgl_expand_string("close"));
-			return false;
-		} else {			
-			responseHeader(kgl_expand_string("Connection"), kgl_expand_string("keep-alive"));
+			return sink->ResponseConnection(kgl_expand_string("close"));
+		}
+		if (http_major == 1 && http_minor >= 1) {
+			//HTTP/1.1 default keep-alive
 			return true;
 		}
+		return sink->ResponseConnection(kgl_expand_string("keep-alive"));
 	}
 	bool responseHeader(const char *name,hlen_t name_len,const char *val,hlen_t val_len);
 	//发送完header开始发送body时调用
-	void startResponseBody(INT64 body_len);
+	bool startResponseBody(INT64 body_len);
 	inline bool needFilter() {
 		return of_ctx!=NULL;
 	}
 	
-	int parseHeader(const char *attr, char *val,int &val_len, bool isFirst);
+	bool ParseHeader(const char *attr, int attr_len,char *val,int val_len, bool is_first);
 	const char *getMethod();
-	void getCharset(KHttpHeader *header);
-	StreamState write_all(const char *buf, int len);
-
-	//异步调用，进入子请求，返回时还是打开fetchObj->open，
-	void beginSubRequest(KUrl *url,sub_request_call_back callBack,void *data);
-	void endSubRequest();
+	int Write(const char *buf, int len);
+	bool WriteAll(const char *buf, int len);
+	bool WriteBuff(kbuf *buf);
 	int checkFilter(KHttpObject *obj);
-	u_short workModel;
-	/*
-	 * stackSize指示ssi指示内部包含次数。
-	 *
-	 */
-	unsigned char stackSize;
-	unsigned char mark;
-
 	//限速(叠加)
 	KSpeedLimitHelper *slh;
 	void pushSpeedLimit(KSpeedLimit *sl)
@@ -463,13 +309,14 @@ public:
 		return sleepTime;
 	}
 	//客户真实ip(有可能被替换)
-	char *getClientIp()
+	const char *getClientIp()
 	{
 		if (client_ip) {
 			return client_ip;
 		}
 		client_ip = (char *)malloc(MAXIPLEN);
-		c->socket->get_remote_ip(client_ip,MAXIPLEN);
+		sockaddr_i *addr = sink->GetAddr();
+		ksocket_sockaddr_ip(addr, client_ip, MAXIPLEN);
 		return client_ip;
 	}
 	char *client_ip;
@@ -486,21 +333,18 @@ public:
 	}
 	void registerConnectCleanHook(kgl_pool_cleanup_pt callBack,void *data)
 	{
-		kgl_pool_cleanup_t *cn = kgl_pool_cleanup_add(c->get_pool(), 0);
+		kgl_pool_cleanup_t *cn = kgl_pool_cleanup_add(sink->GetConnectionPool(), 0);
 		cn->data = data;
 		cn->handler = callBack;
 	}
-#ifdef ENABLE_KSAPI_FILTER
-	KHttpFilterContext *http_filter_ctx;
-	void init_http_filter();
-#endif
 	//流量统计
 	KFlowInfoHelper *fh;
-	void addFlow(INT64 flow,bool cache_hit)
+	void addFlow(INT64 flow)
 	{
+		send_size += (int)flow;
 		KFlowInfoHelper *helper = fh;
 		while (helper) {
-			helper->fi->addFlow(flow, cache_hit);
+			helper->fi->addFlow(flow, ctx->cache_hit);
 			helper = helper->next;
 		}
 	}
@@ -510,10 +354,14 @@ public:
 		helper->next = fh;
 		fh = helper;
 	}
-#ifdef ENABLE_HTTP2
-	//spdy协议用到的上下文,生命周期由KHttp2负责
-	KHttp2Context *http2_ctx;
-#endif
+	bool IsWorkModel(int work_model)
+	{
+		kserver *server = sink->GetBindServer();
+		if (server == NULL) {
+			return false;
+		}
+		return TEST(server->flags, work_model) == work_model;
+	}
 	
 #ifdef ENABLE_REQUEST_QUEUE
 	KRequestQueue *queue;
@@ -521,19 +369,55 @@ public:
 	//从堆上分配内存，在rq删除时，自动释放。
 	void *alloc_connect_memory(int size)
 	{
-		return kgl_pnalloc(c->get_pool(), size);
+		return kgl_pnalloc(sink->GetConnectionPool(), size);
 	}
 	void *alloc_request_memory(int size)
 	{
 		return kgl_pnalloc(pool, size);
 	}
-	bool sync_send_header();
-	bool sync_send_buffer();
+
+	const char *GetHttpValue(const char *attr)
+	{
+		KHttpHeader *next = header;
+		while (next) {
+			if (!strcasecmp(attr, next->attr)) {
+				return next->val;
+			}
+			next = next->next;
+		}
+		return NULL;
+	}
+	bool IsSync()
+	{
+		return TEST(flags, RQ_SYNC);
+	}
+	void AddSync()
+	{
+		sink->AddSync();
+		SET(flags, RQ_SYNC);
+	}
+	void RemoveSync()
+	{
+		sink->RemoveSync();
+		CLR(flags, RQ_SYNC);
+	}
+	int Read(char *buf, int len);
+	kev_result Read(void *arg, result_callback result, buffer_callback buffer);
+	kev_result Write(void *arg, result_callback result, buffer_callback buffer);
 private:
+	kev_result LowRead(void *arg, result_callback result, buffer_callback buffer);
+	void InitPool(kgl_pool_t *pool) {
+		kassert(this->pool == NULL);
+		this->pool = pool;
+		if (this->pool == NULL) {
+			this->pool = kgl_create_pool(KGL_REQUEST_POOL_SIZE);
+		}
+	}
+	kgl_header_result InternalParseHeader(const char *attr, int attr_len, char *val,int *val_len, bool is_first);
 	bool parseMeth(const char *src);
 	bool parseConnectUrl(char *src);
 	bool parseHttpVersion(char *ver);
-	int parseHost(char *val);
+	kgl_header_result parseHost(char *val);
 };
 struct RequestError
 {
@@ -574,13 +458,14 @@ inline u_short string_hash(const char *p, u_short res) {
         return res;
         */
 }
+kev_result stageWriteRequest(KHttpRequest *rq, KAutoBuffer *buffer);
 /**
-* 进入发送数据，发送rq->buffer
+* 进入发送数据，发送指定的kbuf
 */
-void stageWriteRequest(KHttpRequest *rq);
-/**
-* 进入发送数据，发送指定的buff
-*/
-void stageWriteRequest(KHttpRequest *rq,buff *buf,int start,int len);
-void startTempFileWriteRequest(KHttpRequest *rq);
+kev_result stageWriteRequest(KHttpRequest *rq,kbuf *buf,int start,int len);
+kev_result handleStartRequest(KHttpRequest *rq, int got);
+#ifdef ENABLE_TF_EXCHANGE
+kev_result startTempFileWriteRequest(KHttpRequest *rq);
+kev_result stageTempFileWriteEnd(KHttpRequest *rq);
+#endif
 #endif

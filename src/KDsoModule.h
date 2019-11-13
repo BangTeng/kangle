@@ -1,6 +1,6 @@
 #ifndef KDSOMODULE_H
 #define KDSOMODULE_H
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "ksapi.h"
 class KDsoModule
 {

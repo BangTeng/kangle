@@ -46,7 +46,7 @@ bool KMapRedirectMark::mark(KHttpRequest *rq, KHttpObject *obj, const int chainJ
 	} else {
 		s << item->rewrite;
 	}
-	rq->url->getPath(s);
+	rq->url->GetPath(s);
 	push_redirect_header(rq, s.getBuf(), s.getSize(), item->code);	
 	jumpType = JUMP_DENY;
 	return true;

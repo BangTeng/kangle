@@ -1,7 +1,7 @@
 #ifndef KSSLSERIALACL_H
 #define KSSLSERIALACL_H
 #include "KMultiAcl.h"
-#include "KSocket.h"
+#include "ksocket.h"
 #include "ssl_utils.h"
 #ifdef KSOCKET_SSL
 class KSSLSerialAcl: public KMultiAcl {
@@ -15,11 +15,10 @@ public:
 	const char *getName() {
 		return "ssl_serial";
 	}
-	bool match(KHttpRequest *rq, KHttpObject *obj) {
-		if (TEST(rq->workModel,WORK_MODEL_SSL)) {
-			KSSLSocket *sslSocket = static_cast<KSSLSocket *> (rq->c->socket);
-			char *serial = ssl_var_lookup(sslSocket->getSSL(),
-					"CERT_SERIALNUMBER");
+	bool match(KHttpRequest *rq, KHttpObject *obj) {		
+		SSL *ssl = rq->sink->GetSSL();
+		if (ssl) {
+			char *serial = ssl_var_lookup(ssl, "CERT_SERIALNUMBER");
 			if (serial == NULL) {
 				return false;
 			}

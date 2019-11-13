@@ -7,7 +7,7 @@
 class KSyncFetchObject : public KFetchObject
 {
 public:
-	void open(KHttpRequest *rq);
+	kev_result open(KHttpRequest *rq);
 	bool isSync()
 	{
 		return true;
@@ -21,7 +21,7 @@ public:
 	virtual void process(KHttpRequest *rq) = 0;	
 	/*
 	 * return value:
-	 * READ_SWITCH_FUNCTION		switch to buff *read() function
+	 * READ_SWITCH_FUNCTION		switch to kbuf *read() function
 	 * READ_PROTOCOL_ERROR		protocol error,must close connection
 	 * 0 or -1	read end
 	 * >0		success read len

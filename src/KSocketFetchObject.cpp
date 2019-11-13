@@ -25,7 +25,5 @@
 #include "lib.h"
 #include "http.h"
 #include "log.h"
-#include "KHttpProtocolParser.h"
-#include "KHttpObjectParserHook.h"
 #include "KSocketFetchObject.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"

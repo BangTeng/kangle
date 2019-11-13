@@ -25,17 +25,13 @@
 #include	<time.h>
 #include 	<ctype.h>
 #include	"do_config.h"
-#include	"forwin32.h"
-#include "malloc_debug.h"
+#include	"kforwin32.h"
+#include "kmalloc.h"
 #include "KHttpObjectHash.h"
 #include "KHttpObject.h"
 #include "lib.h"
-//#include	"modules.h"
 static const char *days[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
-static const char *months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-		"Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-//static	void	flush_log(void);
-//static	char	*my_gethostbyaddr(int);
+static const char *months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun","Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 static int make_month(const char *s);
 static int make_num(const char *s);
 

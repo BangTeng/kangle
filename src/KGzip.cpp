@@ -24,7 +24,7 @@
 #include "do_config.h"
 #include "KGzip.h"
 #include "KHttpTransfer.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 
 KGzipCompress::KGzipCompress(bool use_deflate,KWStream *st,bool autoDelete) : KHttpStream(st,autoDelete)
 {

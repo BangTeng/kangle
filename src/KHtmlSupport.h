@@ -20,7 +20,6 @@
 #include<string>
 #include<map>
 #include "KHtmlSupportException.h"
-#include "malloc_debug.h"
 #include "KUrlValue.h"
 /**
  * HTML±‡“Î÷ß≥÷

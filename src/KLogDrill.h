@@ -2,7 +2,7 @@
 #define KLOGDRILL_H
 #include "global.h"
 #ifdef ENABLE_LOG_DRILL
-#include "KString.h"
+#include "KStringBuf.h"
 class KHttpRequest;
 void add_log_drill(KHttpRequest *rq,KStringBuf &s);
 void flush_log_drill();

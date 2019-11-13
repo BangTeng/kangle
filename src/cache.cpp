@@ -33,9 +33,9 @@
 #endif
 #include <sstream>
 #include "cache.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KHttpObjectHash.h"
-#include "KThreadPool.h"
+#include "kthread.h"
 #include "KObjectList.h"
 #include "KCache.h"
 #include "KSimulateRequest.h"
@@ -107,7 +107,7 @@ bool stored_obj(KHttpRequest *rq, KHttpObject *obj,KHttpObject *old_obj) {
 	if (TEST(rq->filter_flags, RF_NO_DISK_CACHE)) {
 		SET(obj->index.flags, FLAG_NO_DISK_CACHE);
 	}
-	if (TEST(rq->workModel,WORK_MODEL_INTERNAL)) {
+	if (rq->ctx->internal) {
 		SET(obj->index.flags,FLAG_RQ_INTERNAL);
 	}
 	if (TEST(obj->index.flags,OBJ_IS_STATIC2)) {
@@ -152,6 +152,7 @@ void caculateCacheSize(INT64 &csize,INT64 &cdsize,INT64 &hsize,INT64 &hdsize)
 	cacheLock.Unlock();
 	*/
 }
+#ifdef ENABLE_SIMULATE_HTTP
 bool cache_prefetch(const char *url)
 {
 	kgl_async_http ctx;
@@ -163,3 +164,4 @@ bool cache_prefetch(const char *url)
 	ctx.rh = &head;
 	return asyncHttpRequest(&ctx)==0;
 }
+#endif

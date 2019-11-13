@@ -14,7 +14,7 @@
 #include "global.h"
 #include "KRedirect.h"
 #include "KVirtualHost.h"
-#include "KSocket.h"
+#include "ksocket.h"
 #include "KMutex.h"
 #include "KPipeStream.h"
 //#include "api_child.h"
@@ -38,7 +38,7 @@ public:
 
 	}
 	virtual ~KProcessManage();
-	void connect(KHttpRequest *rq,KExtendProgram *rd);
+	kev_result connect(KHttpRequest *rq,KExtendProgram *rd);
 	void clean();
 	void refresh(time_t nowTime);
 	void getProcessInfo(std::stringstream &s);

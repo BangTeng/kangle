@@ -25,8 +25,8 @@ KReplaceContentFilter::~KReplaceContentFilter()
 bool KReplaceContentFilter::dumpBuffer()
 {
 	StreamState result = STREAM_WRITE_SUCCESS;
-	buff *buf = b.stealBuffFast();
-	buff *head = buf;
+	kbuf *buf = b.stealBuffFast();
+	kbuf *head = buf;
 	while (head) {
 		buf = head->next;
 		if (st==NULL) {
@@ -40,7 +40,7 @@ bool KReplaceContentFilter::dumpBuffer()
 		}		
 	}
 	if (head) {
-		KBuffer::destroy(head);
+		destroy_kbuf(head);
 	}
 	return result == STREAM_WRITE_SUCCESS;
 }

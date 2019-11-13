@@ -4,8 +4,8 @@
 #include "global.h"
 
 #include "KHttpManage.h"
-#include "KThreadPool.h"
-#include "KSelectorManager.h"
+#include "kthread.h"
+#include "kselector_manager.h"
 #include "cache.h"
 #include "log.h"
 #include <map>
@@ -14,7 +14,7 @@
 #include <iostream>
 #include <ctype.h>
 #include <time.h>
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "lib.h"
 #include "KHttpRequest.h"
 #include "KAcserverManager.h"
@@ -33,16 +33,110 @@
 #include "KProcessManage.h"
 #include "KLogHandle.h"
 #include "KUrlParser.h"
-#include "KHttpFilterDsoManage.h"
+#include "KDsoExtendManage.h"
 #include "KCache.h"
-#include "KAddr.h"
+#include "kaddr.h"
+#include "KPreRequest.h"
 
-#include "server.h"
+#include "extern.h"
 #include "lang.h"
-#include "md5.h"
+#include "kmd5.h"
 using namespace std;
-string get_connect_per_ip();
-FUNC_TYPE FUNC_CALL check_autoupdate(void *param);
+//string get_connect_per_ip();
+KTHREAD_FUNCTION check_autoupdate(void *param);
+bool getConnectionTr(KHttpRequest *rq, KConnectionInfoContext *ctx)
+{
+	if (conf.max_connect_info > 0 && ctx->total_count > (int)conf.max_connect_info) {
+		return false;
+	}
+	if (ctx->vh != NULL && (rq->svh==NULL || strcmp(rq->svh->vh->name.c_str(), ctx->vh) != 0)) {
+		return true;
+	}
+	ctx->total_count++;
+	ctx->s << "rqs.push(new Array(";
+	ctx->s << "'";
+	if (ctx->translate) {
+		ctx->s << "rq=" << (void *)rq;
+		ctx->s << ",meth=" << (int)rq->meth;
+#ifdef ENABLE_REQUEST_QUEUE
+		ctx->s << ",queue=" << rq->queue;
+#endif
+#ifdef ENABLE_HTTP2
+	
+#endif
+	}
+	ctx->s << "','" << rq->getClientIp();
+	ctx->s << "','" << (kgl_current_sec - rq->begin_time_msec / 1000);
+	ctx->s << "','";
+	if (ctx->translate) {
+		ctx->s << klang[rq->getState()];
+	} else {
+		ctx->s << rq->getState();
+	}
+	ctx->s << "','";
+	ctx->s << rq->getMethod();
+	if (rq->mark != 0) {
+		ctx->s << " " << (int)rq->mark;
+	}
+	ctx->s << "','";
+	std::string url = rq->getInfo();
+	if (url.size() > 0 && url.find('\'') == std::string::npos) {
+		ctx->s << url;
+	}
+	ctx->s << "','";
+	if (!ctx->translate) {
+		sockaddr_i self_addr;
+		char ips[MAXIPLEN];
+		rq->sink->GetSelfAddr(&self_addr);
+		ksocket_sockaddr_ip(&self_addr, ips, sizeof(ips));
+		ctx->s << ips << ":" << ksocket_addr_port(&self_addr);
+	}
+	ctx->s << "','";
+	const char *referer = rq->GetHttpValue("Referer");
+	if (referer) {
+		ctx->s << KXml::encode(referer);
+	}
+	ctx->s << "','";
+	ctx->s << (int)rq->http_major;
+	ctx->s << "',";
+	if (rq->fetchObj) {
+		ctx->s << "1";
+	} else {
+		ctx->s << "0";
+	}
+	ctx->s << "));\n";
+	return true;
+}
+bool kconnection_info_iterator(void *ctx, kselector *selector, kselectable *st)
+{
+	KConnectionInfoContext *cn_ctx = (KConnectionInfoContext *)ctx;
+	if (st->app_data == NULL) {
+		return true;
+	}
+	if (!TEST(st->st_flags, STF_APP_HTTP2)) {		
+		return getConnectionTr((KHttpRequest *)st->app_data,cn_ctx);
+	}
+#ifdef ENABLE_HTTP2
+	KHttp2 *http2 = (KHttp2 *)st->app_data;
+	
+	KHttp2Node **nodes = http2->GetAllStream();
+	for (int k = 0; k < kgl_http_v2_index_size(); k++) {
+		KHttp2Node *node = nodes[k];
+		while (node) {
+			if (node->stream == NULL || node->stream->request == NULL) {
+				node = node->index;
+				continue;
+			}
+			KHttpRequest *rq = node->stream->request;
+			node = node->index;			
+			if (!getConnectionTr(rq, cn_ctx)) {
+				return false;
+			}
+		}
+	}
+#endif
+	return true;
+}
 string endTag() {
 	std::stringstream s;
 	if(need_reboot_flag){
@@ -157,19 +251,19 @@ bool KHttpManage::runCommand() {
 		if(max_time_str.size()>0){
 			max_time = atoi(max_time_str.c_str());
 		}
-		dump_memory(min_time,max_time);
+		dump_memory_leak(min_time,max_time);
 		return sendHttp("200");
 	} else if (cmd == "test_leak") {
 		//警告: 这里只是测试使用，存在明显的内存泄漏
 		//测试一个内存泄漏，以此测试内存泄漏工具是否正常工作
+		int *a = new int;
 		char *scode = strdup("200");
 		return sendHttp(scode);
 #endif
 	} else if (cmd == "dump") {
 #ifdef _WIN32
 		coredump(GetCurrentProcessId(),GetCurrentProcess(),NULL);
-		Sleep(2000);
-		m_thread.start(NULL,crash_report_thread);
+		
 		return sendHttp("200");
 #endif
 	} else if(cmd=="heapmin") {
@@ -205,7 +299,7 @@ bool KHttpManage::runCommand() {
 	} else if (cmd=="dci") {
 		std::stringstream s;
 		if (dci) {
-			s << "dci queue: " << dci->getWorker()->getQueue();
+			s << "dci queue: " << dci->getWorker()->queue;
 			s << " memory: " << dci->memory_used();
 		}
 		return sendHttp(s.str());
@@ -286,10 +380,16 @@ bool KHttpManage::extends(unsigned item) {
 			,NULL
 #endif
 #ifndef HTTP_PROXY
-			,klang["api"], klang["cgi"],klang["cmd"]
+			,klang["api"],
+#ifdef ENABLE_CGI
+		klang["cgi"],
+#else
+		NULL,
+#endif
+		klang["cmd"]
 #endif
 #ifdef ENABLE_KSAPI_FILTER
-			,klang["http_filter"]
+			,"dso"
 #endif
 		
 	};
@@ -327,12 +427,14 @@ bool KHttpManage::extends(unsigned item) {
 			name = getUrlValue("name");
 		}
 		s << conf.gam->apiList(name);
+#ifdef ENABLE_CGI
 	} else if (item == 3) {
 		string name;
 		if (getUrlValue("action") == "edit") {
 			name = getUrlValue("name");
 		}
 		s << conf.gam->cgiList(name);
+#endif
 #ifdef ENABLE_VH_RUN_AS
 	} else if (item==4) {
 		string name;
@@ -343,8 +445,8 @@ bool KHttpManage::extends(unsigned item) {
 #endif
 	} else if (item==5) {
 #ifdef ENABLE_KSAPI_FILTER
-		if (conf.hfdm) {
-			conf.hfdm->html(s);
+		if (conf.dem) {
+			conf.dem->html(s);
 		}
 #endif
 	}
@@ -482,12 +584,14 @@ bool KHttpManage::config() {
 		s << klang["log_handle_concurrent"] << "<input type=text name='log_handle_concurrent' value='" << conf.maxLogHandle << "'></br>\n";
 	} else if (item == 3) {
 		s <<  klang["max_connection"] << ": <input type=text size=5 name=max value=" << conf.max << "><br>";
+
 		s <<  LANG_TOTAL_THREAD_EACH_IP	<< ":<input type=text size=3 title='";
+#if 0
 		ipLock.Lock();
 		KPerIpConnect *per_ip = conf.per_ip_head;
 		while (per_ip) {
 			char ips2[MAXIPLEN];
-			KSocket::make_ip(&per_ip->src.addr,ips2,sizeof(ips2));
+			ksocket_ipaddr_ip(&per_ip->src.addr,ips2,sizeof(ips2));
 			s << ips2;
 			if (per_ip->src.mask_num > 0) {
 				s << "/" << (int) per_ip->src.mask_num;
@@ -502,6 +606,7 @@ bool KHttpManage::config() {
 			per_ip=per_ip->next;
 		}
 		ipLock.Unlock();
+#endif
 		s << "' name=max_per_ip value="	<< conf.max_per_ip << "><br>";
 		
 		s <<  klang["min_free_thread"]	<< ":<input type=text size=3 name=min_free_thread value='"	<< conf.min_free_thread << "'><br>";
@@ -532,7 +637,6 @@ bool KHttpManage::config() {
 		//s << "<input type=checkbox name='async_io' value='1' " << (conf.async_io ?"checked":"") << ">" << klang["async_io"] << "<br>\n";
 		s << "upstream sign : <code title='len=" << conf.upstream_sign_len << "'>" << conf.upstream_sign << "</code><br>\n";
 		s << "<!-- read_hup=" << conf.read_hup << " -->\n";
-		s << "<!-- mlock=" << conf.mlock << " -->\n";
 	} else if (item == 5) {
 		s  << klang["lang_only_gzip_cache"] << "<select name=only_gzip_cache><option value=1 ";
 		if (conf.only_gzip_cache == 1){
@@ -624,7 +728,7 @@ bool KHttpManage::configsubmit() {
 			conf.select_count = worker_thread;
 			need_reboot_flag = true;
 		}
-		selectorManager.setTimeOut();
+		selector_manager_set_timeout(conf.connect_time_out, conf.time_out);
 	} else if (item == 1) {
 #ifdef ENABLE_DISK_CACHE
 		conf.disk_cache = get_radio_size(getUrlValue("disk_cache").c_str(),conf.disk_cache_is_radio);
@@ -673,7 +777,7 @@ bool KHttpManage::configsubmit() {
 		conf.max = atoi(getUrlValue("max").c_str());
 		conf.min_free_thread = atoi(getUrlValue("min_free_thread").c_str());
 		if (conf.max_per_ip != max_per_ip){
-			set_max_per_ip(max_per_ip);
+			conf.max_per_ip = max_per_ip;
 		}
 
 #ifdef ENABLE_REQUEST_QUEUE
@@ -684,8 +788,8 @@ bool KHttpManage::configsubmit() {
 		conf.worker_dns = atoi(getUrlValue("worker_dns").c_str());
 		conf.max_io = atoi(getUrlValue("max_io").c_str());
 		conf.io_timeout = atoi(getUrlValue("io_timeout").c_str());
-		conf.ioWorker->setWorker(conf.worker_io,conf.max_io);
-		conf.dnsWorker->setWorker(conf.worker_dns,512);
+		kasync_worker_set(conf.ioWorker,conf.worker_io,conf.max_io);
+		kasync_worker_set(conf.dnsWorker,conf.worker_dns,512);
 	} else if (item == 4) {
 		//data exchange
 #ifdef ENABLE_TF_EXCHANGE
@@ -845,10 +949,10 @@ bool KHttpManage::sendHttp(const char *msg, INT64 content_length,const char *con
 		s << "public,max_age=" << max_age;
 		rq->responseHeader(kgl_expand_string("Cache-control"), s.getBuf(), s.getSize());
 	}
-	buff *gzipOut = NULL;
+	kbuf *gzipOut = NULL;
 	rq->responseConnection();
 	if (content_length > conf.min_gzip_length && msg && TEST(rq->raw_url.encoding, KGL_ENCODING_GZIP)) {
-		buff in;
+		kbuf in;
 		memset(&in, 0, sizeof(in));
 		in.data = (char *)msg;
 		in.used = (int)content_length;
@@ -860,27 +964,18 @@ bool KHttpManage::sendHttp(const char *msg, INT64 content_length,const char *con
 		rq->responseHeader(kgl_expand_string("Content-length"), (int)content_length);
     }
 	rq->startResponseBody(-1);
-	//同步模式发送header
-	if (rq->send_ctx.getBufferSize()>0) {
-		if (!rq->sync_send_header()) {
-			if (gzipOut) {
-				KBuffer::destroy(gzipOut);
-			}
-			return false;
-		}
-	}	
     if (gzipOut) {
-		bool result = (send_buff(rq, gzipOut) == STREAM_WRITE_SUCCESS);
-        KBuffer::destroy(gzipOut);
+		bool result = rq->WriteBuff(gzipOut);
+        destroy_kbuf(gzipOut);
 		return result;
-    } 
+    }
 	if (msg == NULL) {
 		return true;
 	}
 	if (content_length <= 0) {
 		content_length = strlen(msg);
 	}
-	return rq->write_all(msg, (int)content_length) == STREAM_WRITE_SUCCESS; 
+	return rq->WriteAll(msg, (int)content_length);
 }
 bool KHttpManage::sendHttp(const string &msg) {
 	return sendHttp(msg.c_str(), msg.size());
@@ -968,7 +1063,6 @@ bool KHttpManage::sendLeftMenu() {
 	//*/
 	s << "</table></body></html>";
 	return sendHttp(s.str().c_str());
-
 }
 bool KHttpManage::sendMainFrame() {
 	stringstream s;
@@ -1068,32 +1162,35 @@ bool KHttpManage::sendMainFrame() {
 	s << "<tr><td>" << LANG_CONNECT_COUNT << "</td>";
 	s << "<td>" << total_connect << "</td></tr>\n";
 	//thread
+	int worker_count, free_count;
+	kthread_get_count(&worker_count, &free_count);
 	s << "<tr><td>" << LANG_WORKING_THREAD << "</td>";
-	s << "<td >" << total_thread << "</td></tr>\n";
-	s << "<tr><td>" << LANG_FREE_THREAD << "</td><td>"
-			<< m_thread.getFreeThread() << "</td></tr>\n";
+	s << "<td >" << worker_count << "</td></tr>\n";
+	s << "<tr><td>" << LANG_FREE_THREAD << "</td><td>" << free_count << "</td></tr>\n";
 #ifdef ENABLE_REQUEST_QUEUE
 	s << "<tr><td>" << klang["request_worker_info"] << "</td><td>" << globalRequestQueue.getWorkerCount() << "/" << globalRequestQueue.getQueueSize() << "</td></tr>";
 	s << "<!-- queue refs=" << globalRequestQueue.getRef() << " -->\n";
 #endif
+#ifdef ENABLE_STAT_STUB
 	s << "<tr><td>async io</td><td>" << katom_get((void *)&kgl_aio_count) << "</td></tr>\n";
-	s << "<tr><td>" << klang["io_worker_info"] << "</td><td>" << conf.ioWorker->getWorker() << "/" << conf.ioWorker->getQueue() << "</td></tr>\n";
-	s << "<tr><td>" << klang["dns_worker_info"] << "</td><td>" << conf.dnsWorker->getWorker() << "/" << conf.dnsWorker->getQueue() << "</td></tr>\n";
-	s << "<tr><td>addr cache:</td><td>" << get_addr_cache_count() << "</td></tr>\n";
+#endif
+	s << "<tr><td>" << klang["io_worker_info"] << "</td><td>" << conf.ioWorker->worker << "/" << conf.ioWorker->queue << "</td></tr>\n";
+	s << "<tr><td>" << klang["dns_worker_info"] << "</td><td>" << conf.dnsWorker->worker << "/" << conf.dnsWorker->queue << "</td></tr>\n";
+	s << "<tr><td>addr cache:</td><td>" << kgl_get_addr_cache_count() << "</td></tr>\n";
 #ifdef ENABLE_DB_DISK_INDEX
-	s << "<tr><td>dci queue:</td><td>" << (dci?dci->getWorker()->getQueue():0) << "</td></tr>\n";
+	s << "<tr><td>dci queue:</td><td>" << (dci?dci->getWorker()->queue:0) << "</td></tr>\n";
 	s << "<tr><td>dci mem:</td><td>" << (dci ? dci->memory_used():0) << "</td></tr>\n";
 #endif
 	s << "</table>\n";
 
-	//KSelector *selector = selectorManager.newSelector();
+	//kselector *selector = selectorManager.newSelector();
 	s << "<h3>" << klang["selector"] << "</h3>";
 	s << "<table>" ;
 	s << "<tr><td>" << LANG_NAME << "</td><td>";
-	s << selectorManager.getName() << "</td></tr>";
+	s << kgl_selector_module.name << "</td></tr>";
 	//s << "<tr><td>" << klang["worker_process"] << "</td><td>" << conf.worker << "</td></tr>";
 	s << "<tr><td>" << klang["worker_thread"] << "</td><td>";
-	s << selectorManager.getSelectorCount() << "</td></tr>";
+	s << get_selector_count() << "</td></tr>";
 	s << "</table>";
 
 	s << "</td><td valign=top align=right>";
@@ -1147,19 +1244,11 @@ bool KHttpManage::sendMainPage() {
 	return sendHttp(s.str());
 }
 bool KHttpManage::sendRedirect(const char *newUrl) {
-	KBuffer s;
-	rq->responseStatus(302);
-#ifdef ENABLE_HTTP2
-	if (rq->http2_ctx == NULL)
-#endif
-		rq->responseHeader(kgl_expand_string("Connection"), kgl_expand_string("close"));
+	rq->responseStatus(STATUS_FOUND);
+	rq->responseHeader(kgl_expand_string("Content-Length"), 0);
+	rq->responseConnection();
 	rq->responseHeader(kgl_expand_string("Location"), newUrl, (hlen_t)strlen(newUrl));
-	SET(rq->flags,RQ_CONNECTION_CLOSE);
-	rq->startResponseBody(0);
-	if (rq->send_ctx.getBufferSize() > 0) {
-		return rq->sync_send_header();
-	}
-	return true;
+	return rq->startResponseBody(0);
 }
 bool matchManageIP(const char *ip, std::vector<std::string> &ips,std::string &matched_ip)
 {
@@ -1179,7 +1268,7 @@ bool matchManageIP(const char *ip, std::vector<std::string> &ips,std::string &ma
 	return false;
 }
 char *KHttpManage::parsePostFile(int &len, std::string &fileName) {
-	KHttpHeader *header = rq->parser.getHeaders();
+	KHttpHeader *header = rq->GetHeader();
 	char *boundary = NULL;
 	if (postData == NULL) {
 		return NULL;
@@ -1272,58 +1361,44 @@ char *KHttpManage::parsePostFile(int &len, std::string &fileName) {
 }
 void KHttpManage::parsePostData() {
 #define MAX_POST_SIZE	8388608 //8m
-	if (rq->content_length == 0 || rq->meth != METH_POST) {
+	if (rq->content_length <= 0 || rq->meth != METH_POST) {
 		return;
 	}
-	//	bool result = false;
 	char *buffer = NULL;
-	int leave_to_read = (int)(rq->content_length - rq->parser.bodyLen);
-	if (leave_to_read <= 0) {
-		buffer = (char *) malloc(rq->parser.bodyLen + 1);
-		memcpy(buffer, rq->parser.body, rq->parser.bodyLen);
-		postLen = rq->parser.bodyLen;
-		buffer[postLen] = 0;
-	} else {
-		if (rq->content_length > MAX_POST_SIZE) {
-			fprintf(stderr, "post size is too big\n");
-			return;
-		}
-		buffer = (char *) xmalloc((int)(rq->content_length+1));
-		char *str = buffer;
-		//memset(buffer, 0, rq->content_length+1);
-		memcpy(buffer, rq->parser.body, rq->parser.bodyLen);
-		str += rq->parser.bodyLen;
-		//int remaining=rq->leave_to_read;
-		int length = 0;
-		while (leave_to_read > 0) {
-			length = rq->read(str, leave_to_read);
-			if (length <= 0) {
-				free(buffer);
-				SET(rq->flags,RQ_CONNECTION_CLOSE);
-				return;
-			}
-			leave_to_read -= length;
-			str += length;
-		}
-		postLen = (int)rq->content_length;
-		buffer[postLen] = 0;
+	if (rq->content_length > MAX_POST_SIZE) {
+		fprintf(stderr, "post size is too big\n");
+		return;
 	}
+	buffer = (char *)xmalloc((int)(rq->content_length+1));
+	char *str = buffer;		
+	int length = 0;
+	while (rq->left_read > 0) {
+		length = rq->Read(str, (int)rq->left_read);
+		if (length <= 0) {
+			free(buffer);
+			SET(rq->flags,RQ_CONNECTION_CLOSE);
+			return;
+		}		
+		str += length;
+	}
+	postLen = (int)rq->content_length;
+	buffer[postLen] = 0;	
 	postData = buffer;
 }
 bool checkManageLogin(KHttpRequest *rq) {
 #ifdef KSOCKET_UNIX
-	if (TEST(rq->workModel, WORK_MODEL_UNIX_SOCKET)) {
-		//unix socket不要验证
+	kserver *server = rq->sink->GetBindServer();
+	if (server && server->addr.v4.sin_family == AF_UNIX) {
 		return true;
 	}
 #endif
 	char ips[MAXIPLEN];
-	rq->c->socket->get_remote_ip(ips, sizeof(ips));
+	rq->sink->GetRemoteIp(ips, sizeof(ips));
 	if (strcmp(ips, "127.0.0.1") != 0) {
 		std::string manage_sec_file = conf.path  + "manage.sec";
 		KFile file;
 		if (file.open(manage_sec_file.c_str(), fileRead)) {
-			rq->c->socket->shutdown(SHUT_RDWR);
+			rq->sink->Shutdown();
 			return false;
 		}
 	}
@@ -1540,6 +1615,7 @@ bool KHttpManage::start_obj(bool &hit)
 {
 	stringstream s;
 	KHttpObject *obj = NULL;
+	KBufferFile bf;
 	if(strcmp(rq->url->path,"/obj")==0){
 		hit = true;
 		string url = getUrlValue("url");
@@ -1574,7 +1650,7 @@ bool KHttpManage::start_obj(bool &hit)
 			s << "content_len:" << obj->index.content_length << "<br>";
 			KHttpObjectBody *body = obj->data;
 			INT64 len = 0;
-			buff *head = NULL;
+			kbuf *head = NULL;
 			if(body){
 				head = body->bodys;
 			}
@@ -1584,7 +1660,7 @@ bool KHttpManage::start_obj(bool &hit)
 			}
 			s << "memory length:" << len << "<br>";	
 #ifdef ENABLE_DISK_CACHE
-			bool result = obj->swapout(false);
+			bool result = obj->swapout(&bf,false);
 			if(result){
 				const char *file = obj->getFileName();
 				s << "disk file:" << file << "<br>";
@@ -2105,13 +2181,18 @@ bool KHttpManage::start(bool &hit) {
 		return false;
 	}
 	if (strcasecmp(rq->url->path, "/connection") == 0) {
-		int debug = atoi(getUrlValue("debug").c_str());
-		stringstream s;
-		int totalCount;
-		string connectString = selectorManager.getConnectionInfo(totalCount,debug,NULL);
+		std::stringstream s;
+		KConnectionInfoContext ctx;
+		ctx.total_count = 0;
+		ctx.debug = atoi(getUrlValue("debug").c_str());
+		ctx.vh = NULL;
+		ctx.translate = true;
+
+		selector_manager_iterator((void *)&ctx, kconnection_info_iterator);
+		
 		s << "<html><head><LINK href=/main.css type='text/css' rel=stylesheet></head><body>\n";
 		s << "<!-- total_connect=" << total_connect << " -->\n<h3>";
-		s << LANG_CONNECTION << "(total:" << totalCount;
+		s << LANG_CONNECTION << "(total:" << ctx.total_count;
 		s << ")</h3>\n";
 		//[<a href=\"javascript:if(confirm('really?')){ window.location='/close_all_request';}\">" << klang["close_all_request"];
 		//s << "</a>]
@@ -2119,7 +2200,7 @@ bool KHttpManage::start(bool &hit) {
 		s << "<div id='rq'>loading...</div>\n";
 		s << endTag();
 		s << "<script language='javascript'>\nvar sortIndex = 2;\nvar sortDesc = false;\nvar rqs=new Array();\n";
-		s << connectString ;
+		s << ctx.s.str() ;
 		s << "function $(id) \n"
 		"{ \n"
 		"if (document.getElementById) \n"
@@ -2191,6 +2272,7 @@ function sortrq(index)\
 	if (strcmp(rq->url->path, "/exportconfig") == 0) {
 		return exportConfig();
 	}
+#ifdef ENABLE_CGI
 	if (strcmp(rq->url->path, "/cgienable") == 0) {
 		bool enable = false;
 		if (getUrlValue("flag") == "enable") {
@@ -2204,6 +2286,7 @@ function sortrq(index)\
 		}
 		return sendErrPage("error set flag");
 	}
+#endif
 	if (strcmp(rq->url->path, "/apienable") == 0) {
 		bool enable = false;
 		if (getUrlValue("flag") == "enable") {
@@ -2263,8 +2346,7 @@ function sortrq(index)\
 		}
 		return sendErrPage(errMsg.c_str());
 	}
-
-
+#ifdef ENABLE_CGI
 	if (strcmp(rq->url->path, "/cgiform") == 0) {
 		std::string errMsg;
 		if (conf.gam->cgiForm(urlParam, errMsg)) {
@@ -2275,6 +2357,7 @@ function sortrq(index)\
 		}
 		return sendErrPage(errMsg.c_str());
 	}
+#endif
 	if (strcmp(rq->url->path, "/delapi") == 0) {
 		std::string errMsg;
 		if (conf.gam->delApi(getUrlValue("name"), errMsg)) {
@@ -2286,6 +2369,7 @@ function sortrq(index)\
 		return sendErrPage(errMsg.c_str());
 
 	}
+#ifdef ENABLE_CGI
 	if (strcmp(rq->url->path, "/delcgi") == 0) {
 		std::string errMsg;
 		if (conf.gam->delCgi(getUrlValue("name"), errMsg)) {
@@ -2297,6 +2381,7 @@ function sortrq(index)\
 		return sendErrPage(errMsg.c_str());
 
 	}
+#endif
 	if (strcmp(rq->url->path, "/changelang") == 0) {
 		strncpy(conf.lang, getUrlValue("lang").c_str(),sizeof(conf.lang)-1);
 		if (!saveConfig()) {

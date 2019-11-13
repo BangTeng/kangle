@@ -25,7 +25,7 @@
 #define KFILTERHELPER_H_
 #include <assert.h>
 #include "KContentMark.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 class KFilterHelper {
 public:
 	KFilterHelper(KContentMark * filter, int jump) {

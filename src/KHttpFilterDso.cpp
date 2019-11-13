@@ -1,36 +1,32 @@
-#include "forwin32.h"
+#include "kforwin32.h"
 #include "KHttpFilterDso.h"
 #include "KDynamicString.h"
 #include "log.h"
 #include "KAccess.h"
 #include "KAccessDso.h"
-#include "KSelectorManager.h"
+#include "kselector_manager.h"
 #include "KTimer.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "KHttpFilterContext.h"
+#include "KAccessDsoSupport.h"
+
 #ifdef ENABLE_KSAPI_FILTER
-static KGL_RESULT WINAPI global_get_variable(
+KGL_RESULT global_get_variable(
 	PVOID                        ctx,
 	LPSTR                        lpszVariableName,
 	LPVOID                       lpvBuffer,
 	LPDWORD                      lpdwSize
 	)
 {
-	KHttpFilterDso *dso = (KHttpFilterDso *)ctx;
-	if (strncasecmp(lpszVariableName, "config:", 7) == 0) {
-		std::map<std::string, std::string>::iterator it = dso->attribute.find(lpszVariableName);
-		if (it == dso->attribute.end()) {
-			return KGL_EUNKNOW;
-		}
-		return add_api_var(lpvBuffer, lpdwSize, (*it).second.c_str(), (*it).second.size());
-	}
+	//KDsoExtend *dso = (KDsoExtend *)ctx;
 	const char *val = getSystemEnv(lpszVariableName);
 	if (val == NULL || *val == '\0') {
 		return KGL_EINVALID_PARAMETER;
 	}
 	return add_api_var(lpvBuffer, lpdwSize, val);
 }
-static KGL_RESULT WINAPI global_support_function(
+
+KGL_RESULT global_support_function(
 	PVOID                        ctx,
 	DWORD                        req,
 	PVOID                        data,
@@ -42,29 +38,43 @@ static KGL_RESULT WINAPI global_support_function(
 			kgl_access *access = (kgl_access *)data;
 			if (TEST(access->flags, KF_NOTIFY_REQUEST_ACL)) {
 				KAccessDso *model = new KAccessDso(access,
-					(KHttpFilterDso *)ctx,
+					(KDsoExtend *)ctx,
 					KF_NOTIFY_REQUEST_ACL);
 				KAccess::addAclModel(REQUEST, new KAccessDsoAcl(model));
 			}
 			if (TEST(access->flags, KF_NOTIFY_RESPONSE_ACL)) {
 				KAccessDso *model = new KAccessDso(access,
-					(KHttpFilterDso *)ctx,
+					(KDsoExtend *)ctx,
 					KF_NOTIFY_RESPONSE_ACL);
 				KAccess::addAclModel(RESPONSE, new KAccessDsoAcl(model));
 			}
 			if (TEST(access->flags, KF_NOTIFY_REQUEST_MARK)) {
 				KAccessDso *model = new KAccessDso(access,
-					(KHttpFilterDso *)ctx,
+					(KDsoExtend *)ctx,
 					KF_NOTIFY_REQUEST_MARK);
 				KAccess::addMarkModel(REQUEST, new KAccessDsoMark(model));
 			}
 			if (TEST(access->flags, KF_NOTIFY_RESPONSE_MARK)) {
 				KAccessDso *model = new KAccessDso(access,
-					(KHttpFilterDso *)ctx,
+					(KDsoExtend *)ctx,
 					KF_NOTIFY_RESPONSE_MARK);
 				KAccess::addMarkModel(RESPONSE, new KAccessDsoMark(model));
 			}
 			return KGL_OK;
+	}
+	case KGL_REQ_REGISTER_ASYNC_UPSTREAM:
+	{
+		kgl_upstream *us = (kgl_upstream *)data;
+		CLR(us->flags, KF_UPSTREAM_SYNC);
+		KDsoExtend *de = (KDsoExtend *)ctx;
+		if (de->RegisterUpstream(us)) {
+			return KGL_OK;
+		}
+		return KGL_EUNKNOW;
+	}
+	case KGL_REQ_REGISTER_SYNC_UPSTREAM:
+	{
+		return KGL_ENOT_SUPPORT;
 	}
 	case KGL_REQ_SERVER_VAR: {
 			const char *name = (const char *)data;
@@ -80,12 +90,12 @@ static KGL_RESULT WINAPI global_support_function(
 	}
 	case KGL_REQ_ONREADY:{
 			kgl_call_back *c = (kgl_call_back *)data;
-			selectorManager.onReady(c->call_back, c->arg);
+			selector_manager_on_ready(c->call_back, c->arg);
 			return KGL_OK;
 	}
 	case KGL_REQ_TIMER:	{
 			kgl_timer *t = (kgl_timer *)data;
-			if (!selectorManager.isInit()) {
+			if (!is_selector_manager_init()) {
 				return KGL_ENOT_READY;
 			}
 			timer_run(t->timer_run, t->arg, t->msec, t->selector);
@@ -93,23 +103,25 @@ static KGL_RESULT WINAPI global_support_function(
 	}
 	case KGL_REQ_CREATE_WORKER:	{
 			int *max_worker = (int *)data;
-			KAsyncWorker *worker = new KAsyncWorker(*max_worker,0);
+			kasync_worker *worker = kasync_worker_init(*max_worker,0);
 			*ret = (void *)worker;
 			return KGL_OK;
 	}
 	case KGL_REQ_RELEASE_WORKER: {
-			KAsyncWorker *worker = (KAsyncWorker *)data;
-			worker->release();
+			kasync_worker *worker = (kasync_worker *)data;
+			kasync_worker_release(worker);
 			return KGL_OK;
 	}
 	case KGL_REQ_THREAD: {
 			kgl_thread *thread = (kgl_thread *)data;
 			if (thread->worker) {
-				KAsyncWorker *worker = (KAsyncWorker *)thread->worker;
-				worker->tryStart(thread->param, thread->thread_function);
+				kasync_worker *worker = (kasync_worker *)thread->worker;
+				if (!kasync_worker_try_start(worker, thread->param, thread->thread_function,false)) {
+					return KGL_EUNKNOW;
+				}
 				return KGL_OK;
 			}
-			if (thread_start_worker(thread->param, thread->thread_function)) {
+			if (kasync_worker_thread_start(thread->param, thread->thread_function)) {
 				return KGL_OK;
 			}
 			return KGL_EUNKNOW;
@@ -117,6 +129,7 @@ static KGL_RESULT WINAPI global_support_function(
 	}
 	return KGL_EINVALID_PARAMETER;
 }
+#if 0
 KHttpFilterDso::KHttpFilterDso(const char *name)
 {
 	this->name = xstrdup(name);
@@ -179,4 +192,5 @@ kgl_filter_version *KHttpFilterDso::get_version()
 {
 	return &version;
 }
+#endif
 #endif

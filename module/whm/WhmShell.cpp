@@ -1,7 +1,7 @@
 #include "WhmShell.h"
 #include "WhmShellSession.h"
 
-FUNC_TYPE FUNC_CALL whmShellAsyncThread(void *param)
+KTHREAD_FUNCTION whmShellAsyncThread(void *param)
 {
 	WhmShellContext *sc = (WhmShellContext *)param;
 	WhmShell *shell = sc->shell;
@@ -102,7 +102,7 @@ int WhmShell::call(const char *callName,const char *eventType,WhmContext *contex
 		}
 		lock.Unlock();
 		if (need_start_thread) {			
-			if (!m_thread.start(sc,whmShellAsyncThread)) {
+			if (!kthread_pool_start(whmShellAsyncThread,sc)) {
 				removeContext(sc);
 				lock.Lock();
 				merge_context_running = false;
@@ -125,7 +125,7 @@ int WhmShell::call(const char *callName,const char *eventType,WhmContext *contex
 	}
 	addContext(sc);
 	std::string session = sc->session;
-	if (!m_thread.start(sc,whmShellAsyncThread)) {
+	if (!kthread_pool_start(whmShellAsyncThread, sc)) {
 		removeContext(sc);
 		sc->release();
 		context->setStatus("cann't start thread");
@@ -143,7 +143,7 @@ int WhmShell::result(WhmShellContext *sc,WhmContext *context)
 	}
 	sc->lock.Lock();
 	KStringBuf s;
-	buff *buf = sc->out_buffer.getHead();
+	kbuf *buf = sc->out_buffer.getHead();
 	while (buf && buf->used>0) {
 		s.write_all(buf->data,buf->used);
 		buf = buf->next;

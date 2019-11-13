@@ -9,7 +9,7 @@
 #define KSERVICEPROVIDER_H_
 //#include "utils.h"
 #include "KStream.h"
-#include "forwin32.h"
+#include "kforwin32.h"
 class KServiceProvider {
 public:
 	KServiceProvider();
@@ -20,9 +20,8 @@ public:
 	virtual const char *getFileName() = 0;
 	virtual const char *getQueryString() = 0;
 	virtual const char *getRequestUri() = 0;
-	virtual unsigned getContentLength() = 0;
+	virtual INT64 getContentLength() = 0;
 	virtual const char *getContentType() = 0;
-	virtual char *getPreLoadedBody(int *len) = 0;
 	virtual Token_t getToken() = 0;
 	virtual bool execUrl(const char *url) = 0;
 	virtual void log(const char *str) = 0;

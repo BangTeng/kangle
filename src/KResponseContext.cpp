@@ -5,7 +5,7 @@
 void KResponseContext::clean()
 {
 	if(header){
-		KBuffer::destroy(header);
+		destroy_kbuf(header);
 		header = NULL;
 	}
 	body = NULL;

@@ -1,10 +1,10 @@
 #ifndef KIPMAP_H
 #define KIPMAP_H
 #include "global.h"
-#include "forwin32.h"
-#include "KSocket.h"
-#include "rbtree.h"
-
+#include "kforwin32.h"
+#include "ksocket.h"
+#include "krbtree.h"
+#include <sstream>
 struct dns_range_addr
 {
 	ip_addr min_addr;
@@ -39,7 +39,7 @@ public:
 	bool add_addr(char *addr, void *bind_data);
 private:	
 	bool add_range_addr(struct dns_range_addr *range_addr,void *bind_data);
-	rb_tree *ip;
+	krb_tree *ip;
 	int item_count;
 };
 bool test_ip_map();

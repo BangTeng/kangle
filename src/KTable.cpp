@@ -21,16 +21,17 @@
 #include "KTable.h"
 #include "KChain.h"
 #include "KModelManager.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 #include "time_utils.h"
 using namespace std;
 
 bool KTable::startElement(KXmlContext *context, std::map<std::string,
 		std::string> &attribute,KAccess *kaccess) {
 
-	if (context->getParentName() == TABLE_CONTEXT && context->qName
-			== CHAIN_CONTEXT) {
-		assert(curChain==NULL);
+	if (context->getParentName() == TABLE_CONTEXT && context->qName	== CHAIN_CONTEXT) {
+		if (curChain) {
+			delete curChain;
+		}
 		curChain = new KChain();
 	}
 	if (curChain) {

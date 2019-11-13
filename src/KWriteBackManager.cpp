@@ -1,7 +1,7 @@
 #include "KWriteBackManager.h"
 #include<sstream>
 #include "lang.h"
-#include "malloc_debug.h"
+#include "kmalloc.h"
 using namespace std;
 #ifdef ENABLE_WRITE_BACK
 KWriteBackManager writeBackManager;
