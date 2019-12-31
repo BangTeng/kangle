@@ -190,9 +190,9 @@ kev_result send_http(KHttpRequest *rq, KHttpObject *obj, uint16_t status_code, K
 	rq->responseStatus(status_code);
 	if (rq->auth) {
 		rq->auth->insertHeader(rq);
-	}
-	rq->responseHeader(kgl_response_server,conf.serverName,conf.serverNameLength);
+	}	
 	timeLock.Lock();
+	rq->responseHeader(kgl_response_server, conf.serverName, conf.serverNameLength);
 	rq->responseHeader(kgl_response_date,(char *)cachedDateTime,29);
 	timeLock.Unlock();
 	if (body) {
@@ -229,10 +229,14 @@ kev_result send_http(KHttpRequest *rq, KHttpObject *obj, uint16_t status_code, K
 	if (body) {
 		return stageWriteRequest(rq, body);
 	}
-	return stageEndRequest(rq);	
+	return stageEndRequest(rq);
 }
 kev_result send_auth(KHttpRequest *rq,KAutoBuffer *body) {
-	return send_http(rq, NULL, STATUS_UNAUTH, body);
+	uint16_t status_code = AUTH_STATUS_CODE;
+	if (rq->auth) {
+		status_code = rq->auth->GetStatusCode();
+	}
+	return send_http(rq, NULL, status_code, body);
 }
 /**
 * 发送错误信息
@@ -252,7 +256,33 @@ kev_result send_error(KHttpRequest *rq, KHttpObject *obj, int code,const char* r
 	}
 	KAutoBuffer s(rq->pool);
 	assert(rq);
-	
+	std::string errorPage;
+	if (conf.gvm->globalVh.getErrorPage(code, errorPage)) {
+		if (strncasecmp(errorPage.c_str(), "file://", 7) == 0) {
+			errorPage = errorPage.substr(7,errorPage.size()-7);
+		}
+		if (!isAbsolutePath(errorPage.c_str())) {
+			errorPage = conf.path + errorPage;
+		}
+		KFile fp;
+		if (fp.open(errorPage.c_str(), fileRead)) {
+			INT64 len = fp.getFileSize();
+			len = MIN(len, 32768);
+			kbuf *buf = new_pool_kbuf(rq->pool,int(len));
+			int used = fp.read(buf->data, (int)len);
+			buf->used = used;
+			if (used > 2) {
+				char *p = (char *)memchr(buf->data, '~', used - 2);
+				if (p != NULL) {
+					char tmp[5];
+					snprintf(tmp, 4, "%03d", code);
+					kgl_memcpy(p, tmp, 3);
+				}
+			}
+			s.Append(buf);
+			return send_http(rq, obj, code, &s);
+		}
+	}
 	const char *status = KHttpKeyValue::getStatus(code);
 	s << "<html>\n<head>\n";
 	s << "	<meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">\n";
@@ -300,7 +330,9 @@ void insert_via(KHttpRequest *rq, KWStream &s, char *old_via) {
 		s << ip << ":" << ksocket_addr_port(&addr);
 	}
 	s << "(";
+	timeLock.Lock();
 	s.write_all(conf.serverName,conf.serverNameLength);
+	timeLock.Unlock();
 	s << ")\r\n";
 }
 /*************************
@@ -350,9 +382,9 @@ bool build_obj_header(KHttpRequest *rq, KHttpObject *obj,INT64 content_len, INT6
 		}
 		rq->responseStatus(status_code);
 	}
-	if (TEST(obj->index.flags,ANSW_LOCAL_SERVER)) {
-		rq->responseHeader(kgl_response_server,conf.serverName,conf.serverNameLength);
+	if (TEST(obj->index.flags,ANSW_LOCAL_SERVER)) {		
 		timeLock.Lock();
+		rq->responseHeader(kgl_response_server, conf.serverName, conf.serverNameLength);
 		rq->responseHeader(kgl_response_date,(char *)cachedDateTime,29);
 		timeLock.Unlock();
 	}
@@ -370,23 +402,10 @@ bool build_obj_header(KHttpRequest *rq, KHttpObject *obj,INT64 content_len, INT6
 			rq->responseHeader(kgl_expand_string("Age"),current_age);
 		}
 	}
-	if (rq->cookie_stick>0) {
-		//设置cookie粘住cookie
-		KStringBuf b;
-		if (*conf.cookie_stick_name) {
-			b << conf.cookie_stick_name;
-		} else {
-			b.WSTR(DEFAULT_COOKIE_STICK_NAME);
-		}
-		b.WSTR("=");
-		b << rq->cookie_stick;
-		b.WSTR("; path=/");
-		rq->responseHeader(kgl_expand_string("Set-Cookie"),b.getBuf(),b.getSize());
-	}	
 	if (TEST(rq->filter_flags,RF_X_CACHE)) {
 		KStringBuf b;
 		if (rq->ctx->cache_hit_part) {
-			b.WSTR("HIT-PART from ");			
+			b.WSTR("HIT-PART from ");
 		} else if (rq->ctx->cache_hit) {
 			b.WSTR("HIT from ");
 		} else {
@@ -443,12 +462,15 @@ kev_result stage_rdata_end(KHttpRequest *rq,StreamState result)
 	}
 	if (result == STREAM_WRITE_FAILED) {
 		if (obj->data->type==MEMORY_OBJECT) {
-			SET(obj->index.flags,FLAG_DEAD|OBJ_INDEX_UPDATE);
+			obj->Dead();
 			SET(rq->flags,RQ_CONNECTION_CLOSE);
 		}
 		if(TEST(rq->filter_flags,RQ_RESPONSE_DENY) && !TEST(rq->flags,RQ_HAS_SEND_HEADER)){
 			return send_error(rq,NULL,STATUS_FORBIDEN,"access denied by response control");
 		}
+		//如果是http2的情况下，此处要向下游传递错误，调用terminal stream
+		//避免下游会误缓存
+		rq->ctx->body_not_complete = 1;
 		return stageEndRequest(rq);
 	}
 	kassert(rq->ctx->st);
@@ -463,8 +485,7 @@ kev_result stage_rdata_end(KHttpRequest *rq,StreamState result)
 	if (KEV_HANDLED(ret)) {
 		return ret;
 	}
-	rq->ctx->expected_done = 1;
-#ifdef  ENABLE_BIG_OBJECT
+#ifdef  ENABLE_BIG_OBJECT_206
 	if (rq->bo_ctx) {
 		return rq->bo_ctx->write_request_end(rq);
 	}
@@ -509,8 +530,8 @@ bool push_redirect_header(KHttpRequest *rq, const char *url,int url_len,int code
 		return false;
 	}
 	rq->responseStatus(code);
-	rq->responseHeader(kgl_response_server, conf.serverName, conf.serverNameLength);
 	timeLock.Lock();
+	rq->responseHeader(kgl_response_server, conf.serverName, conf.serverNameLength);
 	rq->responseHeader(kgl_response_date, (char *)cachedDateTime, 29);
 	timeLock.Unlock();
 	rq->responseHeader(kgl_expand_string("Location"),url,url_len);
@@ -606,6 +627,10 @@ kev_result sendMemoryObject(KHttpRequest *rq,KHttpObject *obj)
 {
 
 	rq->closeFetchObject();
+	if (TEST(rq->flags, RQ_HAVE_RANGE) && obj->url->IsContentEncoding()) {
+		//有压缩的内容，不回应206
+		CLR(rq->flags, RQ_HAVE_RANGE);
+	}
 #if 0
 	if (TEST(obj->index.flags, OBJ_CACHE_RESPONSE)) {		
 		if (!TEST(rq->workModel, WORK_MODEL_MANAGE | WORK_MODEL_INTERNAL | WORK_MODEL_SKIP_ACCESS)
@@ -687,15 +712,14 @@ bool sync_send_http_object(KHttpRequest *rq, KHttpObject *obj) {
 		KHttpObjectBody *data = new KHttpObjectBody();
 		obj->data = data;
 		if (!obj->swapin(data)) {
-			SET(obj->index.flags,FLAG_DEAD|OBJ_INDEX_UPDATE);
+			obj->Dead();
 			lock->Unlock();
 			cache.dead(obj, __FILE__, __LINE__);
 			//objList[obj->list_state].dead(obj);
 			return send_error(rq, NULL, STATUS_SERVER_ERROR, "Cann't swap in object!") == kev_ok;
 		}
 		SET(obj->index.flags,FLAG_IN_MEM);
-		
-			cache.getHash(obj->h)->incSize(obj->index.content_length);		
+		cache.getHash(obj->h)->incSize(obj->index.content_length + obj->index.head_size);
 	}
 #endif	
 	send_buffer = obj->data->bodys;
@@ -815,7 +839,7 @@ kev_result handleUpstreamRecvedHead(KHttpRequest *rq)
 #ifdef ENABLE_TF_EXCHANGE
 	if (!rq->ctx->internal) {
 		if (!TEST(rq->filter_flags,RF_NO_BUFFER) &&
-			rq->fetchObj->needTempFile()) {
+			rq->fetchObj->NeedTempFile(false,rq)) {
 			//在需要temp file的上游，并且没有指定no_buffer
 			if (rq->tf == NULL) {
 				rq->tf = new KTempFile;
@@ -837,7 +861,7 @@ kev_result handleUpstreamRecvedHead(KHttpRequest *rq)
 	int status_code = obj->data->status_code;
 	//context->us_code = obj->data->status_code;
 	if (status_code != STATUS_OK && status_code != STATUS_CONTENT_PARTIAL) {
-		SET(obj->index.flags,ANSW_NO_CACHE|OBJ_INDEX_UPDATE|OBJ_NOT_OK);
+		SET(obj->index.flags,ANSW_NO_CACHE|OBJ_NOT_OK);
 	}
 	if (checkResponse(rq,obj) == JUMP_DENY) {
 		if (rq->sink->HasHeaderDataToSend()) {
@@ -852,7 +876,7 @@ kev_result handleUpstreamRecvedHead(KHttpRequest *rq)
 	//printf("load head status=%d\n", obj->data->status_code);
 	switch (status_code) {
 	case STATUS_NOT_MODIFIED:
-		SET(obj->index.flags,FLAG_DEAD|OBJ_INDEX_UPDATE);
+		SET(obj->index.flags,FLAG_DEAD);
 		CLR(obj->index.flags,ANSW_CHUNKED);
 		if (context->old_obj) {
 			if(!TEST(rq->flags,RQ_HAS_IF_MOD_SINCE|RQ_HAS_IF_NONE_MATCH)) {
@@ -872,7 +896,7 @@ kev_result handleUpstreamRecvedHead(KHttpRequest *rq)
 		rq->ctx->cache_hit = false;
 		if (rq->meth == METH_HEAD || TEST(context->obj->index.flags,FLAG_NO_BODY)) {
 			//没有http body的情况
-			SET(obj->index.flags,FLAG_DEAD|OBJ_INDEX_UPDATE);
+			SET(obj->index.flags,FLAG_DEAD);
 			CLR(obj->index.flags,ANSW_CHUNKED);
 			rq->ctx->no_body = true;
 			return handleUpstreamNoBody(rq);
@@ -885,9 +909,9 @@ kev_result handleUpstreamRecvedHead(KHttpRequest *rq)
 			rq->ctx->left_read = -1;
 		}
 		
-		if (status_code==STATUS_CONTENT_PARTIAL) {
+		if (status_code==STATUS_CONTENT_PARTIAL && !obj->IsContentRangeComplete(rq)) {
 			//强行设置206不缓存
-			SET(obj->index.flags,ANSW_NO_CACHE|OBJ_INDEX_UPDATE|OBJ_NOT_OK);
+			SET(obj->index.flags,ANSW_NO_CACHE|OBJ_NOT_OK);
 		} else {
 			CLR(rq->flags,RQ_HAVE_RANGE);
 		}
@@ -983,11 +1007,11 @@ kev_result handleError(KHttpRequest *rq,int code,const char *msg) {
 	}
 	if (result && !rq->file->isDirectory()) {
 		bool redirect_result;
-		rq->closeFetchObject();
-		rq->fetchObj = rq->svh->vh->findFileExtRedirect(rq, rq->file, true,redirect_result);
-		if (rq->fetchObj==NULL) {			
-			rq->fetchObj = new KStaticFetchObject;		
+		KFetchObject *fo = rq->svh->vh->findFileExtRedirect(rq, rq->file, true,redirect_result);
+		if (fo ==NULL) {
+			fo = new KStaticFetchObject;
 		}
+		rq->appendFetchObject(fo);
 		return processRequest(rq);
 	}
 	return send_error(rq,NULL,code,msg);
@@ -996,7 +1020,7 @@ kev_result handleError(KHttpRequest *rq,int code,const char *msg) {
 KFetchObject *bindVirtualHost(KHttpRequest *rq,RequestError *error,KAccess **htresponse,bool &handled) {
 	assert(rq->file==NULL);
 	//file = new KFileName;
-	assert(rq->fetchObj==NULL);
+	assert(!rq->hasFinalFetchObject());
 	KFetchObject *redirect = NULL;
 	bool result = false;
 	bool redirect_result = false;
@@ -1012,7 +1036,7 @@ KFetchObject *bindVirtualHost(KHttpRequest *rq,RequestError *error,KAccess **htr
 		error->set(STATUS_SERVER_ERROR, "cann't bind file.");
 		return NULL;
 	}
-	if (handled || rq->fetchObj) {
+	if (handled || rq->hasFinalFetchObject()) {
 		//请求已经处理,或者数据源已确定.
 		return NULL;
 	}
@@ -1103,7 +1127,9 @@ kev_result stage_prepare(KHttpRequest *rq)
 {
 	assert(rq->ctx->obj);
 	RequestError error;
-	if(rq->fetchObj == NULL){
+	error.code = STATUS_SERVER_ERROR;
+	error.msg = "internal error";
+	if(!rq->hasFinalFetchObject()){
 		if (rq->svh==NULL) {
 #ifdef ENABLE_VH_RS_LIMIT
 			return send_error(rq,NULL,STATUS_SERVER_ERROR,"access action error");
@@ -1122,8 +1148,7 @@ kev_result stage_prepare(KHttpRequest *rq)
 			return kev_ok;
 		}
 		if (fo) {
-			assert(rq->fetchObj==NULL);
-			rq->fetchObj = fo;
+			rq->appendFetchObject(fo);
 		}
 		//postmap
 		if (htresponse) {
@@ -1153,16 +1178,8 @@ kev_result stage_prepare(KHttpRequest *rq)
 			return send_error(rq,NULL,STATUS_FORBIDEN,"Deny by global postmap access");
 		}
 	}
-	if(rq->fetchObj==NULL){
+	if(!rq->hasFinalFetchObject()){
 		return handleError(rq,error.code,error.msg);
-	}
-	if (TEST(rq->filter_flags,RQ_NO_EXTEND) && !TEST(rq->flags,RQ_IS_ERROR_PAGE)) {
-		//无扩展处理
-		if (rq->fetchObj->needQueue()) {
-			rq->closeFetchObject();
-			assert(rq->fetchObj==NULL);
-			rq->fetchObj = new KStaticFetchObject();
-		}
 	}
 	return processRequest(rq);
 }
@@ -1284,7 +1301,7 @@ bool parse_url(const char *src, KUrl *url) {
 		p_len = sx - ss;
 	}
 	url->host = (char *) malloc(p_len + 1);
-	memcpy(url->host, ss, p_len);
+	kgl_memcpy(url->host, ss, p_len);
 	url->host[p_len] = 0;
 	only_path: const char *sp = strchr(sx, '?');
 	int path_len;
@@ -1307,7 +1324,7 @@ bool parse_url(const char *src, KUrl *url) {
 	}
 	url->path = (char *) xmalloc(path_len+1);
 	url->path[path_len] = '\0';
-	memcpy(url->path, sx, path_len);
+	kgl_memcpy(url->path, sx, path_len);
 	return true;
 }
 bool stageContentType(KHttpRequest *rq,KHttpObject *obj)
@@ -1323,6 +1340,7 @@ bool stageContentType(KHttpRequest *rq,KHttpObject *obj)
 	obj->insertHttpHeader2(strdup("Content-Type"),sizeof("Content-Type")-1, content_type,strlen(content_type));
 	return true;
 }
+
 bool make_http_env(KHttpRequest *rq, KBaseRedirect *brd,time_t lastModified,KFileName *file,KEnvInterface *env, bool chrooted) {
 	size_t skip_length = 0;
 	char tmpbuff[50];
@@ -1368,7 +1386,9 @@ bool make_http_env(KHttpRequest *rq, KBaseRedirect *brd,time_t lastModified,KFil
 			env->addHttpHeader((char *)"If-None-Match",rq->ctx->if_none_match->data);
 		}
 	}
+	timeLock.Lock();
 	env->addEnv("SERVER_SOFTWARE", conf.serverName);
+	timeLock.Unlock();
 	env->addEnv("GATEWAY_INTERFACE", "CGI/1.1");
 	env->addEnv("SERVER_NAME", rq->url->host);
 	env->addEnv("SERVER_PROTOCOL", "HTTP/1.1");
@@ -1425,7 +1445,7 @@ bool make_http_env(KHttpRequest *rq, KBaseRedirect *brd,time_t lastModified,KFil
 			if(pathInfoLength>0){
 				//有path info的情况下
 				char *scriptName = (char *)xmalloc(pathInfoLength+1);
-				memcpy(scriptName,rq->url->path,pathInfoLength);
+				kgl_memcpy(scriptName,rq->url->path,pathInfoLength);
 				scriptName[pathInfoLength] = '\0';
 				env->addEnv("SCRIPT_NAME",scriptName);
 				xfree(scriptName);
@@ -1465,9 +1485,14 @@ bool make_http_env(KHttpRequest *rq, KBaseRedirect *brd,time_t lastModified,KFil
 #ifdef KSOCKET_SSL
 	if (TEST(rq->raw_url.flags,KGL_URL_SSL)) {
 		env->addEnv("HTTPS", "ON");
-		SSL *ssl = rq->sink->GetSSL();
+		kssl_session *ssl = rq->sink->GetSSL();
 		if (ssl) {
-			make_ssl_env(env, ssl);
+#ifdef SSL_READ_EARLY_DATA_SUCCESS
+			if (ssl->in_early) {
+				env->addEnv("SSL_EARLY_DATA", "1");
+			}
+#endif
+			make_ssl_env(env, ssl->ssl);
 		}
 	}
 #endif
@@ -1488,7 +1513,7 @@ KTHREAD_FUNCTION stage_sync(void *param)
 }
 int checkResponse(KHttpRequest *rq,KHttpObject *obj)
 {
-	if (rq->IsWorkModel(WORK_MODEL_MANAGE) || rq->ctx->response_checked || rq->ctx->skip_access) {
+	if (TEST(rq->GetWorkModel(), WORK_MODEL_MANAGE) || rq->ctx->response_checked || rq->ctx->skip_access) {
 		return JUMP_ALLOW;
 	}
 	rq->ctx->response_checked = 1;

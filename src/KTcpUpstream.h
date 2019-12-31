@@ -33,6 +33,14 @@ public:
 	{
 		return this->cn;
 	}
+	void SetDelay()
+	{
+		ksocket_delay(cn->st.fd);
+	}
+	void SetNoDelay(bool forever)
+	{
+		ksocket_no_delay(cn->st.fd,forever);
+	}
 	void Shutdown()
 	{
 		selectable_shutdown(&cn->st);

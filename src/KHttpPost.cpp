@@ -102,7 +102,7 @@ bool KHttpPost::addData(const char *data,int len)
 	if(totalLen-used < len){
 		return false;
 	}
-	memcpy(hot,data,len);
+	kgl_memcpy(hot,data,len);
 	hot+=len;
 	return true;
 }

@@ -22,6 +22,7 @@
 /**
  * KHtmlSupport 异常类，发生异常时抛出
  */
+#if 0
 class KHtmlSupportException : public std::exception
 {
 public:
@@ -32,5 +33,5 @@ public:
 private:
 	std::string msg;
 };
-
+#endif
 #endif /*KHTMLSUPPORTEXCEPTION_H_*/

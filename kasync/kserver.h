@@ -36,6 +36,7 @@ struct kserver_s {
 #ifdef KSOCKET_SSL
 	SSL_CTX *ssl_ctx;
 	bool http2;
+	bool early_data;
 #endif
 	uint8_t flags;
 	uint8_t ssl : 1;

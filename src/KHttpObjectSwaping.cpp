@@ -30,16 +30,16 @@ kev_result swap_obj_result(KHttpRequest *rq, KHttpObject *obj, KHttpObjectBody *
 	if (result == swap_in_success) {
 		SET(obj->index.flags, FLAG_IN_MEM);
 	} else if (result != swap_in_busy) {
-		SET(obj->index.flags, FLAG_DEAD | OBJ_INDEX_UPDATE);
+		SET(obj->index.flags, FLAG_DEAD);
 	}
 	lock->Unlock();
 	if (result == swap_in_success) {
 		assert(obj->data->status_code > 0);
-		if (TEST(obj->index.flags, FLAG_BIG_OBJECT)) {
-			cache.getHash(obj->h)->incSize(obj->index.head_size);
-		} else {
-			cache.getHash(obj->h)->incSize(obj->index.content_length);
+		INT64 inc_size = obj->index.head_size;
+		if (obj->data->type == MEMORY_OBJECT) {
+			inc_size += obj->index.content_length;
 		}
+		cache.getHash(obj->h)->incSize(inc_size);
 	}
 	kev_result ret = osData->os->swapResult(rq,obj, result);
 	delete osData;
@@ -65,7 +65,102 @@ kev_result swapin_head_body_callback(kasync_file *fp, void *arg, char *buf, int 
 	KAsyncHttpObjectSwaping *os = (KAsyncHttpObjectSwaping *)arg;
 	return os->swapin_head_body_result(buf, got);
 }
+#ifdef ENABLE_BIG_OBJECT
+kev_result swapin_head_callback(kasync_file *fp, void *arg, char *buf, int got)
+{
+	KAsyncHttpObjectSwaping *os = (KAsyncHttpObjectSwaping *)arg;
+	return os->swapin_head_result(buf, got);
+}
+#endif
+#ifdef ENABLE_BIG_OBJECT_206
+kev_result swap_in_progress_callback(kasync_file *fp, void *arg, char *buf, int got)
+{
+	KAsyncHttpObjectSwaping *os = (KAsyncHttpObjectSwaping *)arg;
+	return os->swapin_progress_result(buf, got);
+}
 
+kev_result KAsyncHttpObjectSwaping::swapin_progress_result(char *buf, int got)
+{
+	if (got <= 0) {
+		return swapin_result(swap_in_failed_read);
+	}
+	offset += got;
+	buffer_left -= got;
+	hot = buf + got;
+	total_left -= got;
+	if (buffer_left > 0) {		
+		if (!kgl_selector_module.aio_read(rq->sink->GetSelector(), aio_file, hot, offset, buffer_left, swap_in_progress_callback, this)) {
+			return swapin_result(swap_in_failed_read);
+		}
+		return kev_ok;
+	}
+	if (!data->sbo->restore(buffer, buffer_size)) {
+		return swapin_result(swap_in_failed_parse);
+	}
+	return swapin_result(swap_in_success);
+}
+kev_result KAsyncHttpObjectSwaping::swapin_proress()
+{
+	kasync_file_close(aio_file);
+	aio_file = NULL;
+	offset = 0;
+	char *filename = obj->getFileName(true);
+	if (filename == NULL) {
+		return swapin_result(swap_in_failed_other);
+	}
+	FILE_HANDLE fp = kfopen(filename, fileRead, KFILE_ASYNC);
+	free(filename);
+	if (!kflike(fp)) {
+		return swapin_result(swap_in_failed_open);
+	}
+	aio_file = kgl_selector_module.aio_open(rq->sink->GetSelector(),fp);
+	if (aio_file == NULL) {
+		kfclose(fp);
+		return swapin_result(swap_in_failed_open);
+	}
+	int size = (int)kfsize(fp);
+	alloc_buffer(MIN(16384, size));
+	if (!kgl_selector_module.aio_read(rq->sink->GetSelector(), aio_file, buffer, 0, buffer_size, swap_in_progress_callback, this)) {
+		return swapin_result(swap_in_failed_read);
+	}
+	return kev_ok;
+}
+#endif
+#ifdef ENABLE_BIG_OBJECT
+kev_result KAsyncHttpObjectSwaping::swapin_head_result(char *buf, int got)
+{
+	//printf("swap_head_result buffer=[%p],buf=[%p],got=[%d]\n",buffer,buf,got);
+	if (got <= 0) {
+		return swapin_result(swap_in_failed_read);
+	}
+	offset += got;
+	buffer_left -= got;
+	hot = buf + got;
+	if (buffer_left > 0) {
+		if (!kgl_selector_module.aio_read(rq->sink->GetSelector(),aio_file, hot, offset, buffer_left, swapin_head_callback, this)) {
+			return swapin_result(swap_in_failed_read);
+		}
+		return kev_ok;
+	}
+	if (!data->restore_header(obj, buffer, buffer_size)) {
+		return swapin_result(swap_in_failed_parse);
+	}
+#ifdef ENABLE_BIG_OBJECT_206
+	if (data->type == BIG_OBJECT_PROGRESS) {
+		return swapin_proress();
+	}
+#endif
+	return swapin_result(swap_in_success);
+}
+kev_result KAsyncHttpObjectSwaping::swapin_head()
+{
+	this->alloc_buffer(obj->index.head_size);
+	if (!kgl_selector_module.aio_read(rq->sink->GetSelector(), aio_file, buffer, 0, buffer_size, swapin_head_callback, this)) {
+		return swapin_result(swap_in_failed_read);
+	}
+	return kev_ok;
+}
+#endif
 KAsyncHttpObjectSwaping::~KAsyncHttpObjectSwaping()
 {
 	if (aio_file) {
@@ -103,7 +198,7 @@ kev_result KAsyncHttpObjectSwaping::swapin_head_body_result(char *buf, int got)
 		kbuf *tmp = (kbuf *)malloc(sizeof(kbuf));
 		tmp->used = got;
 		tmp->data = (char *)malloc(got);
-		memcpy(tmp->data, buf, got);
+		kgl_memcpy(tmp->data, buf, got);
 		tmp->flags = 0;
 		tmp->next = NULL;
 		if (last == NULL) {

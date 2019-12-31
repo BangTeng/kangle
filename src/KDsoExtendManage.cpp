@@ -76,6 +76,6 @@ KRedirect *KDsoExtendManage::RefsRedirect(std::string &name)
 	}
 	std::string rd_name = name.substr(index + 1);
 	KRedirect *rd = (*it).second->RefsRedirect(rd_name);
-	lock.Unlock();	
+	lock.Unlock();
 	return rd; 
 }

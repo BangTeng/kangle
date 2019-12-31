@@ -31,9 +31,9 @@ public:
 		return false;
 	}
 	//返回头长度,-1表示出错
-	int StartResponseBody(bool sync, int64_t body_size)
+	int StartResponseBody(KHttpRequest *rq, int64_t body_size)
 	{
-		if (sync) {
+		if (rq->IsSync()) {
 			return http2->sync_send_header(ctx, body_size);
 		}
 		ctx->SetContentLength(body_size);
@@ -109,7 +109,11 @@ public:
 	void EndRequest(KHttpRequest *rq)
 	{
 		SET(rq->flags, RQ_CONNECTION_CLOSE);
-		http2->write_end(ctx);
+		if (unlikely(rq->ctx->body_not_complete)) {
+			http2->shutdown(ctx);
+		} else {
+			http2->write_end(ctx);
+		}
 		http2->release(ctx);
 #ifndef NDEBUG
 		ctx = NULL;
@@ -142,14 +146,6 @@ public:
 	void Flush()
 	{
 	}
-#ifdef KSOCKET_SSL
-	virtual SSL *GetSSL() {
-		if (http2->c->st.ssl) {
-			return http2->c->st.ssl->ssl;
-		}
-		return NULL;
-	}
-#endif
 #ifdef ENABLE_PROXY_PROTOCOL
 	const char *GetProxyIp()
 	{

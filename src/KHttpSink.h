@@ -36,7 +36,7 @@ public:
 		return buffer.used;
 	}
 	void StartHeader(KHttpRequest *rq);
-	int StartResponseBody(bool sync, int64_t body_size);
+	int StartResponseBody(KHttpRequest *rq, int64_t body_size);
 	bool IsLocked();
 	kev_result Write(void *arg, result_callback result, buffer_callback buffer);
 	kev_result Read(void *arg, result_callback result, buffer_callback buffer);
@@ -58,10 +58,13 @@ public:
 	{
 		selectable_remove_sync(&cn->st);
 	}
-	void Flush()
+	void SetDelay()
 	{
-		ksocket_no_delay(cn->st.fd);
 		ksocket_delay(cn->st.fd);
+	}
+	void SetNoDelay(bool forever)
+	{
+		ksocket_no_delay(cn->st.fd,forever);
 	}
 	void Shutdown()
 	{
@@ -97,14 +100,6 @@ public:
 	{
 		return dechunk;
 	}
-#ifdef KSOCKET_SSL
-	SSL *GetSSL() {
-		if (cn->st.ssl == NULL) {
-			return NULL;
-		}
-		return cn->st.ssl->ssl;
-	}
-#endif
 	void SkipPost(KHttpRequest *rq);
 	void StartPipeLine(KHttpRequest *rq);
 protected:

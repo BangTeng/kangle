@@ -110,6 +110,7 @@ inline void getRequestLine(int status,kgl_str_t *ret)
 		case 429:kgl_str_set(ret, "HTTP/1.1 429 Too Many Requests\r\n"); return; 
 		case 431:kgl_str_set(ret, "HTTP/1.1 431 Request Header Fields Too Large\r\n"); return;
 		case 451:kgl_str_set(ret, "HTTP/1.1 451 Unavailable For Legal Reasons\r\n"); return;
+		case 497:kgl_str_set(ret, "HTTP/1.1 497 Http to Https\r\n"); return;
 		case 498:kgl_str_set(ret, "HTTP/1.1 498 Invalid Token\r\n"); return;
 		case 499:kgl_str_set(ret, "HTTP/1.1 499 Token Required\r\n"); return;
 		//5XX

@@ -98,6 +98,7 @@
 #include "KUrlRangeMark.h"
 #include "KVaryMark.h"
 
+#include "KTcpFetchObject.h"
 #include "KQueueMark.h"
 #include "KPathSignMark.h"
 #include "KStubStatusMark.h"
@@ -384,34 +385,39 @@ int KAccess::check(KHttpRequest *rq, KHttpObject *obj) {
 	switch (jumpType) {
 	case JUMP_SERVER:
 	{
-		assert(rq->fetchObj == NULL);
+		assert(!rq->hasFinalFetchObject());
 		as = (KPoolableRedirect *)jump;
-		assert(rq->fetchObj == NULL);
-		rq->fetchObj = as->makeFetchObject(rq, NULL);
+		KFetchObject *fo = as->makeFetchObject(rq, NULL);
 		as->addRef();
-		KBaseRedirect *brd = new KBaseRedirect(as, KGL_CONFIRM_FILE_NEVER);
-		rq->fetchObj->bindBaseRedirect(brd);
-		brd->release();
-		jumpType = JUMP_ALLOW;	
+		fo->bindRedirect(as, KGL_CONFIRM_FILE_NEVER);
+		rq->appendFetchObject(fo);
+		jumpType = JUMP_ALLOW;
 		break;
 	}
 #ifdef ENABLE_WRITE_BACK
 	case JUMP_WBACK:
 		if (jump) {
-			KWriteBack *wb = (KWriteBack *) jump;
+			KWriteBack *wb = (KWriteBack *)jump;
 			wb->buildRequest(rq);
 		}
 		jumpType = JUMP_DENY;
 		break;
 #endif
 	case JUMP_PROXY:
-		assert(rq->fetchObj==NULL);
+		assert(!rq->hasFinalFetchObject());
 #ifdef HTTP_PROXY
-		if (rq->meth == METH_CONNECT) 
-			rq->fetchObj = new KConnectProxyFetchObject();
-		else 
+		if (rq->meth == METH_CONNECT) {
+			rq->appendFetchObject(new KConnectProxyFetchObject());
+			break;
+		}
 #endif
-		rq->fetchObj = new KHttpProxyFetchObject();
+#ifdef ENABLE_PROXY_PROTOCOL
+		if (TEST(rq->GetWorkModel(), WORK_MODEL_PROXY|WORK_MODEL_SSL_PROXY)) {
+			rq->appendFetchObject(new KTcpFetchObject(false));
+			break;
+		}
+#endif
+		rq->appendFetchObject(new KHttpProxyFetchObject());
 		break;
 	}
 	lock.RUnlock();

@@ -136,7 +136,7 @@ std::string KMultiHostAcl::getHtml(KModel *model) {
 	return s.str();
 }
 void KMultiHostAcl::editHtml(std::map<std::string, std::string> &attibute)
-		throw (KHtmlSupportException) {
+		 {
 	if (attibute["file"].size() > 0) {
 		file = attibute["file"];
 	}

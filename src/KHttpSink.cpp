@@ -1,7 +1,7 @@
 #include "KHttpSink.h"
 #include "KHttpRequest.h"
 #include "kbuf.h"
-
+#include "http.h"
 
 #define MAX_HTTP_CHUNK_SIZE 8192
 static int buffer_write_http_sink(void *arg, LPWSABUF buf, int bc)
@@ -70,7 +70,8 @@ kev_result result_read_http_sink(void *arg, int got)
 		return kev_destroy;
 	}
 	KHttpSink *sink = static_cast<KHttpSink *>(rq->sink);
-	ks_write_success(&sink->buffer, got);
+	//fwrite(sink->buffer.buf+sink->buffer.used, 1, got, stdout);
+	ks_write_success(&sink->buffer, got);	
 	return sink->Parse(rq);
 }
 
@@ -82,6 +83,26 @@ int buffer_read_http_sink(void *arg, LPWSABUF buf, int bufCount)
 	//printf("buf_len=[%d]\n", buf[0].len);
 	return bc;
 }
+#ifdef KSOCKET_SSL	
+kev_result handle_http2https_error(KHttpRequest *rq)
+{
+	SET(rq->flags, RQ_CONNECTION_CLOSE);
+	if (conf.http2https_code == 0 || rq->raw_url.IsBad()) {
+		return send_error(rq, NULL, STATUS_HTTP_TO_HTTPS, "send http to https port");
+	}
+	sockaddr_i addr;
+	if (!rq->sink->GetSelfAddr(&addr)) {
+		return send_error(rq, NULL, STATUS_HTTP_TO_HTTPS, "send http to https port");
+	}
+	KStringBuf s;
+	s << "https://";
+	rq->raw_url.GetHost(s, 443);
+	rq->raw_url.GetPath(s, false);
+	push_redirect_header(rq, s.getBuf(), s.getSize(), conf.http2https_code);
+	rq->startResponseBody(0);
+	return stageEndRequest(rq);
+}
+#endif
 kev_result KHttpSink::ResultResponseContext(int got)
 {
 	buffer_callback buffer = rc->buffer;
@@ -138,9 +159,6 @@ kev_result KHttpSink::Parse(KHttpRequest *rq)
 		//printf("len=[%d],result=[%d]\n", len,result);
 		//fwrite(hot, 1, len, stdout);
 		switch (result) {
-		case kgl_parse_error:
-			delete rq;
-			return kev_destroy;
 		case kgl_parse_continue:
 		{
 			if (kgl_current_msec - rq->begin_time_msec > conf.time_out * 2000) {
@@ -170,7 +188,16 @@ kev_result KHttpSink::Parse(KHttpRequest *rq)
 			}
 			//printf("***************body_len=[%d]\n", parser.body_len);
 			rc = new KResponseContext(rq->pool);
-			return handleStartRequest(rq, 0);
+#ifdef KSOCKET_SSL	
+			//kconnection *cn = rq->sink->GetConnection();
+			if (cn->server->ssl_ctx && cn->st.ssl == NULL) {
+				return handle_http2https_error(rq);
+			}
+#endif
+			return handleStartRequest(rq, parser.header_len);
+		default:
+			delete rq;
+			return kev_destroy;
 		}
 	}
 }
@@ -180,26 +207,28 @@ bool KHttpSink::ResponseHeader(const char *name, int name_len, const char *val, 
 	int len = name_len + val_len + 4;
 	char *buf = (char *)kgl_pnalloc(rc->ab.pool,len);
 	char *hot = buf;
-	memcpy(hot, name, name_len);
+	kgl_memcpy(hot, name, name_len);
 	hot += name_len;
-	memcpy(hot, ": ", 2);
+	kgl_memcpy(hot, ": ", 2);
 	hot += 2;
-	memcpy(hot, val, val_len);
+	kgl_memcpy(hot, val, val_len);
 	hot += val_len;
-	memcpy(hot, "\r\n", 2);
+	kgl_memcpy(hot, "\r\n", 2);
 	rc->head_append(buf, len);
 	return true;
 }
-int KHttpSink::StartResponseBody(bool sync,int64_t body_size)
+int KHttpSink::StartResponseBody(KHttpRequest *rq,int64_t body_size)
 {
 	if (rc == NULL) {
 		return 0;
 	}
-	ksocket_delay(cn->st.fd);
+	if (!rq->ctx->connection_upgrade) {
+		ksocket_delay(cn->st.fd);
+	}
 	rc->head_append_const("\r\n", 2);
 	rc->SwitchRead();
 	int header_len = rc->GetLen();
-	if (sync) {
+	if (rq->IsSync()) {
 		WSABUF buf[64];
 		for (;;) {			
 			int bc = rc->GetReadBuffer(buf, 64);
@@ -228,7 +257,7 @@ int KHttpSink::Read(char *buf, int len)
 	kassert(dechunk == NULL);
 	if (buffer.used > 0) {
 		len = MIN(len, buffer.used );
-		memcpy(buf, buffer.buf, len);
+		kgl_memcpy(buf, buffer.buf, len);
 		ks_save_point(&buffer, buffer.buf + len, buffer.used - len);
 		return len;
 	}
@@ -261,7 +290,7 @@ kev_result KHttpSink::Read(void *arg,result_callback result, buffer_callback buf
 		int bc = buffer(arg, &buf, 1);
 		kassert(bc == 1);
 		int len = MIN((int)buf.iov_len, this->buffer.used);
-		memcpy(buf.iov_base, this->buffer.buf, len);
+		kgl_memcpy(buf.iov_base, this->buffer.buf, len);
 		ks_save_point(&this->buffer, this->buffer.buf + len, this->buffer.used - len);
 		return result(arg, len);
 	}
@@ -278,7 +307,7 @@ void KHttpSink::EndRequest(KHttpRequest *rq)
 		delete rq;
 		return;
 	}
-	ksocket_no_delay(cn->st.fd);
+	ksocket_no_delay(cn->st.fd,false);
 	kassert(buffer.buf_size > 0);
 	if (rq->left_read != 0 && !TEST(rq->flags, RQ_HAVE_EXPECT)) {
 		//still have data to read
@@ -298,6 +327,7 @@ void KHttpSink::SkipPost(KHttpRequest *rq)
 	int skip_len = (int)(MIN(rq->left_read, (INT64)buffer.used));
 	ks_save_point(&buffer, buffer.buf + skip_len, buffer.used - skip_len);
 	rq->left_read -= skip_len;
+	rq->AddUpFlow((INT64)skip_len);
 	if (rq->left_read <= 0) {
 		StartPipeLine(rq);
 		return;

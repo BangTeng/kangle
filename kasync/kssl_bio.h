@@ -12,6 +12,7 @@ typedef struct {
 	void *arg;
 	int got;
 } kssl_bio;
+void kgl_bio_init_method();
 BIO_METHOD *BIO_kgl_method();
 kev_result result_ssl_bio_read(void *arg, int got);
 int  buffer_ssl_bio_read(void *arg, LPWSABUF buf, int bufCount);

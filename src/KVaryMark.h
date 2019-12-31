@@ -60,8 +60,7 @@ public:
 		s << vary.getModel();
 		return s.str();
 	}
-	void editHtml(std::map<std::string,std::string> &attibute)
-		throw(KHtmlSupportException) {
+	void editHtml(std::map<std::string,std::string> &attibute){
 		if (attr) {
 			free(attr);
 		}

@@ -61,7 +61,6 @@ public:
 		return s.str();
 	}
 	void editHtml(std::map<std::string, std::string> &attibute)
-		throw (KHtmlSupportException)
 	{
 		if (vhc) {
 			delete vhc;

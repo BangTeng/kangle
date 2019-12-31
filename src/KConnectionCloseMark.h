@@ -26,7 +26,7 @@ public:
 		return s.str();
 	}
 	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+			 {
 	}
 	void buildXML(std::stringstream &s) {
 		s << ">";

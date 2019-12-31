@@ -65,7 +65,7 @@ static KGL_RESULT WINAPI  ServerSupportFunction (
 				rq->tf->init(left_read);
 				int size = strlen(ctx);
 				char *arg = (char *)rq->alloc_request_memory(size + 1);
-				memcpy(arg, ctx, size + 1);
+				kgl_memcpy(arg, ctx, size + 1);
 				if (rq->tf->post_ctx == NULL) {
 					rq->tf->post_ctx = new KTempFilePostContext;
 				}

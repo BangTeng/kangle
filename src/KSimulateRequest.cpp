@@ -65,7 +65,9 @@ int asyncHttpRequest(kgl_async_http *ctx)
 	}
 	if (!user_agent) {
 		//add default user-agent header
+		timeLock.Lock();
 		rq->ParseHeader(kgl_expand_string("User-Agent"), conf.serverName, conf.serverNameLength, false);
+		timeLock.Unlock();
 	}
 	rq->sink = ss;
 	rq->ctx->simulate = 1;
@@ -115,7 +117,7 @@ int WINAPI test_body_hook(void *arg,const char *data,int len)
 }
 int WINAPI test_post_hook(void *arg,char *buf,int len)
 {
-	memcpy(buf,"test",4);
+	kgl_memcpy(buf,"test",4);
 	return 4;
 }
 static void WINAPI timer_simulate(void *arg)
@@ -146,7 +148,7 @@ KSimulateSink::~KSimulateSink()
 }
 void KSimulateSink::EndRequest(KHttpRequest *rq)
 {
-	exptected_done = rq->ctx->expected_done;
+	exptected_done = !rq->ctx->body_not_complete;
 	delete rq;
 }
 typedef struct {

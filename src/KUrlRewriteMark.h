@@ -86,7 +86,6 @@ public:
 		return s.str();
 	}
 	void editHtml(std::map<std::string, std::string> &attribute)
-			throw (KHtmlSupportException)
 	{
 		icase = (attribute["icase"]=="1");
 		if (attribute["nc"].size()>0) {

@@ -39,7 +39,7 @@ public:
 		return s.str();
 	}
 	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+			 {
 		code = atoi(attibute["code"].c_str());
 	}
 	void buildXML(std::stringstream &s) {

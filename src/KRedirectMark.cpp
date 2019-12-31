@@ -97,7 +97,7 @@ std::string KRedirectMark::getDisplay() {
 	return s.str();
 }
 void KRedirectMark::editHtml(std::map<std::string, std::string> &attribute)
-		throw (KHtmlSupportException) {
+		 {
 	if (dst) {
 		xfree(dst);
 	}

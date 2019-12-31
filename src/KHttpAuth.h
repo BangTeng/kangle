@@ -89,6 +89,17 @@ public:
 	{
 		this->auth_header = auth_header;
 	}
+	uint16_t GetStatusCode()
+	{
+		switch (auth_header) {
+		case AUTH_HEADER_WEB:
+			return STATUS_UNAUTH;
+		case AUTH_HEADER_PROXY:
+			return STATUS_PROXY_UNAUTH;
+		default:
+			return AUTH_STATUS_CODE;
+		}
+	}
 	friend class KAuthMark;
 protected:
 	const char *get_auth_header()

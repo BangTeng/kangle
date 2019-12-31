@@ -150,13 +150,14 @@ am_kangle_OBJECTS = cache.$(OBJEXT) KConfig.$(OBJEXT) \
 	KHttpParser.$(OBJEXT) KTcpUpstream.$(OBJEXT) KSink.$(OBJEXT) \
 	KPreRequest.$(OBJEXT) KBufferFetchObject.$(OBJEXT) \
 	KSSLSniContext.$(OBJEXT) KHttpSink.$(OBJEXT) \
-	KAccessDsoSupport.$(OBJEXT) KDsoExtendManage.$(OBJEXT) \
-	KDsoExtend.$(OBJEXT) KDsoRedirect.$(OBJEXT) \
-	KDsoAsyncFetchObject.$(OBJEXT) KTsUpstream.$(OBJEXT) \
-	KDechunkContext.$(OBJEXT) KDechunkEngine.$(OBJEXT) \
-	../kasync/kaddr.$(OBJEXT) ../kasync/kfile.$(OBJEXT) \
-	../kasync/kmalloc_debug.$(OBJEXT) ../kasync/kserver.$(OBJEXT) \
-	../kasync/kasync_file.$(OBJEXT) ../kasync/kgl_ssl.$(OBJEXT) \
+	KDiskCacheStream.$(OBJEXT) KAccessDsoSupport.$(OBJEXT) \
+	KDsoExtendManage.$(OBJEXT) KDsoExtend.$(OBJEXT) \
+	KDsoRedirect.$(OBJEXT) KDsoAsyncFetchObject.$(OBJEXT) \
+	KTsUpstream.$(OBJEXT) KDechunkContext.$(OBJEXT) \
+	KDechunkEngine.$(OBJEXT) ../kasync/kaddr.$(OBJEXT) \
+	../kasync/kfile.$(OBJEXT) ../kasync/kmalloc_debug.$(OBJEXT) \
+	../kasync/kserver.$(OBJEXT) ../kasync/kasync_file.$(OBJEXT) \
+	../kasync/kgl_ssl.$(OBJEXT) \
 	../kasync/kmalloc_debug_win32.$(OBJEXT) \
 	../kasync/ksocket.$(OBJEXT) ../kasync/kasync_worker.$(OBJEXT) \
 	../kasync/krbtree.$(OBJEXT) ../kasync/kssl_bio.$(OBJEXT) \
@@ -231,14 +232,14 @@ OBJEXT = o
 PACKAGE = kangle
 PACKAGE_BUGREPORT = 
 PACKAGE_NAME = kangle
-PACKAGE_STRING = kangle 3.5.16
+PACKAGE_STRING = kangle 3.5.18
 PACKAGE_TARNAME = kangle
-PACKAGE_VERSION = 3.5.16
+PACKAGE_VERSION = 3.5.18
 PATH_SEPARATOR = :
 SET_MAKE = 
 SHELL = /bin/sh
 STRIP = 
-VERSION = 3.5.16
+VERSION = 3.5.18
 abs_builddir = /home/keengo/kangle/src
 abs_srcdir = /home/keengo/kangle/src
 abs_top_builddir = /home/keengo/kangle
@@ -505,7 +506,7 @@ KDechunkEngine.h KHttpEnv.h KHuffDecode.cpp KHttp2.h KHttp2.cpp KHttp2Table.cpp 
 KGeoMark.cpp KLogDrill.cpp KGeoMark.h KLogDrill.h KQueueMark.h KQueueMark.cpp KHttpObjectSwaping.cpp KHttpObjectSwaping.h\
 KMapRedirectMark.cpp KMapRedirectMark.h KProxy.cpp KProxy.h KConnectionLimit.h KConnectionLimit.cpp\
 KAutoBuffer.cpp KAutoBuffer.h KHttpResponseParser.cpp KHttpResponseParser.h KHttpParser.cpp KTcpUpstream.cpp KTcpUpstream.h KSink.cpp KSink.h KPreRequest.cpp KPreRequest.h \
-KBufferFetchObject.cpp KBufferFetchObject.h KSSLSniContext.cpp KHttpSink.cpp KHttpSink.h KHttp2Sink.h\
+KBufferFetchObject.cpp KBufferFetchObject.h KSSLSniContext.cpp KHttpSink.cpp KHttpSink.h KHttp2Sink.h KDiskCacheStream.cpp  KDiskCacheStream.h\
 KAccessDsoSupport.cpp KDsoExtendManage.cpp KDsoExtend.cpp KDsoExtend.h KDsoRedirect.cpp KDsoRedirect.h KDsoAsyncFetchObject.cpp KDsoAsyncFetchObject.h KTsUpstream.cpp KTsUpstream.h KDechunkContext.cpp KDechunkEngine.cpp\
 ../kasync/kaddr.c            ../kasync/kfile.c           ../kasync/kmalloc_debug.c        ../kasync/kserver.c\
 ../kasync/kasync_file.c      ../kasync/kgl_ssl.c         ../kasync/kmalloc_debug_win32.c  ../kasync/ksocket.c\
@@ -853,6 +854,7 @@ include ./$(DEPDIR)/KDechunkEngine.Po
 include ./$(DEPDIR)/KDirectoryFetchObject.Po
 include ./$(DEPDIR)/KDiskCache.Po
 include ./$(DEPDIR)/KDiskCacheIndex.Po
+include ./$(DEPDIR)/KDiskCacheStream.Po
 include ./$(DEPDIR)/KDsoAsyncFetchObject.Po
 include ./$(DEPDIR)/KDsoExtend.Po
 include ./$(DEPDIR)/KDsoExtendManage.Po

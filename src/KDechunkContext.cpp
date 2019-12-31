@@ -97,7 +97,7 @@ kev_result KDechunkContext::ReadChunk(KHttpSink *sink)
 		kassert(bc == 1);
 		len = MIN((int)buf.iov_len, chunk_left);
 		if (len > 0) {
-			memcpy(buf.iov_base, chunk, len);
+			kgl_memcpy(buf.iov_base, chunk, len);
 			chunk_left -= len;
 			chunk += len;
 			if (raw_read) {

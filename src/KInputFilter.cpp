@@ -47,14 +47,14 @@ int KInputFilter::check(KInputFilterContext *rq,const char *str,int len,bool isL
 	if (last_buf) {
 		int new_len = last_buf_len + len;
 		buf = (char *)malloc(new_len + 1);
-		memcpy(buf,last_buf,last_buf_len);
-		memcpy(buf+last_buf_len,str,len);
+		kgl_memcpy(buf,last_buf,last_buf_len);
+		kgl_memcpy(buf+last_buf_len,str,len);
 		len = new_len;
 		free(last_buf);
 		last_buf = NULL;
 	} else {
 		buf = (char *)malloc(len + 1);
-		memcpy(buf,str,len);
+		kgl_memcpy(buf,str,len);
 	}
 	buf[len] = '\0';
 	char *hot = buf;
@@ -179,11 +179,11 @@ bool KInputFilterContext::parseBoundary(char *val)
 	mb = new multipart_buffer;
 	mb->boundary = (char *)malloc(boundary_len+3);
 	mb->boundary[0] = mb->boundary[1] = '-';
-	memcpy(mb->boundary+2,hot,boundary_len);
+	kgl_memcpy(mb->boundary+2,hot,boundary_len);
 	mb->boundary[boundary_len+2] = '\0';
 	mb->boundary_next = (char *)malloc(boundary_len+4);
 	mb->boundary_next[0] = '\n';
-	memcpy(mb->boundary_next+1,mb->boundary,boundary_len+2);
+	kgl_memcpy(mb->boundary_next+1,mb->boundary,boundary_len+2);
 	mb->boundary_next_len = boundary_len+3;
 	mb->boundary_next[mb->boundary_next_len] = '\0';
 	return true;

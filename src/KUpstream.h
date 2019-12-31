@@ -37,7 +37,7 @@ public:
 	{
 
 	}
-	virtual void SetNoDelay()
+	virtual void SetNoDelay(bool forever)
 	{
 	}
 	virtual kev_result Connect(void *arg, result_callback result)

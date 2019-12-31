@@ -82,7 +82,6 @@ public:
 		return s.str();
 	}
 	void editHtml(std::map<std::string, std::string> &attribute)
-			throw (KHtmlSupportException)
 	{	
 		icase = atoi(attribute["icase"].c_str());
 		if (attribute["filename"].size() > 0) {

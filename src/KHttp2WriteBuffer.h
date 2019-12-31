@@ -111,7 +111,7 @@ public:
 			int chunk_len = len;
 			char *buf = alloc_buffer(chunk_len);
 			len -= chunk_len;
-			memcpy(buf, str, chunk_len);
+			kgl_memcpy(buf, str, chunk_len);
 			str += chunk_len;
 		}
 	}
@@ -124,7 +124,7 @@ public:
 		http2_buff *buf = new http2_buff;
 		buf->data = (char *)xmalloc(len);
 		buf->used = len;
-		memcpy(buf->data, str, len);
+		kgl_memcpy(buf->data, str, len);
 		buf->next = head;
 		head = buf;
 	}
@@ -284,7 +284,7 @@ private:
 				return;
 			}
 			tcp_cork = 0;
-			ksocket_no_delay(fd);
+			ksocket_no_delay(fd,false);
 		}
 	}
 #endif

@@ -79,10 +79,6 @@ public:
 		state = 0;
 	}
 };
-/*
- * 简单xml解析器: 作者:康鸿九(khj99@tom.com)
- * 注意: 目前还不支持全部xml语法(一般用来读取配置文件)
- */
 class KXml {
 public:
 	/**
@@ -106,14 +102,14 @@ public:
 	/*
 	 * 开始解析文件
 	 */
-	bool parseFile(std::string file) throw (KXmlException);
+	bool parseFile(std::string file);
 	/*
 	 * 开始解析一个字符串
 	 */
-	bool parseString(const char *buf) throw (KXmlException);
+	bool parseString(const char *buf);
 	KXml();
 	~KXml();
-	bool startParse(char * buf) throw (KXmlException);
+	bool startParse(char * buf);
 	void setData(void *data)
 	{
 		this->data = data;
@@ -151,7 +147,7 @@ private:
 	//KXmlEvent *event;
 	std::list<KXmlEvent *> events;
 	friend class KXmlContext;
-	bool internelParseString(char *buf) throw (KXmlException);
+	bool internelParseString(char *buf);
 	void clear();
 	void startXml(const std::string &encoding) {
 		std::list<KXmlEvent *>::iterator it;

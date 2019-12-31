@@ -73,7 +73,7 @@ void KConfig::copy(KConfig *c)
 {
 	//把cconf赋值到conf中
 	KConfigBase *bc = static_cast<KConfigBase *>(this);
-	memcpy(bc,static_cast<KConfigBase *>(c),sizeof(KConfigBase));
+	kgl_memcpy(bc,static_cast<KConfigBase *>(c),sizeof(KConfigBase));
 	conf.admin_lock.Lock();
 	this->admin_ips.swap(c->admin_ips);
 	this->admin_user = c->admin_user;
@@ -408,7 +408,7 @@ bool load_config_file(KFileName *file,int inclevel,KStringBuf &s,int &id,bool &m
 			break;
 		}
 		char *incfilename = (char *)xmalloc(filelen+1);
-		memcpy(incfilename,p,filelen);
+		kgl_memcpy(incfilename,p,filelen);
 		incfilename[filelen] = '\0';
 		for(int i=filelen-1;i>0;i--){
 			if(!isspace((unsigned char)incfilename[i])){
@@ -577,9 +577,17 @@ void do_config(bool first_time) {
 		//first time load must not use thread
 		do_config_thread((void *)&first_time);
 		return;
-	}	
+	}
 	if (!kthread_pool_start(do_config_thread, NULL)) {
 		katom_set((void *)&load_config_progress, 0);
+	}
+}
+void wait_load_config_done() {
+	for (;;) {
+		if (0 == katom_get((void *)&load_config_progress)) {
+			break;
+		}
+		my_msleep(50);
 	}
 }
 int merge_apache_config(const char *filename)
@@ -711,6 +719,21 @@ void load_config(KConfig *cconf,bool firstTime)
 	}
 	cur_config_ext = false;
 }
+void parse_server_software()
+{
+	//生成serverName
+	timeLock.Lock();
+	if (*conf.server_software) {
+		SAFE_STRCPY(conf.serverName, conf.server_software);
+	} else {
+		std::string serverName = PROGRAM_NAME;
+		serverName += "/";
+		serverName += VERSION;
+		SAFE_STRCPY(conf.serverName, serverName.c_str());
+	}
+	conf.serverNameLength = strlen(conf.serverName);
+	timeLock.Unlock();
+}
 //解析配置文件,调用完load_config之后，对一些项目，解析处理，实施
 void parse_config(bool firstTime)
 {
@@ -735,18 +758,9 @@ void parse_config(bool firstTime)
 	} else {
 		conf.diskWorkTime.set(NULL);
 	}
+	parse_server_software();
 	if (firstTime) {
 		//第一次才生效
-		//生成serverName
-		if (*conf.server_software) {
-			SAFE_STRCPY(conf.serverName ,conf.server_software);
-		} else {
-			std::string serverName = PROGRAM_NAME;
-			serverName += "/";
-			serverName += VERSION;
-			SAFE_STRCPY(conf.serverName,serverName.c_str());
-		}
-		conf.serverNameLength = strlen(conf.serverName);
 		//生成disk_cache_dir
 		if (*conf.disk_cache_dir2) {
 			string disk_cache_dir = conf.disk_cache_dir2;

@@ -141,7 +141,7 @@ std::string KCloudIpAcl::getDisplay()
 	lock.Unlock();
 	return s.str();
 }
-void KCloudIpAcl::editHtml(std::map<std::string, std::string> &attibute) throw (KHtmlSupportException)
+void KCloudIpAcl::editHtml(std::map<std::string, std::string> &attibute) 
 {
 	lock.Lock();
 	url = attibute["url"];

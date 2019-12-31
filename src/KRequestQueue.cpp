@@ -113,7 +113,6 @@ bool KRequestQueue::start(KHttpRequest *rq)
 	bool result = false;
 	SET(rq->flags,RQ_QUEUED);
 	bool startResult = false;
-	rq->ctx->queue_handled = true;
 	refsLock.Lock();
 	if (rq->queue != NULL) {
 		assert(rq->queue == this);
@@ -125,6 +124,7 @@ bool KRequestQueue::start(KHttpRequest *rq)
 		refs ++;
 		cur_worker ++;
 		startResult = true;
+		rq->ctx->queue_handled = true;
 	} else {
 		if(max_queue == 0 || queue.size() < max_queue){
 			//printf("add to queue..............\n");
@@ -134,6 +134,7 @@ bool KRequestQueue::start(KHttpRequest *rq)
 			rq->setState(STATE_QUEUE);
 			queue.push_back(rq);
 			result = true;
+			rq->ctx->queue_handled = true;
 			if(!TEST(rq->flags,RQ_SYNC)){
 				//in queue
 				rq->sink->AddSync();
@@ -145,6 +146,7 @@ bool KRequestQueue::start(KHttpRequest *rq)
 		result = startDirect(rq);
 		if (!result) {
 			rq->queue = NULL;
+			rq->ctx->queue_handled = false;
 			refsLock.Lock();
 			refs --;
 			cur_worker --;

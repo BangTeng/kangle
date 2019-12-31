@@ -77,7 +77,7 @@ StreamState KGzipCompress::write_end()
 	}
 	if (used + 8 > CHUNK || !fast) {
 		char *buf = (char *) xmalloc(used+8);
-		memcpy(buf, out, used);
+		kgl_memcpy(buf, out, used);
 		xfree(out);
 		out = buf;
 	}
@@ -195,7 +195,7 @@ StreamState KGzipDecompress::write_end()
 	if (used > 0 && out) {
 		if(!fast && CHUNK-used > 64){
 			char *new_out = (char *)xmalloc(used);
-			memcpy(new_out,out,used);
+			kgl_memcpy(new_out,out,used);
 			xfree(out);
 			out = new_out;
 		}

@@ -14,7 +14,7 @@ static KGL_RESULT WINAPI  GetHeader (
 		if (is_attr(header,lpszName)) {
 			DWORD len = strlen(header->val) + 1;
 			*lpdwSize = MIN(*lpdwSize,len);
-			memcpy(lpvBuffer,header->val,*lpdwSize);
+			kgl_memcpy(lpvBuffer,header->val,*lpdwSize);
 			return KGL_OK;
 		}
 		header = header->next;

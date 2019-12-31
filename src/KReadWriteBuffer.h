@@ -110,7 +110,7 @@ public:
 		kbuf *buf = (kbuf *)malloc(sizeof(kbuf));
 		buf->flags = 0;
 		buf->data = (char *)malloc(len);
-		memcpy(buf->data, str, len);
+		kgl_memcpy(buf->data, str, len);
 		buf->used = len;
 		insertBuffer(buf);
 	}
@@ -122,7 +122,7 @@ protected:
 		char *t = getWriteBuffer(wlen);
 		assert(t);
 		wlen = MIN(len, wlen);
-		memcpy(t, buf, wlen);
+		kgl_memcpy(t, buf, wlen);
 		writeSuccess(wlen);
 		return wlen;
 	}

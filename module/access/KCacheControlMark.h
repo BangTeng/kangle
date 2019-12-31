@@ -69,8 +69,7 @@ public:
 		}
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute){
 		max_age = atoi(attibute["max_age"].c_str());
 		if(attibute["static"]=="on" || attibute["static"]=="1"){
 			staticUrl = true;
@@ -206,8 +205,7 @@ public:
 		}
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-		throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute){
 		max_age = atoi(attibute["max_age"].c_str());
 		soft = (attibute["soft"] == "1");
 		lastModified = (attibute["last_modified"] == "1");

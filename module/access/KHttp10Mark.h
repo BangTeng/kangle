@@ -34,7 +34,7 @@ public:
 	{
 		return "";
 	}
-	void editHtml(std::map<std::string, std::string> &attribute) throw (KHtmlSupportException)
+	void editHtml(std::map<std::string, std::string> &attribute)
 	{
 	}
 	void buildXML(std::stringstream &s)

@@ -20,8 +20,7 @@ public:
 		}
 		return s.str();
 	}
-	void editHtml(std::map<std::string,std::string> &attibute)
-			throw(KHtmlSupportException) {
+	void editHtml(std::map<std::string,std::string> &attibute) {
 		flag=0;
 		const char *flagStr=attibute["flag"].c_str();
 		char *buf = strdup(flagStr);

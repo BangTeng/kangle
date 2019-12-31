@@ -80,8 +80,7 @@ public:
 		s << getValList();
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute){
 		freeMap();
 		if(icase_can_change){
 			if (attibute["icase"] == "1") {

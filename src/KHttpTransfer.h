@@ -28,13 +28,9 @@
 #include "KGzip.h"
 #include "KSendable.h"
 #include "KChunked.h"
+#include "KCacheStream.h"
 
-enum cache_model
-{
-	cache_none,
-	cache_memory,
-	//cache_disk
-};
+
 /*
  * This class use to transfer data to client
  * It support compress(use gzip) and chunk transfer encoding.
@@ -48,8 +44,8 @@ enum cache_model
  gzip压缩-->
  缓存数据-->
  chunked发送-->
- 限速发送-->
- socket
+ socket-->
+ write hook
  */
 class KHttpTransfer: public KHttpStream {
 public:
@@ -76,11 +72,9 @@ public:
 	KHttpObject *obj;
 	KReadWriteBuffer buffer;
 private:
-	bool loadStream();
-	bool gzip_layer;
+	bool loadStream(bool gzip_layer, cache_model cache_layer);
 	bool isHeadSend;
-	bool responseChecked;
-	cache_model cache_layer;
+
 };
 
 #endif /* KHTTPTRANSFER_H_ */

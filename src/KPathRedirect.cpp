@@ -43,7 +43,7 @@ KPathRedirect::KPathRedirect(const char *path, KRedirect *rd) : KBaseRedirect(rd
 	this->path = (char *)xmalloc(path_len + 1);
 	hot = this->path;
 	this->path_len = path_len;
-	memcpy(hot, path, path_len);
+	kgl_memcpy(hot, path, path_len);
 	hot[path_len] = '\0';
 	if (*path == '~') {
 		reg = new KReg;

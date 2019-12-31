@@ -70,8 +70,7 @@ public:
 		s << params.getModel();
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute){
 		raw = (attibute["raw"]=="1");
 		nc = (attibute["nc"]=="1");
 		const char *param = attibute["params"].c_str();

@@ -195,7 +195,8 @@ bool KTcpUpstream::BuildHttpHeader(KHttpRequest *rq, KWStream *s)
 		insert_via(rq, *s, NULL);
 	}
 	if (TEST(rq->filter_flags, RF_X_REAL_IP)) {
-		s->WSTR("X-Real-IP: ");
+		s->WSTR(X_REAL_IP_HEADER);
+		s->WSTR(": ");
 		*s << rq->getClientIp();
 		s->WSTR("\r\n");
 		if (TEST(rq->raw_url.flags, KGL_URL_SSL)) {

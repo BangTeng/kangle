@@ -53,6 +53,7 @@ public:
 	{
 		brd = NULL;
 		flags = 0;
+		next = NULL;
 	}
 	virtual ~KFetchObject()
 	{
@@ -70,12 +71,6 @@ public:
 		kassert(false);
 		return kev_err;
 	}
-#ifdef WORK_MODEL_TCP
-	virtual bool isPipeLine()
-	{
-		return false;
-	}
-#endif
 	//通知读完了body
 	virtual void readBodyEnd(KHttpRequest *rq)
 	{
@@ -101,6 +96,11 @@ public:
 	{
 		return closed;
 	}
+	void bindRedirect(KRedirect *rd,uint8_t confirmFile)
+	{
+		kassert(this->brd == NULL);
+		this->brd = new KBaseRedirect(rd, confirmFile);
+	}
 	void bindBaseRedirect(KBaseRedirect *brd)
 	{
 		kassert(this->brd==NULL);
@@ -114,14 +114,19 @@ public:
 		return brd;
 	}
 	virtual KFetchObject *clone(KHttpRequest *rq);
-	virtual bool needTempFile()
-	{
-		return true;
-	}
+	virtual bool NeedTempFile(bool upload, KHttpRequest *rq);
 	bool IsChunkPost()
 	{
 		return chunk_post;
 	}
+	union {
+		struct {
+			uint32_t closed : 1;
+			uint32_t chunk_post : 1;
+			uint32_t filter : 1;
+		};
+		uint32_t flags;
+	};
 #ifdef ENABLE_REQUEST_QUEUE
 	//此数据源是否需要队列功能。对于本地数据不用该功能。
 	//对于上游数据和动态的则返回true
@@ -131,23 +136,14 @@ public:
 	}
 #endif
 	StreamState PushBody(KHttpRequest *rq, const char *buf, int len);
+	KFetchObject *next;
 protected:
-	void setClosed(bool closed)
-	{
-		this->closed = closed;
-	}
 	KBaseRedirect *brd;
 	/*
 	处理已经从upstream读到的数据，返回true,继续读取，false则不继续读，表示已经有数据可以发到rq
 	*/
 	kev_result pushHttpBody(KHttpRequest *rq,const char *buf,int len);
-	struct {
-		union {
-			uint32_t closed : 1;
-			uint32_t chunk_post : 1;
-		};
-		uint32_t flags;
-	};
+	
 };
 
 #endif /* KFETCHOBJECT_H_ */

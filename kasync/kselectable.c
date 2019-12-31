@@ -6,7 +6,7 @@
 #include "kmalloc.h"
 #define MAXSENDBUF 16
 #ifdef KSOCKET_SSL
-static int kgl_ssl_writev(SSL *ssl, LPWSABUF buffer, int bc)
+static int kgl_ssl_writev(kssl_session *ssl, LPWSABUF buffer, int bc)
 {
 	int got = 0;
 	for (int i = 0; i < bc; i++) {
@@ -21,7 +21,22 @@ static int kgl_ssl_writev(SSL *ssl, LPWSABUF buffer, int bc)
 			}
 			len = MIN(left, len);
 #endif
-			int this_len = SSL_write(ssl, hot, len);
+#ifdef SSL_READ_EARLY_DATA_SUCCESS
+			if (ssl->in_early) {
+				//printf("ssl_is_init_finished=[%d]\n", SSL_is_init_finished(ssl->ssl));
+				size_t write_bytes;
+				int n = SSL_write_early_data(ssl->ssl, hot, len, &write_bytes);				
+				if (n > 0) {
+					got += write_bytes;
+					len -= write_bytes;
+					hot += write_bytes;
+					//printf("SSL_write_early_data try write=[%d] return [%d] got=[%d].\n", len, write_bytes, got);
+					continue;
+				}
+				return (got > 0 ? got : -1);				
+			}
+#endif
+			int this_len = SSL_write(ssl->ssl, hot, len);
 			//printf("SSL_write try write=[%d] return [%d] got=[%d].\n", len,this_len,got);
 			if (this_len <= 0) {
 				return (got > 0 ? got : this_len);
@@ -33,17 +48,46 @@ static int kgl_ssl_writev(SSL *ssl, LPWSABUF buffer, int bc)
 	}
 	return got;
 }
-static int kgl_ssl_readv(SSL *ssl, LPWSABUF buffer, int bc)
+static int kgl_ssl_readv(kssl_session *ssl, LPWSABUF buffer, int bc)
 {
 	int got = 0;
-	for (int i = 0; i < bc; i++) {
-		char *hot = (char *)buffer[i].iov_base;
+	int i = 0;
+	int this_len;
+	for (;i < bc; i++) {
+		u_char *hot = (u_char *)buffer[i].iov_base;
 		int len = buffer[i].iov_len;
 		while (len > 0) {
-			int this_len = SSL_read(ssl, hot, len);
+#ifdef SSL_READ_EARLY_DATA_SUCCESS
+			if (ssl->early_preread) {
+				ssl->early_preread = 0;
+				got += 1;
+				*hot = ssl->early_buf;
+				hot++;
+				len--;
+				continue;
+			}
+			if (ssl->in_early) {
+				size_t read_bytes = 0;
+				int n = SSL_read_early_data(ssl->ssl, hot, len, &read_bytes);
+				//printf("ssl_read_early_data ret=[%d] read_bytes=[%d]\n", n, read_bytes);
+				if (n == SSL_READ_EARLY_DATA_FINISH) {
+					ssl->in_early = 0;
+					continue;
+				}
+				if (n != SSL_READ_EARLY_DATA_SUCCESS) {
+					return got;
+				}
+				this_len = (int)read_bytes;
+				got += this_len;
+				len -= this_len;
+				hot += this_len;
+				continue;
+			}
+#endif
+			this_len = SSL_read(ssl->ssl, hot, len);
 			if (this_len <= 0) {
 				return (got > 0 ? got : this_len);
-			}
+			}			
 			got += this_len;
 			len -= this_len;
 			hot += this_len;
@@ -132,6 +176,10 @@ void selectable_shutdown(kselectable *st)
 }
 void selectable_recvfrom_event(kselectable *st)
 {
+#ifdef STF_ET
+	if (TEST(st->st_flags, STF_ET))
+#endif
+		CLR(st->st_flags,STF_RECVFROM);
 	WSABUF buf;
 	WSABUF addr;
 	int bc = st->e[OP_READ].buffer(st->e[OP_READ].arg, &buf, 1);
@@ -204,7 +252,7 @@ static bool selectable_ssl_write(kselectable *st, result_callback result, buffer
 	if (buffer) {
 		WSABUF recvBuf[MAXSENDBUF];
 		int bufferCount = buffer(arg, recvBuf, MAXSENDBUF);
-		ssl_bio->got = kgl_ssl_writev(st->ssl->ssl, recvBuf, bufferCount);
+		ssl_bio->got = kgl_ssl_writev(st->ssl, recvBuf, bufferCount);
 	}
 	if (BIO_pending(ssl_bio->bio) <= 0) {
 		st->e[OP_WRITE].arg = arg;
@@ -323,8 +371,11 @@ bool selectable_try_read(kselectable *st, result_callback result, buffer_callbac
 {
 #ifdef KSOCKET_SSL
 	if (st->ssl) {
-		int pending_read = SSL_pending(st->ssl->ssl);
-		if (pending_read > 0) {
+		if (
+#ifdef SSL_READ_EARLY_DATA_SUCCESS
+			st->ssl->in_early || 
+#endif
+			SSL_pending(st->ssl->ssl)>0) {
 			//printf("st=[%p] ssl_pending=[%d]\n",st, pending_read);
 #ifdef ENABLE_KSSL_BIO
 			kassert(result != result_ssl_bio_read);
@@ -371,7 +422,7 @@ kev_result selectable_event_write(kselectable *st,result_callback result, buffer
 	int got;
 #ifdef KSOCKET_SSL
 	if (st->ssl) {
-		got = kgl_ssl_writev(st->ssl->ssl, recvBuf, bc);
+		got = kgl_ssl_writev(st->ssl, recvBuf, bc);
 	} else
 #endif
 		got = kgl_writev(st->fd, recvBuf, bc);
@@ -413,7 +464,7 @@ kev_result selectable_event_read(kselectable *st, result_callback result, buffer
 		kssl_bio *ssl_bio = &st->ssl->bio[OP_READ];
 		int ssl_pending = SSL_pending(st->ssl->ssl);
 		int bio_pending = BIO_pending(ssl_bio->bio);
-		kassert(ssl_pending > 0 || bio_pending > 0 || ssl_bio->bio->shutdown);
+		kassert(st->ssl->in_early || ssl_pending > 0 || bio_pending > 0 || BIO_get_shutdown(ssl_bio->bio));
 #endif
 #endif
 		if (TEST(st->st_flags, STF_RREADY2)) {
@@ -431,7 +482,7 @@ kev_result selectable_event_read(kselectable *st, result_callback result, buffer
 	int got;
 #ifdef KSOCKET_SSL
 	if (st->ssl) {		
-		got = kgl_ssl_readv(st->ssl->ssl, recvBuf, bc); 
+		got = kgl_ssl_readv(st->ssl, recvBuf, bc); 
 	} else 
 #endif
 		got = kgl_readv(st->fd, recvBuf, bc);
@@ -470,7 +521,7 @@ int selectable_sync_read(kselectable *st, LPWSABUF buf, int bc)
 {
 #ifdef KSOCKET_SSL
 	if (st->ssl) {
-		return kgl_ssl_readv(st->ssl->ssl, buf, bc);
+		return kgl_ssl_readv(st->ssl, buf, bc);
 	}
 #endif
 	return kgl_readv(st->fd, buf, bc);
@@ -479,7 +530,7 @@ int selectable_sync_write(kselectable *st, LPWSABUF buf, int bc)
 {
 #ifdef KSOCKET_SSL
 	if (st->ssl) {
-		return kgl_ssl_writev(st->ssl->ssl, buf, bc);
+		return kgl_ssl_writev(st->ssl, buf, bc);
 	}
 #endif
 	return kgl_writev(st->fd, buf, bc);

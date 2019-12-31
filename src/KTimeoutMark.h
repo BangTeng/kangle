@@ -41,7 +41,7 @@ public:
 		s << (int)v;
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attribute) throw (KHtmlSupportException)
+	void editHtml(std::map<std::string, std::string> &attribute)
 	{
 		v = atoi(attribute["v"].c_str());
 	}

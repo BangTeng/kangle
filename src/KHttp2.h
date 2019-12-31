@@ -224,7 +224,7 @@ struct kgl_http_v2_state_t {
 	unsigned						keep_pool : 1;
 	kgl_pool_t						 *pool;
 	kgl_http_v2_header_t             header;
-	size_t                           header_limit;
+	size_t                           header_length;
 	u_char                           field_state;
 	u_char                          *field_start;
 	u_char                          *field_end;
@@ -257,9 +257,9 @@ public:
 	}
 	uint32_t                  id;
 	KHttp2Node				 *index;
-	uint8_t                   rank;
-	uint8_t                   weight;
-	double                    rel_weight;
+	//uint8_t                   rank;
+	//uint8_t                   weight;
+	//double                    rel_weight;
 	KHttp2Context            *stream;
 };
 class KHttp2Context

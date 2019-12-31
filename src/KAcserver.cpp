@@ -113,6 +113,7 @@ void KPoolableRedirect::build_proto_html(KPoolableRedirect *mserver, std::string
 		s << "checked";
 	}
 	s << ">ajp";
+#endif
 #if 0
 	s << "<input type='radio' value='uwsgi' name='proto' ";
 	if (mserver && mserver->proto == Proto_uwsgi) {
@@ -140,7 +141,7 @@ void KPoolableRedirect::build_proto_html(KPoolableRedirect *mserver, std::string
 	s << ">proxy";
 #endif
 	s << "<br>";
-#endif
+
 }
 KFetchObject *KPoolableRedirect::makeFetchObject(KHttpRequest *rq, KFileName *file) {
 	CLR(rq->filter_flags,RQ_FULL_PATH_INFO);

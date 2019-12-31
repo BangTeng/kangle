@@ -198,7 +198,7 @@ void KDynamicString::controlCode(char *code) {
 			char *saved_hot = hot;
 			for (curBlock->index = 0; curBlock->index < curBlock->count; curBlock->index++) {
 				if (curBlock->index > 0) {
-					memcpy(saved_hot, orig_hot, orig_len);
+					kgl_memcpy(saved_hot, orig_hot, orig_len);
 					hot = saved_hot;
 				}
 				parseString();

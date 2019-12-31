@@ -32,6 +32,7 @@ time_t parse1123time(const char *str);
 
 void makeLastModifiedTime(time_t *a, char *b, size_t l);
 void my_sleep(int);
+void init_time_zone();
 u_short string_hash(const char *str, u_short res = 1);
 
 /*

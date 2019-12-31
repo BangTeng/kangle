@@ -53,7 +53,7 @@ public:
 		}
 		if_none_match->data = (char *)malloc(len+1);
 		if_none_match->len = len;
-		memcpy(if_none_match->data,etag,len+1);		
+		kgl_memcpy(if_none_match->data,etag,len+1);		
 	}
 	KWStream *st;
 	KHttpObject *obj;
@@ -84,9 +84,9 @@ public:
 	uint32_t parent_signed : 1;
 	//client主动关闭
 	uint32_t read_huped : 1;
-	//rq进入write timer
-	uint32_t write_timer : 1;
-	uint32_t expected_done : 1;
+	//rq进入write hook
+	uint32_t write_hook : 1;
+	uint32_t body_not_complete : 1;
 	uint32_t upstream_expected_done : 1;
 	//lastModified类型
 	modified_type mt;

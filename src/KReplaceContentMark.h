@@ -84,8 +84,7 @@ public:
 		s << ":" << mark_mark;
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-		throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute) {
 			content = attibute["content"];
 			replace = attibute["replace"];
 			charset = attibute["charset"];

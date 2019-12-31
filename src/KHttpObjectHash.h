@@ -206,10 +206,13 @@ public:
 			size_lock.Lock();
 			if (TEST(obj->index.flags,FLAG_IN_MEM)) {
 				assert(obj->data);
-				
+				size -= obj->index.head_size;
+				if (obj->data->type == MEMORY_OBJECT) {
 					size -= obj->index.content_length;
+				}
 			}
 			if (TEST(obj->index.flags,FLAG_IN_DISK)) {
+				disk_size -= obj->index.head_size;
 				disk_size -= obj->index.content_length;
 			}
 			size_lock.Unlock();

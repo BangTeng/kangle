@@ -136,7 +136,7 @@ void addr_sub(ip_addr *addr,uint32_t value)
 bool make_local_ip(ip_addr *addr,char *ips,int ips_len)
 {
 	ip_addr net_addr;
-	memcpy(&net_addr,addr,sizeof(ip_addr));
+	kgl_memcpy(&net_addr,addr,sizeof(ip_addr));
 	hton_addr(&net_addr);	
 	return ksocket_ipaddr_ip(&net_addr,ips,ips_len);
 }
@@ -265,7 +265,7 @@ bool KIpMap::add_range_addr(struct dns_range_addr *range_addr,void *bind_data)
 	}
 	assert(node);
 	struct dns_range_addr *addr = (struct dns_range_addr *)malloc(sizeof(struct dns_range_addr));
-	memcpy(addr,range_addr,sizeof(struct dns_range_addr));
+	kgl_memcpy(addr,range_addr,sizeof(struct dns_range_addr));
 	node->data = addr;
 	addr->bind_data = bind_data;
 	//处理前面的ip覆盖
@@ -278,11 +278,11 @@ bool KIpMap::add_range_addr(struct dns_range_addr *range_addr,void *bind_data)
 			//产生新的range ip插入
 			struct dns_range_addr new_addr;
 			memset(&new_addr,0,sizeof(new_addr));
-			memcpy(&new_addr.min_addr,&range_addr->max_addr,sizeof(new_addr.min_addr));
-			memcpy(&new_addr.max_addr,&pre_addr->max_addr,sizeof(new_addr.max_addr));
+			kgl_memcpy(&new_addr.min_addr,&range_addr->max_addr,sizeof(new_addr.min_addr));
+			kgl_memcpy(&new_addr.max_addr,&pre_addr->max_addr,sizeof(new_addr.max_addr));
 			addr_add(&new_addr.min_addr,1);
 			//重新调整之前的range ip
-			memcpy(&pre_addr->max_addr,&range_addr->min_addr,sizeof(ip_addr));
+			kgl_memcpy(&pre_addr->max_addr,&range_addr->min_addr,sizeof(ip_addr));
 			addr_sub(&pre_addr->max_addr,1);
 			add_range_addr(&new_addr,pre_addr->bind_data);
 			//printf("ret=%d\n",ret);
@@ -290,7 +290,7 @@ bool KIpMap::add_range_addr(struct dns_range_addr *range_addr,void *bind_data)
 			make_local_ip(&range_addr->min_addr, ips, MAXIPLEN);
 			//klog(KLOG_WARNING,"IP [%s] is pre-covered min,view = [%d]\n",ips,view->id);
 			//重新调整之前的range ip
-			memcpy(&pre_addr->max_addr,&range_addr->min_addr,sizeof(ip_addr));
+			kgl_memcpy(&pre_addr->max_addr,&range_addr->min_addr,sizeof(ip_addr));
 			addr_sub(&pre_addr->max_addr,1);
 		}
 	}
@@ -303,16 +303,16 @@ bool KIpMap::add_range_addr(struct dns_range_addr *range_addr,void *bind_data)
 			//klog(KLOG_WARNING,"IP [%s] is next-covered max,,view = [%d]\n",ips,view->id);
 			struct dns_range_addr new_addr;
 			memset(&new_addr,0,sizeof(new_addr));
-			memcpy(&new_addr.min_addr,&next_addr->max_addr,sizeof(new_addr.min_addr));
-			memcpy(&new_addr.max_addr,&range_addr->max_addr,sizeof(new_addr.max_addr));
+			kgl_memcpy(&new_addr.min_addr,&next_addr->max_addr,sizeof(new_addr.min_addr));
+			kgl_memcpy(&new_addr.max_addr,&range_addr->max_addr,sizeof(new_addr.max_addr));
 			addr_add(&new_addr.min_addr,1);
-			memcpy(&range_addr->max_addr,&next_addr->min_addr,sizeof(ip_addr));
+			kgl_memcpy(&range_addr->max_addr,&next_addr->min_addr,sizeof(ip_addr));
 			addr_sub(&range_addr->max_addr,1);
 			add_range_addr(&new_addr,bind_data);
 		} else if (ip_addr_cmp(&range_addr->max_addr,&next_addr->min_addr)>=0) {
 			make_local_ip(&range_addr->min_addr, ips, MAXIPLEN);
 			//klog(KLOG_WARNING,"IP [%s] is next-covered min,view = [%d]\n",ips,view->id);
-			memcpy(&range_addr->max_addr,&next_addr->min_addr,sizeof(ip_addr));
+			kgl_memcpy(&range_addr->max_addr,&next_addr->min_addr,sizeof(ip_addr));
 			addr_sub(&range_addr->max_addr,1);
 		}
 	}

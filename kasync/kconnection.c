@@ -53,7 +53,7 @@ kconnection *kconnection_new(sockaddr_i *addr)
 	memset(c, 0, sizeof(kconnection));
 	c->pool = kgl_create_pool(8192);
 	if (addr) {
-		memcpy(&c->addr, addr, sizeof(sockaddr_i));
+		kgl_memcpy(&c->addr, addr, sizeof(sockaddr_i));
 	}
 	ksocket_init(c->st.fd);
 	return c;
@@ -134,24 +134,17 @@ kev_result kconnection_connect(kconnection *c,result_callback cb, void *arg)
 	return kev_ok;
 }
 #ifdef KSOCKET_SSL
-static kev_result ssl_handshake_result(kconnection_ssl_handshake_param *sh,bool result)
+static kev_result result_ssl_handshake(void *arg, int got);
+static kev_result ssl_handshake_result(kconnection_ssl_handshake_param *sh, bool result)
 {
 	kev_result ret = sh->cb(sh->arg, result ? 0 : -1);
 	xfree(sh);
 	return ret;
 }
-static kev_result result_ssl_handshake(void *arg, int got)
-{
-	kconnection_ssl_handshake_param *sh = (kconnection_ssl_handshake_param *)arg;
-	if (got < 0) {
-		return ssl_handshake_result(sh, false);
-	}
-	kssl_session *ssl = sh->c->st.ssl;
-	kassert(ssl);
-	kssl_status status = kgl_ssl_handshake(ssl->ssl);
+static kev_result result_ssl_handshake_status(kconnection_ssl_handshake_param *sh, kssl_session *ssl, kssl_status status) {
 #ifdef ENABLE_KSSL_BIO
 	if (status != ret_error && BIO_pending(ssl->bio[OP_WRITE].bio) > 0) {
-		return selectable_write(&sh->c->st, result_ssl_handshake, NULL,sh);
+		return selectable_write(&sh->c->st, result_ssl_handshake, NULL, sh);
 	}
 #endif
 	switch (status) {
@@ -171,7 +164,49 @@ static kev_result result_ssl_handshake(void *arg, int got)
 		return ssl_handshake_result(sh, false);
 	}
 }
-static void kconnection_ssl_init(kconnection *c, SSL *ssl)
+#ifdef SSL_READ_EARLY_DATA_SUCCESS
+static kev_result ssl_try_early_data(kconnection_ssl_handshake_param *sh)
+{
+	u_char     buf;
+	size_t     readbytes = 0;
+	kssl_session *ssl = sh->c->st.ssl;
+	int n = SSL_read_early_data(ssl->ssl, &buf, 1, &readbytes);
+	//printf("sh=[%p %p] SSL_read_early_data=[%d]\n", sh,ssl->ssl,n);
+	if (n == SSL_READ_EARLY_DATA_FINISH) {
+		ssl->try_early_data = 0;
+		return result_ssl_handshake(sh,0);
+	}
+	if (n == SSL_READ_EARLY_DATA_SUCCESS) {
+		ssl->try_early_data = 0;
+		ssl->early_buf = buf;
+		ssl->in_early = 1;
+		ssl->early_preread = 1;
+		//printf("read early data buf=[%c] arg=[%p]\n",buf,sh->arg);
+		return result_ssl_handshake_status(sh, ssl, ret_ok);
+	}
+	kssl_status status = kgl_ssl_handshake_status(ssl->ssl,n);
+	return result_ssl_handshake_status(sh, ssl, status);
+}
+#endif
+
+static kev_result result_ssl_handshake(void *arg, int got)
+{
+	kconnection_ssl_handshake_param *sh = (kconnection_ssl_handshake_param *)arg;
+	if (got < 0) {
+		//printf("ssl handshake failed. sh=[%p]\n", sh);
+		return ssl_handshake_result(sh, false);
+	}
+	kssl_session *ssl = sh->c->st.ssl;
+#ifdef SSL_READ_EARLY_DATA_SUCCESS
+	if (ssl->try_early_data) {
+		return ssl_try_early_data(sh);
+	}
+#endif
+	kassert(ssl);
+	kssl_status status = kgl_ssl_handshake(ssl->ssl);
+	return result_ssl_handshake_status(sh, ssl, status);
+}
+static void kconnection_ssl_init(kconnection *c,SSL_CTX *ssl_ctx, SSL *ssl)
 {
 	kassert(c->st.ssl == NULL);
 	c->st.ssl = xmemory_new(kssl_session);
@@ -182,6 +217,11 @@ static void kconnection_ssl_init(kconnection *c, SSL *ssl)
 	SSL_set_bio(ssl, c->st.ssl->bio[OP_READ].bio, c->st.ssl->bio[OP_WRITE].bio);
 #endif
 	c->st.ssl->ssl = ssl;
+#ifdef SSL_READ_EARLY_DATA_SUCCESS
+	if (SSL_CTX_get_max_early_data(ssl_ctx)) {
+		c->st.ssl->try_early_data = 1;
+	}
+#endif
 }
 kev_result kconnection_ssl_handshake(kconnection *c,result_callback cb, void *arg)
 {	
@@ -218,8 +258,9 @@ bool kconnection_ssl_connect(kconnection *c, SSL_CTX *ssl_ctx, const char *sni_h
 		SSL_set_tlsext_host_name(ssl, sni_hostname);
 	}
 #endif
+
 	SSL_set_connect_state(ssl);
-	kconnection_ssl_init(c, ssl);
+	kconnection_ssl_init(c, ssl_ctx, ssl);
 	return true;
 }
 
@@ -231,7 +272,7 @@ bool kconnection_ssl_accept(kconnection *c, SSL_CTX *ssl_ctx)
 	}
 	SSL_set_accept_state(ssl);
 	SSL_set_ex_data(ssl, kangle_ssl_conntion_index, c);
-	kconnection_ssl_init(c, ssl);
+	kconnection_ssl_init(c, ssl_ctx, ssl);
 	return true;
 }
 #endif

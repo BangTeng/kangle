@@ -73,8 +73,7 @@ public:
 		}
 		return s.str();
 	}
-	void editHtml(std::map<std::string,std::string> &attibute)
-			throw(KHtmlSupportException) {
+	void editHtml(std::map<std::string,std::string> &attibute){
 		flag=0;
 		nogzip = false;
 		gzip = false;
@@ -168,8 +167,7 @@ public:
 		}
 		return s.str();
 	}
-	void editHtml(std::map<std::string,std::string> &attibute)
-			throw(KHtmlSupportException) {
+	void editHtml(std::map<std::string,std::string> &attibute){
 		if(attibute["no_extend"]=="1"){
 			no_extend = true;
 		} else {

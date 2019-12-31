@@ -46,7 +46,7 @@ public:
 			::kfclose(fp);
 		}
 	}
-	bool needTempFile()
+	bool NeedTempFile(bool upload, KHttpRequest *rq)
 	{
 		return false;
 	}

@@ -68,3 +68,10 @@ kev_result KFetchObject::open(KHttpRequest *rq)
 	this->closed = 0;
 	return kev_err;
 }
+bool KFetchObject::NeedTempFile(bool upload, KHttpRequest *rq)
+{
+	if (!upload) {
+		return true;
+	}
+	return rq->content_length == -1;
+}

@@ -6,12 +6,13 @@
 #include <stdlib.h>
 KBEGIN_DECLS
 #define xmemory_new(T) (T *)xmalloc(sizeof(T))
+#define kgl_memcpy memmove
 #define xfree	 free
 #define xmalloc	 malloc
 #define xstrdup  strdup
 void start_hook_alloc();
 int dump_memory_leak(int min_time, int max_time);
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(NDEBUG)
 #define kassert(result) do {if (!(result)) abort();}while(0)
 #else
 #define kassert assert

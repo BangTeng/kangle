@@ -141,7 +141,7 @@ StreamState KBuffer::write_all(const char *buf, int len) {
 			int copyLen = maxSave < len ? maxSave : len;
 			if (copyLen <= 0)
 				break;
-			memcpy(hotData + used, buf, copyLen);
+			kgl_memcpy(hotData + used, buf, copyLen);
 			used += copyLen;
 			len -= copyLen;
 			buf += copyLen;
@@ -168,7 +168,7 @@ void KBuffer::internelEnd(char *buf, int len, int addBytes) {
 		hot_buf->next = NULL;
 		hot_buf->flags = 0;
 		if (len > 0) {
-			memcpy(hot_buf->data, buf, len);
+			kgl_memcpy(hot_buf->data, buf, len);
 		}
 		hot_buf->used = len;
 	}

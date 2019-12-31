@@ -4,6 +4,7 @@
 #ifdef _WIN32
 #include <direct.h>
 #endif
+#include <errno.h>
 #include "KDiskCache.h"
 #include "do_config.h"
 #include "utils.h"
@@ -69,10 +70,19 @@ KHttpObject::~KHttpObject() {
 		delete url;
 	}
 }
+void KHttpObject::Dead()
+{
+	SET(index.flags, FLAG_DEAD);
+	dc_index_update = 1;
+}
 #ifdef ENABLE_DISK_CACHE
 void KHttpObjectBody::create_type(HttpObjectIndex *index)
 {
-				
+	
+	if (index->content_length >= conf.max_cache_size) {
+		this->type = BIG_OBJECT;
+		return;
+	}
 	this->type = MEMORY_OBJECT;
 }
 bool KHttpObjectBody::restore_header(KHttpObject *obj, char *buffer, int len)
@@ -125,11 +135,7 @@ void KHttpObject::unlinkDiskFile()
 char *KHttpObject::getFileName(bool part)
 {	
 	KStringBuf s;
-	if (*conf.disk_cache_dir) {
-		s << conf.disk_cache_dir;
-	} else {
-		s << conf.path << "cache" << PATH_SPLIT_CHAR;
-	}
+	get_disk_base_dir(s);
 	if (dk.filename1==0) {
 		dk.filename1 = (unsigned) kgl_current_sec;
 		indexLock.Lock();
@@ -237,8 +243,8 @@ success:
 void KHttpObject::write_file_header(KHttpObjectFileHeader *fileHeader)
 {
 	memset(fileHeader, 0, sizeof(KHttpObjectFileHeader));
-	memcpy(fileHeader->fix_str, CACHE_FIX_STR, sizeof(CACHE_FIX_STR));
-	memcpy(&fileHeader->index, &index, sizeof(HttpObjectIndex));
+	kgl_memcpy(fileHeader->fix_str, CACHE_FIX_STR, sizeof(CACHE_FIX_STR));
+	kgl_memcpy(&fileHeader->index, &index, sizeof(HttpObjectIndex));
 	fileHeader->version = CACHE_DISK_VERSION;
 	fileHeader->url_flag_encoding = url->flag_encoding;
 	fileHeader->status_code = data->status_code;
@@ -331,36 +337,26 @@ bool KHttpObject::save_header(KBufferFile *fp,const char *url,int url_len)
 	fp->write(NULL, pad_len);
 	return true;
 }
+
 bool KHttpObject::swapout(KBufferFile *file,bool fast_model)
 {
-
-	if (TEST(index.flags, FLAG_IN_DISK|OBJ_INDEX_UPDATE|OBJ_INDEX_SAVED) == (OBJ_INDEX_SAVED|FLAG_IN_DISK) &&
-		dc_index_update == 0
-		) {
-		//无需更新什么
-		return true;
-	}
 	if (fast_model && !TEST(index.flags, FLAG_IN_DISK)) {
 		return false;
 	}
 	kbuf *tmp;
 	char *filename = NULL;
 	assert(data);
-	if (!TEST(index.flags, OBJ_INDEX_SAVED)) {
-		SET(index.flags, OBJ_INDEX_SAVED|OBJ_INDEX_UPDATE);
-		dc_index_update = 1;
-	}
 	if (TEST(index.flags,FLAG_IN_DISK)) {
-#ifdef ENABLE_DB_DISK_INDEX
-		if (TEST(index.flags, OBJ_INDEX_UPDATE) && dci) {
-			CLR(index.flags, OBJ_INDEX_UPDATE);
-			dci->start(ci_update,this);
-		}
-#endif
 		if (dc_index_update == 0) {
 			return true;
 		}
+#ifdef ENABLE_DB_DISK_INDEX
+		if (dci) {
+			dci->start(ci_update,this);
+		}
+#endif
 	}
+	dc_index_update = 0;
 	if (conf.disk_cache <= 0 || cache.is_disk_shutdown()) {
 		return false;
 	}
@@ -374,7 +370,6 @@ bool KHttpObject::swapout(KBufferFile *file,bool fast_model)
 	if (buffer_size > KGL_MAX_BUFFER_FILE_SIZE) {
 		buffer_size = KGL_MAX_BUFFER_FILE_SIZE;
 	}
-	dc_index_update = 0;
 	filename = getFileName();
 	klog(KLOG_INFO, "swap out obj=[%p %x %x] url=[%s] to file [%s]\n",
 		this,
@@ -409,13 +404,8 @@ bool KHttpObject::swapout(KBufferFile *file,bool fast_model)
 		}
 		tmp=tmp->next;
 	}
-	if (TEST(index.flags,FLAG_BIG_OBJECT)) {
-		cache.getHash(h)->incDiskSize(index.head_size);
-	} else {
-		cache.getHash(h)->incDiskSize(index.content_length);
-	}
+	cache.getHash(h)->incDiskSize(index.head_size + index.content_length);
 #ifdef ENABLE_DB_DISK_INDEX
-	CLR(index.flags, OBJ_INDEX_UPDATE);
 	if (dci) {		
 		dci->start(ci_add,this);
 	}

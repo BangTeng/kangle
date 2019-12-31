@@ -56,14 +56,14 @@ static char *ssl_var_lookup_ssl_cert(X509 *xs, const char *var) {
 		tm = X509_get_notBefore(xs);
 		result = (char *)OPENSSL_malloc(tm->length+1);
 		if (result) {
-			memcpy(result, tm->data, tm->length);
+			kgl_memcpy(result, tm->data, tm->length);
 			result[tm->length] = '\0';
 		}
 	} else if (strcEQ(var, "NOTAFTER")) {
 		tm = X509_get_notAfter(xs);
 		result = (char *)OPENSSL_malloc(tm->length + 1);
 		if (result) {
-			memcpy(result, tm->data, tm->length);
+			kgl_memcpy(result, tm->data, tm->length);
 			result[tm->length] = '\0';
 		}
 	}

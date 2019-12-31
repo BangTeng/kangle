@@ -4,6 +4,28 @@
 #include "kmalloc.h"
 KBEGIN_DECLS
 typedef struct kserver_s kserver;
+#ifdef ENABLE_PROXY_PROTOCOL
+typedef struct kgl_proxy_pp2_tlv_s kgl_proxy_pp2_tlv;
+typedef struct kgl_proxy_pp2_data_s kgl_proxy_pp2_data;
+typedef struct kgl_proxy_protocol_s kgl_proxy_protocol;
+
+struct kgl_proxy_pp2_tlv_s {
+	uint8_t type;
+	uint8_t length_hi;
+	uint8_t length_lo;
+};
+struct kgl_proxy_pp2_data_s {
+	uint8_t type;
+	uint16_t len;
+	char *data;
+	kgl_proxy_pp2_data *next;
+};
+struct kgl_proxy_protocol_s {
+	sockaddr_i *src;
+	sockaddr_i *dst;
+	kgl_proxy_pp2_data *data;
+};
+#endif
 struct kconnection_s {
 	kselectable st;
 	sockaddr_i addr;
@@ -11,7 +33,7 @@ struct kconnection_s {
 	void *sni;
 #endif
 #ifdef ENABLE_PROXY_PROTOCOL
-	char *proxy_ip;
+	kgl_proxy_protocol *proxy;
 #endif
 	kgl_pool_t *pool;
 	kserver *server;
@@ -23,14 +45,9 @@ INLINE void kconnection_delay(kconnection *c)
 {
 	ksocket_delay(c->st.fd);
 }
-INLINE void kconnection_no_delay(kconnection *c)
+INLINE void kconnection_no_delay(kconnection *c,bool forever)
 {
-	ksocket_no_delay(c->st.fd);
-}
-INLINE void kconnection_flush(kconnection *c)
-{
-	kconnection_delay(c);
-	kconnection_no_delay(c);
+	ksocket_no_delay(c->st.fd,forever);
 }
 void kconnection_destroy(kconnection *c);
 kconnection *kconnection_new(sockaddr_i *addr);

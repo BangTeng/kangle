@@ -41,8 +41,7 @@ public:
 		s << speed_limit;
 		return s.str();
 	}
-	void editHtml(std::map<std::string,std::string> &attibute)
-			throw(KHtmlSupportException) {
+	void editHtml(std::map<std::string,std::string> &attibute){
 		speed_limit=(int)get_size(attibute["limit"].c_str());
 	}
 	std::string getHtml(KModel *model) {

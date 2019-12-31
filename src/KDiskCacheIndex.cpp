@@ -14,7 +14,7 @@ void loadDiskCacheIndex(unsigned filename1, unsigned filename2, const char *url,
 	KHttpObject *obj = new KHttpObject;
 	obj->dk.filename1 = filename1;
 	obj->dk.filename2 = filename2;
-	memcpy(&obj->index, &db_index->index,sizeof(obj->index));
+	kgl_memcpy(&obj->index, &db_index->index,sizeof(obj->index));
 	cor_result result = create_http_object(obj,url,db_index->url_flag_encoding);
 	if (result==cor_success) {
 		dci->load_count++;
@@ -100,7 +100,7 @@ void KDiskCacheIndex::start(ci_operator op,KHttpObject *obj)
 		param->filename1 = obj->dk.filename1;
 		param->filename2 = obj->dk.filename2;
 		param->data.url_flag_encoding = obj->url->flag_encoding;
-		memcpy(&param->data.index,&obj->index,sizeof(param->data.index));
+		kgl_memcpy(&param->data.index,&obj->index,sizeof(param->data.index));
 		break;
 	case ci_del:
 		param->filename1 = obj->dk.filename1;

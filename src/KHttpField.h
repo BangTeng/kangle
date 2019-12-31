@@ -20,7 +20,7 @@ public:
 		attr = NULL;
 		val = NULL;
 	}
-	char *parse(char *attr)
+	char *parse(char *attr, const u_char split)
 	{
 		while(*attr && isspace((unsigned char)*attr))
 			attr++;
@@ -29,17 +29,17 @@ public:
 		bool haveval = false;
 		while (*hot) {
 			if(*hot=='='){
-                                *hot = '\0';
-                                hot++;
-                                haveval = true;
-                                break;
-                        }
-			if(*hot==','){
+                *hot = '\0';
+                hot++;
+                haveval = true;
+                break;
+			}
+			if((u_char)*hot==split) {
 				*hot = '\0';
 				hot++;
 				break;
 			}
-			if(isspace((unsigned char)*hot)){
+			if (isspace((unsigned char)*hot)) {
 				*hot = '\0';
 				hot++;
 				char *p = strchr(hot,'=');
@@ -51,10 +51,11 @@ public:
 			}
 			hot++;
 		}
-		if(haveval){
-			while(*hot && isspace((unsigned char)*hot))
+		if (haveval) {
+			while (*hot && isspace((unsigned char)*hot)) {
 				hot++;
-			if(*hot=='"'){
+			}
+			if (*hot=='"') {
 				//ÊÇ×Ö·û´®Öµ
 				hot++;
 				val = hot;
@@ -63,22 +64,22 @@ public:
 					*p = '\0';
 				}
 				hot = p+1;
-			}else{
+			} else {
 				//Êý×Ö
 				val = hot;
 			}
-			while(*hot){
+			while (*hot) {
 				if(*hot == ','){
 					*hot = '\0';
 					hot++;
 					break;
 				}
-				if(isspace((unsigned char)*hot)){
+				if (isspace((unsigned char)*hot)) {
 					*hot = '\0';
 				}
 				hot++;
 			}
-		}else{
+		} else {
 			val = NULL;
 		}
 		return hot;
@@ -99,8 +100,8 @@ public:
 class KHttpField {
 public:
 	KHttpField();
-	virtual ~KHttpField();
-	void parse(const char *str);
+	~KHttpField();
+	void parse(const char *str,const u_char split);
 	http_field_t *getHeader()
 	{
 		return header;

@@ -22,7 +22,7 @@ public:
 		if (buf) {
 			xfree(buf);
 		}
-	}	
+	}
 	kgl_parse_result Parse(KHttpRequest *rq,const char *str, int len)
 	{
 		Push(str, len);
@@ -33,6 +33,8 @@ public:
 		*len = this->len;
 		return hot;
 	}
+	khttp_parser parser;
+	KHttpResponseParser parser_ctx;
 private:
 	kgl_parse_result InternalParse(KHttpRequest *rq)
 	{
@@ -41,6 +43,7 @@ private:
 			memset(&rs, 0, sizeof(rs));
 			kgl_parse_result result = khttp_parse(&parser, &hot, &len, &rs);
 			switch (result) {
+			case kgl_parse_want_read:
 			case kgl_parse_error:
 				return kgl_parse_error;
 			case kgl_parse_continue:
@@ -72,7 +75,7 @@ private:
 		}
 		if (len > 0) {
 			buf = (char *)xmalloc(len);
-			memcpy(buf, hot, len);
+			kgl_memcpy(buf, hot, len);
 			buf_len = len;
 		}
 	}
@@ -80,8 +83,8 @@ private:
 	{
 		if (buf != NULL) {
 			char *nb = (char *)malloc(buf_len + len);
-			memcpy(nb, buf, buf_len);
-			memcpy(nb + buf_len, str, len);
+			kgl_memcpy(nb, buf, buf_len);
+			kgl_memcpy(nb + buf_len, str, len);
 			xfree(buf);
 			buf = nb;
 			this->len = buf_len + len;
@@ -91,8 +94,6 @@ private:
 			this->len = len;
 		}
 	}
-	khttp_parser parser;
-	KHttpResponseParser parser_ctx;;
 	char *hot;
 	int len;
 	char *buf;

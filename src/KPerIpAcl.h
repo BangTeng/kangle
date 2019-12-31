@@ -80,7 +80,7 @@ public:
 		return s.str();
 	}
 	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+			 {
 		max_per_ip = atoi(attibute["max"].c_str());
 	}
 	std::string getHtml(KModel *model) {

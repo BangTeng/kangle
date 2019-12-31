@@ -17,6 +17,7 @@ KApiService(&rd->dso) {
 	rq = NULL;
 	token = NULL;
 	responseDenied = false;
+	parser.parser.first_same = 1;
 }
 
 KApiFetchObject::~KApiFetchObject() {

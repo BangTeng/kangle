@@ -47,8 +47,7 @@
 #include "KHttpTransfer.h"
 #include "KVirtualHostManage.h"
 #include "kselectable.h"
-
-
+#include "KStaticFetchObject.h"
 using namespace std;
 void WINAPI free_auto_memory(void *arg)
 {
@@ -56,10 +55,8 @@ void WINAPI free_auto_memory(void *arg)
 }
 kev_result result_write_expected(void *arg, int got)
 {
-	kgl_request_stack *stack = (kgl_request_stack *)arg;
-	stack->rq->sink->Flush();
-	stack->rq->sink->StartHeader(stack->rq);
-	return stack->rq->Read(stack->arg, stack->result, stack->buffer);
+	kgl_request_event_context *stack = (kgl_request_event_context *)arg;
+	return stack->rq->WriteExpectedCallback(stack->ev.arg, stack->ev.result, stack->ev.buffer);
 }
 #ifdef ENABLE_TF_EXCHANGE
 kev_result stageTempFileWriteEnd(KHttpRequest *rq)
@@ -83,7 +80,7 @@ kev_result resultTempFileRequestWrite(void *arg,int got)
 		SET(rq->flags,RQ_CONNECTION_CLOSE);
 		return stageTempFileWriteEnd(rq);
 	}
-	rq->addFlow(got);
+	rq->AddDownFlow(got);
 	if (rq->tf->readSuccess(got)) {
 		return rq->Write(rq, resultTempFileRequestWrite, bufferTempFileRequestWrite);
 	}
@@ -158,6 +155,23 @@ void KHttpRequest::setState(uint8_t state) {
 	}
 #endif		
 }
+void KHttpRequest::SetSelfPort(uint16_t port, bool ssl)
+{
+	if (port > 0) {
+		self_port = port;
+	}
+	if (ssl) {
+		SET(raw_url.flags, KGL_URL_SSL);
+		if (raw_url.port == 80) {
+			raw_url.port = 443;
+		}
+	} else {
+		CLR(raw_url.flags, KGL_URL_SSL);
+		if (raw_url.port == 443) {
+			raw_url.port = 80;
+		}
+	}
+}
 const char *KHttpRequest::getState()
 {
 	
@@ -178,32 +192,43 @@ void KHttpRequest::resetFetchObject()
 {
 	if (fetchObj) {
 		KFetchObject *fo = fetchObj->clone(this);
-		closeFetchObject(true);
+		fo->next = fetchObj->next;
+		fetchObj->close(this);
 		fetchObj = fo;
 	}
 }
 void KHttpRequest::closeFetchObject(bool destroy)
 {
-	if (fetchObj) {
-		fetchObj->close(this);
+	KFetchObject *fo = fetchObj;
+	while (fo) {
+		KFetchObject *next = fo->next;
+		fo->close(this);
 		if (destroy) {
-			delete fetchObj;
-			fetchObj = NULL;
+			delete fo;
 		}
+		fo = next;
+	}
+	if (destroy) {
+		fetchObj = NULL;
 	}
 #ifdef ENABLE_REQUEST_QUEUE
-	KRequestQueue *queue = this->queue;
-	this->queue = NULL;
+	ReleaseQueue();
+#endif
+}
+#ifdef ENABLE_REQUEST_QUEUE
+void KHttpRequest::ReleaseQueue()
+{
 	if (queue) {
 		if (ctx->queue_handled) {
 			ctx->queue_handled = false;
 			async_queue_destroy(queue);
 		}
 		queue->release();
+		queue = NULL;
 	}
-#endif
+	kassert(!ctx->queue_handled);
 }
-
+#endif
 void KHttpRequest::set_url_param(char *param) {
 	
 	url->param = xstrdup(param);
@@ -255,7 +280,7 @@ const char *KHttpRequest::getMethod() {
 	return KHttpKeyValue::getMethod(meth);
 }
 bool KHttpRequest::isBad() {
-	if (url==NULL || url->host == NULL || url->path == NULL || meth == METH_UNSET) {
+	if (unlikely(url==NULL || url->IsBad() || meth == METH_UNSET)) {
 		return true;
 	}
 	return false;
@@ -384,6 +409,7 @@ KHttpRequest::~KHttpRequest()
 	setState(STATE_UNKNOW);
 }
 void KHttpRequest::clean() {
+	kassert(write_stack == NULL || (write_stack->hook_head == NULL && write_stack->hook_last==NULL));
 	closeFetchObject();
 	if (file){
 		delete file;
@@ -458,6 +484,7 @@ bool KHttpRequest::parseConnectUrl(char *src) {
 	if (!ss) {
 		return false;
 	}
+	CLR(raw_url.flags, KGL_URL_ORIG_SSL);
 	*ss = 0;
 	raw_url.host = strdup(src);
 	raw_url.port = atoi(ss + 1);
@@ -594,9 +621,7 @@ kgl_header_result KHttpRequest::InternalParseHeader(const char *attr, int attr_l
 			return kgl_header_failed;
 		}
 		if (http_major > 1 || (http_major == 1 && http_minor == 1)) {
-			if (conf.keep_alive_count >= 0) {
-				SET(flags, RQ_HAS_KEEP_CONNECTION);
-			}
+			SET(flags, RQ_HAS_KEEP_CONNECTION);
 		}
 		return kgl_header_no_insert;
 	}
@@ -609,9 +634,7 @@ kgl_header_result KHttpRequest::InternalParseHeader(const char *attr, int attr_l
 		KHttpFieldValue field(val);
 		do {
 			if (field.is2("keep-alive", 10)) {
-				if (conf.keep_alive_count >= 0) {
-					flags |= RQ_HAS_KEEP_CONNECTION;
-				}
+				flags |= RQ_HAS_KEEP_CONNECTION;
 			} else if (field.is2("upgrade", 7)) {
 				flags |= RQ_HAS_CONNECTION_UPGRADE;
 			} else if (field.is2(kgl_expand_string("close"))) {
@@ -705,7 +728,7 @@ kgl_header_result KHttpRequest::InternalParseHeader(const char *attr, int attr_l
 		flags |= RQ_HAS_AUTHORIZATION;
 		
 #ifdef ENABLE_TPROXY
-		if (!IsWorkModel(WORK_MODEL_TPROXY)) {
+		if (!TEST(GetWorkModel(),WORK_MODEL_TPROXY)) {
 #endif
 			char *p = val;
 			while (*p && !IS_SPACE(*p)) {
@@ -791,10 +814,11 @@ kgl_header_result KHttpRequest::InternalParseHeader(const char *attr, int attr_l
 }
 int KHttpRequest::Read(char *buf, int len)
 {
+	kassert(this->IsSync());
 	if (TEST(flags, RQ_HAVE_EXPECT)) {
 		CLR(flags, RQ_HAVE_EXPECT);
 		sink->ResponseStatus(100);
-		sink->StartResponseBody(true, 0);
+		sink->StartResponseBody(this, 0);
 		sink->Flush();
 		sink->StartHeader(this);
 	}
@@ -807,25 +831,32 @@ int KHttpRequest::Read(char *buf, int len)
 	length = sink->Read(buf,len);
 	if (length > 0) {
 		left_read -= length;
+		AddUpFlow((INT64)length);
 	}
 	return length;
 }
+kev_result KHttpRequest::WriteExpectedCallback(void *arg, result_callback result, buffer_callback buffer)
+{
+	kassert(!TEST(flags, RQ_HAVE_EXPECT));
+	sink->Flush();
+	sink->StartHeader(this);
+	return sink->Read(arg, result, buffer);
+}
 kev_result KHttpRequest::LowRead(void *arg, result_callback result, buffer_callback buffer)
 {
+	kassert(!IsSync());
 	//check expected 100-continue
 	if (TEST(flags, RQ_HAVE_EXPECT) && !ctx->connection_upgrade) {
 		CLR(flags, RQ_HAVE_EXPECT);
 		sink->ResponseStatus(100);
-		sink->StartResponseBody(false, 0);
+		sink->StartResponseBody(this, 0);
 		if (sink->HasHeaderDataToSend()) {
-			if (write_stack == NULL) {
-				write_stack = (kgl_request_stack *)kgl_pnalloc(pool, sizeof(kgl_request_stack));
-			}
-			write_stack->arg = arg;
-			write_stack->result = result;
-			write_stack->buffer = buffer;
-			write_stack->rq = this;
-			return sink->Write(write_stack, result_write_expected, NULL);
+			kgl_request_event_context *ctx = (kgl_request_event_context *)kgl_pnalloc(pool, sizeof(kgl_request_event_context));
+			ctx->ev.arg = arg;
+			ctx->ev.result = result;
+			ctx->ev.buffer = buffer;
+			ctx->rq = this;
+			return sink->Write(ctx, result_write_expected, NULL);
 		}
 	}
 	return sink->Read(arg, result, buffer);
@@ -843,52 +874,97 @@ kev_result KHttpRequest::Read(void *arg, result_callback result, buffer_callback
 #endif
 	return LowRead(arg, result, buffer);
 }
+
 int buffer_limit_write(void *arg, LPWSABUF buf, int buf_count)
 {
-	kgl_request_stack *stack = (kgl_request_stack *)arg;
-	return stack->buffer(stack->arg, buf, 1);
+	KHttpRequest *rq = (KHttpRequest *)arg;
+	buffer_callback buffer = (buffer_callback)rq->GetCurrentWriteHookContext();
+	return buffer(rq->write_stack->arg, buf, 1);	
 }
 kev_result result_limit_write_done(void *arg, int got)
 {
-	kgl_request_stack *stack = (kgl_request_stack *)arg;
-	KHttpRequest *rq = stack->rq;
-	kassert(rq->ctx->write_timer == 1);
-	rq->ctx->write_timer = 0;
-	return stack->result(stack->arg, got);
+	KHttpRequest *rq = (KHttpRequest *)arg;
+	return rq->WriteHookCallBack();
 }
-kev_result result_limit_write(void *arg, int got)
+kev_result speed_limit_write_hook(KHttpRequest *rq)
 {
-	kgl_request_stack *stack = (kgl_request_stack *)arg;
-	KHttpRequest *rq = stack->rq;
-	kassert(rq->ctx->write_timer==0);
-	if (got <= 0) {
-		return stack->result(stack->arg, got);
+	if (rq->write_stack->got <= 0) {
+		return rq->WriteHookCallBack();
 	}
-	int speed_msec = rq->getSleepTime(got);
+	int speed_msec = rq->getSleepTime(rq->write_stack->got);
 	if (speed_msec > 0) {
-		rq->ctx->write_timer = 1;
 		kgl_block_queue *brq = (kgl_block_queue *)xmemory_new(kgl_block_queue);
 		memset(brq, 0, sizeof(kgl_block_queue));
 		brq->active_msec = kgl_current_msec + speed_msec;
 		brq->func = result_limit_write_done;
-		brq->arg = stack;
-		brq->got = got;
+		brq->arg = rq;
+		brq->got = 0;
 		kselector_add_block_queue(rq->sink->GetSelector(), brq);
 		return kev_ok;
 	}
-	return stack->result(stack->arg, got);
+	return rq->WriteHookCallBack();
+}
+kev_result kgl_call_write_hook(void *arg, int got)
+{
+	KHttpRequest *rq = (KHttpRequest *)arg;
+	kassert(rq->write_stack);
+	rq->write_stack->got = got;
+	rq->ctx->write_hook = 1;
+	return rq->write_stack->hook_head->call(rq);
+}
+void KHttpRequest::AddWriteHook(void *arg, KHttpRequestWriteHook result,bool last)
+{
+	kassert(!IsSync());
+	if (write_stack == NULL) {
+		write_stack = (kgl_request_stack *)kgl_pnalloc(pool, sizeof(kgl_request_stack));
+		memset(write_stack, 0, sizeof(kgl_request_stack));
+	}
+	kgl_write_hook *write_hook = new kgl_write_hook;
+	write_hook->call = result;
+	write_hook->arg = arg;
+	if (last) {
+		write_hook->next = NULL;
+		if (write_stack->hook_last) {
+			write_stack->hook_last->next = write_hook;
+		} else {
+			kassert(write_stack->hook_head == NULL);
+			write_stack->hook_head = write_hook;
+		}
+		write_stack->hook_last = write_hook;
+	} else {
+		write_hook->next = write_stack->hook_head;
+		write_stack->hook_head = write_hook;
+		if (write_stack->hook_last == NULL) {
+			write_stack->hook_last = write_hook;
+		}
+	}
+}
+kev_result KHttpRequest::WriteHookCallBack()
+{
+	kassert(write_stack && write_stack->hook_head);
+	kgl_write_hook *hook = write_stack->hook_head;
+	kassert(hook->next || hook == write_stack->hook_last);
+	write_stack->hook_head = hook->next;
+	delete hook;
+	if (write_stack->hook_head) {
+		return write_stack->hook_head->call(this);
+	}
+	write_stack->hook_last = NULL;
+	kassert(write_stack->result);
+	ctx->write_hook = 0;
+	return write_stack->result(write_stack->arg, write_stack->got);
 }
 kev_result KHttpRequest::Write(void *arg, result_callback result, buffer_callback buffer)
 {
 	if (unlikely(slh && buffer)) {
-		if (write_stack == NULL) {
-			write_stack = (kgl_request_stack *)kgl_pnalloc(pool, sizeof(kgl_request_stack));
-		}		
+		AddWriteHook((void *)buffer, speed_limit_write_hook,false);
+		kassert(this->GetCurrentWriteHookContext() == (void *)buffer);
+		buffer = buffer_limit_write;
+	}
+	if (HasWriteHook()) {
 		write_stack->arg = arg;
 		write_stack->result = result;
-		write_stack->buffer = buffer;
-		write_stack->rq = this;
-		return sink->Write(write_stack, result_limit_write, buffer_limit_write);
+		return sink->Write(this, kgl_call_write_hook, buffer);
 	}
 	return sink->Write(arg, result, buffer);
 }
@@ -964,8 +1040,70 @@ bool KHttpRequest::startResponseBody(INT64 body_len)
 	assert(!TEST(flags,RQ_HAS_SEND_HEADER));
 	if (TEST(flags,RQ_HAS_SEND_HEADER)) {
 		return true;
-	}	
+	}
 	SET(flags,RQ_HAS_SEND_HEADER);
-	return sink->StartResponseBody(TEST(flags, RQ_SYNC), body_len) > 0;
+	int header_len = sink->StartResponseBody(this, body_len);
+	AddDownFlow(header_len,true);
+	return header_len > 0;
 }
 
+void KHttpRequest::pushFetchObject(KFetchObject *fo)
+{
+	fo->next = fetchObj;
+	fetchObj = fo;
+}
+void KHttpRequest::appendFetchObject(KFetchObject *fo)
+{
+	if (fo->filter==0 && TEST(filter_flags, RQ_NO_EXTEND) && !TEST(flags, RQ_IS_ERROR_PAGE)) {
+		//无扩展处理
+		if (fo->needQueue()) {
+			delete fo;
+			fo = new KStaticFetchObject();
+		}
+	}
+	KFetchObject *last = fetchObj;
+	while (last && last->next) {
+		last = last->next;
+	}
+	if (last) {
+		last->next = fo;
+		return;
+	}
+	fetchObj = fo;
+}
+bool KHttpRequest::hasFinalFetchObject()
+{
+	KFetchObject *fo = this->fetchObj;
+	while (fo) {
+		if (!fo->filter) {
+			return true;
+		}
+		fo = fo->next;
+	}
+	return false;
+}
+kev_result KHttpRequest::NextFetchObject(KRequestQueue *queue)
+{
+#ifdef ENABLE_REQUEST_QUEUE
+	if (queue) {
+		ReleaseQueue();
+		this->queue = queue;
+		queue->addRef();
+	}
+#endif
+	KFetchObject *fo = fetchObj;
+	if (fetchObj) {
+		fetchObj = fetchObj->next;
+	}
+	if (fo != NULL) {
+		fo->close(this);
+		delete fo;
+	}
+	if (fetchObj) {
+		if (this->queue && !ctx->queue_handled) {
+			return processRequestUseQueue(this, queue);
+		}
+		return processReadyedRequest(this);
+	}
+	return stageEndRequest(this);
+}

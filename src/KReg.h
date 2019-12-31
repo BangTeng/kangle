@@ -18,6 +18,7 @@
 #ifndef KREG_H_sldjf9sdf9sdf
 #define KREG_H_sldjf9sdf9sdf
 #include<string>
+#include "kmalloc.h"
 #ifdef _WIN32
 #include "pcre/pcre.h"
 #else
@@ -81,7 +82,7 @@ public:
 			return NULL;
 		}
 		char *buf = (char *)malloc(len+1);
-		memcpy(buf,str+ovector[start],len);
+		kgl_memcpy(buf,str+ovector[start],len);
 		buf[len]='\0';
 		return buf;
 	}

@@ -243,7 +243,7 @@ bool KHttp2::add_header(kgl_http_v2_header_t *header)
 	if (avail >= header->name.len) {
 		hpack.pos = (u_char *)kgl_cpymem(hpack.pos, header->name.data,header->name.len);
 	} else {
-		memcpy(hpack.pos, header->name.data, avail);
+		kgl_memcpy(hpack.pos, header->name.data, avail);
 		hpack.pos = (u_char *)kgl_cpymem(hpack.storage,
 			header->name.data + avail,
 			header->name.len - avail);
@@ -258,7 +258,7 @@ bool KHttp2::add_header(kgl_http_v2_header_t *header)
 	if (avail >= header->value.len) {
 		hpack.pos = (u_char *)kgl_cpymem(hpack.pos, header->value.data,	header->value.len);
 	} else {
-		memcpy(hpack.pos, header->value.data, avail);
+		kgl_memcpy(hpack.pos, header->value.data, avail);
 		hpack.pos = (u_char *)kgl_cpymem(hpack.storage,
 			header->value.data + avail,
 			header->value.len - avail);
@@ -272,9 +272,9 @@ bool KHttp2::add_header(kgl_http_v2_header_t *header)
 
 		index = hpack.deleted % hpack.allocated;
 
-		memcpy(entries, &hpack.entries[index],(hpack.allocated - index) * sizeof(kgl_http_v2_header_t *));
+		kgl_memcpy(entries, &hpack.entries[index],(hpack.allocated - index) * sizeof(kgl_http_v2_header_t *));
 
-		memcpy(&entries[hpack.allocated - index], hpack.entries,index * sizeof(kgl_http_v2_header_t *));
+		kgl_memcpy(&entries[hpack.allocated - index], hpack.entries,index * sizeof(kgl_http_v2_header_t *));
 
 		kgl_pfree(c->pool,hpack.entries);
 

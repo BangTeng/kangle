@@ -33,12 +33,14 @@ bool KHostRewriteMark::mark(KHttpRequest *rq, KHttpObject *obj, const int chainJ
 		SET(rq->raw_url.flags,KGL_URL_REWRITED);
 	}
 	if (proxy) {	
-		rq->closeFetchObject();
 		const char *ssl = NULL;
 		if (TEST(rq->url->flags, KGL_URL_SSL)) {
 			ssl = "s";
 		}
-		rq->fetchObj = server_container->get(NULL,(rewrite?rq->url->host:cdn_host->getString()),(port>0?port:rq->url->port),ssl,life_time);
+		KFetchObject *fo = server_container->get(NULL,(rewrite?rq->url->host:cdn_host->getString()),(port>0?port:rq->url->port),ssl,life_time);
+		if (fo) {
+			rq->appendFetchObject(fo);
+		}
 		jumpType = JUMP_ALLOW;
 	}
 	delete ss;
@@ -88,7 +90,7 @@ std::string KHostRewriteMark::getDisplay()
 	return s.str();
 }
 void KHostRewriteMark::editHtml(std::map<std::string, std::string> &attribute)
-			throw (KHtmlSupportException)
+			
 {
 	regHost.setModel(attribute["reg_host"].c_str(),PCRE_CASELESS);
 	host = attribute["host"];
@@ -141,8 +143,11 @@ bool KHostMark::mark(KHttpRequest *rq, KHttpObject *obj, const int chainJumpType
 		SET(rq->raw_url.flags,KGL_URL_REWRITED);
 	}
 	if (proxy) {	
-		rq->closeFetchObject();
-		rq->fetchObj = server_container->get(NULL,(rewrite?rq->url->host:host.c_str()),(port>0?port:rq->url->port),(ssl?"s":NULL),life_time);
+		
+		KFetchObject * fo = server_container->get(NULL,(rewrite?rq->url->host:host.c_str()),(port>0?port:rq->url->port),(ssl?"s":NULL),life_time);
+		if (fo) {
+			rq->appendFetchObject(fo);
+		}
 		jumpType = JUMP_ALLOW;
 	}
 	return true;
@@ -196,7 +201,7 @@ std::string KHostMark::getDisplay()
 	return s.str();
 }
 void KHostMark::editHtml(std::map<std::string, std::string> &attribute)
-			throw (KHtmlSupportException)
+			
 {
 	host = attribute["host"];
 	port = atoi(attribute["port"].c_str());

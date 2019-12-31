@@ -92,8 +92,7 @@ public:
 		xfree(t);
 		return true;
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute){
 		if (attibute["path"].size() > 0) {
 			setPath(attibute["path"].c_str());
 		}

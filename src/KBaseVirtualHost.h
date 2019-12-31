@@ -100,11 +100,11 @@ public:
 		int new_len = left_len + to_len;
 		char *new_value = (char *) xmalloc(new_len+1);
 		new_value[new_len] = '\0';
-		memcpy(new_value, to, to_len);
+		kgl_memcpy(new_value, to, to_len);
 		if (left_len <= 0) {
 			return new_value;
 		}
-		memcpy(new_value + to_len, value + path_len, left_len);
+		kgl_memcpy(new_value + to_len, value + path_len, left_len);
 		return new_value;
 	}
 	bool inherited;

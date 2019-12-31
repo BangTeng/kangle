@@ -122,7 +122,7 @@ char *KFileName::concatDir(const char *docRoot, const char *file) {
 	int len = strlen(triped_path);
 	int name_len = doclen + len;
 	char *name = (char *) xmalloc(name_len+2);
-	memcpy(name, docRoot, doclen);
+	kgl_memcpy(name, docRoot, doclen);
 	if (docRoot[doclen - 1] != '/'
 #ifdef _WIN32
 		&& docRoot[doclen-1] != '\\'
@@ -137,10 +137,10 @@ char *KFileName::concatDir(const char *docRoot, const char *file) {
 		|| *triped_path == '\\'
 #endif
 		) {
-		memcpy(name + doclen, triped_path + 1, len - 1);
+		kgl_memcpy(name + doclen, triped_path + 1, len - 1);
 		name_len--;
 	} else {
-		memcpy(name + doclen, triped_path, len);
+		kgl_memcpy(name + doclen, triped_path, len);
 	}
 	name[name_len] = '\0';
 	xfree(triped_path);
@@ -206,7 +206,7 @@ void KFileName::tripDir3(char *path,const char split_char)
 			}
 		}
 		if (src != hot) {
-			memcpy(src, hot, p - hot);
+			kgl_memcpy(src, hot, p - hot);
 			src += copy_len;
 		} else {
 			src = p;
@@ -388,7 +388,7 @@ CheckLinkState KFileName::checkLink(const char *path, int follow_link) {
 		if (buf.st_uid != buf2.st_uid) {
 			return CheckLinkFailed;
 		}
-		memcpy(&buf, &buf2, sizeof(buf));
+		kgl_memcpy(&buf, &buf2, sizeof(buf));
 		return CheckLinkContinue;
 	}
 #endif
@@ -425,7 +425,7 @@ bool KFileName::setName(const char *docRoot, const char *triped_path,
 		int len = strlen(triped_path);
 		name_len = doclen + len;
 		name = (char *) xmalloc(name_len+2);
-		memcpy(name, docRoot, doclen);
+		kgl_memcpy(name, docRoot, doclen);
 		if (docRoot[doclen - 1] != '/' 
 #ifdef _WIN32
 			&& docRoot[doclen - 1] != '\\'
@@ -440,10 +440,10 @@ bool KFileName::setName(const char *docRoot, const char *triped_path,
 			|| *triped_path == '\\'
 #endif
 			) {
-			memcpy(name + doclen, triped_path + 1, len - 1);
+			kgl_memcpy(name + doclen, triped_path + 1, len - 1);
 			name_len--;
 		} else {
-			memcpy(name + doclen, triped_path, len);
+			kgl_memcpy(name + doclen, triped_path, len);
 		}
 		name[name_len] = '\0';
 		return getFileInfo();
@@ -451,7 +451,7 @@ bool KFileName::setName(const char *docRoot, const char *triped_path,
 	linkChecked = true;
 	int path_len = doclen + strlen(triped_path) + 1;
 	char *path = (char *) xmalloc(path_len+1);
-	memcpy(path, docRoot, doclen);
+	kgl_memcpy(path, docRoot, doclen);
 	char *dst = path + doclen;
 	if (path[doclen - 1] == '/' 
 #ifdef _WIN32
@@ -482,7 +482,7 @@ bool KFileName::setName(const char *docRoot, const char *triped_path,
 			}
 			*dst = PATH_SPLIT_CHAR ;
 			dst++;
-			memcpy(dst, src, copy_len);
+			kgl_memcpy(dst, src, copy_len);
 			dst[copy_len] = '\0';
 			result = checkLink(path, follow_link);
 			break;
@@ -490,7 +490,7 @@ bool KFileName::setName(const char *docRoot, const char *triped_path,
 		int copy_len = p - src;
 		*dst = PATH_SPLIT_CHAR;
 		dst++;
-		memcpy(dst, src, copy_len);
+		kgl_memcpy(dst, src, copy_len);
 		dst += copy_len;
 		*dst = '\0';
 		result = checkLink(path, follow_link);

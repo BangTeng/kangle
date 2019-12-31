@@ -123,9 +123,9 @@ void KVirtualHostContainer::iterator(inter_domain_iterator_arg *it)
 		int new_len = it->domain_len + *name + 1;
 		domain = (domain_t)malloc(new_len + 1);
 		if (it->domain) {
-			memcpy(domain,it->domain,it->domain_len);
+			kgl_memcpy(domain,it->domain,it->domain_len);
 		}
-		memcpy(domain+it->domain_len,name,*name+1);
+		kgl_memcpy(domain+it->domain_len,name,*name+1);
 		it->domain_len = new_len;
 		it->domain = domain;
 	}
@@ -294,7 +294,7 @@ bool KVirtualHostContainer::add(domain_t name,bool wide,kgl_bind_level level,voi
 	if (new_flag) {
 		rn = new KVirtualHostContainer;
 		rn->name = (domain_t)malloc(*name + 1);
-		memcpy(rn->name, name, *name + 1);
+		kgl_memcpy(rn->name, name, *name + 1);
 		node->data = rn;
 	} else {
 		rn = (KVirtualHostContainer *)node->data;

@@ -31,7 +31,7 @@ KListenConfigParser listenConfigParser;
 KWorkerConfigParser worker_config_parser;
 bool KWorkerConfigParser::startCharacter(KXmlContext *context, char *character, int len)
 {
-	if (context->path == "config/worker_thread") {
+	if (context->path == "config" && context->qName == "worker_thread") {
 		conf.select_count = atoi(character);
 		return true;
 	}
@@ -64,6 +64,7 @@ bool KListenConfigParser::startElement(std::string &context, std::string &qName,
 #ifdef ENABLE_HTTP2
 		m_host->http2 = attribute["http2"]=="1";
 #endif
+		m_host->early_data = attribute["early_data"] == "1";
 		m_host->cipher = attribute["cipher"];
 		m_host->protocols = attribute["protocols"];
 #endif

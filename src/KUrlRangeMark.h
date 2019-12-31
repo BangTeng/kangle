@@ -60,8 +60,7 @@ public:
 		s << range_to.getModel();
 		return s.str();
 	}
-	void editHtml(std::map<std::string,std::string> &attibute)
-		throw(KHtmlSupportException) {
+	void editHtml(std::map<std::string,std::string> &attibute){
 		range_from.setModel(attibute["range_from"].c_str(),PCRE_CASELESS);
 		range_to.setModel(attibute["range_to"].c_str(),PCRE_CASELESS);
 	}

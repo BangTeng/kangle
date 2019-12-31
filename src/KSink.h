@@ -81,14 +81,22 @@ public:
 	virtual kconnection *GetConnection() = 0;
 	virtual void SetTimeOut(int tmo_count) = 0;
 	virtual int GetTimeOut() = 0;
-	virtual void Flush() = 0;
+	virtual void SetDelay()
+	{
+
+	}
+	virtual void SetNoDelay(bool forever)
+	{
+	}
+	void Flush()
+	{
+		SetNoDelay(false);
+		SetDelay();
+	}
 #ifdef KSOCKET_SSL
-	virtual SSL *GetSSL() {
+	kssl_session *GetSSL() {
 		kconnection *cn = GetConnection();
-		if (cn->st.ssl == NULL) {
-			return NULL;
-		}
-		return cn->st.ssl->ssl;
+		return cn->st.ssl;
 	}
 #endif
 	virtual void StartHeader(KHttpRequest *rq)
@@ -112,6 +120,6 @@ protected:
 	virtual bool ResponseStatus(uint16_t status_code) = 0;
 	virtual bool ResponseHeader(const char *name, int name_len, const char *val, int val_len) = 0;
 	virtual bool ResponseConnection(const char *val, int val_len) = 0;
-	virtual int StartResponseBody(bool sync, int64_t body_size) = 0;
+	virtual int StartResponseBody(KHttpRequest *rq, int64_t body_size) = 0;
 };
 #endif

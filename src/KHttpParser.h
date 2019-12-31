@@ -6,6 +6,7 @@ typedef enum {
 	kgl_parse_error,
 	kgl_parse_success,
 	kgl_parse_finished,
+	kgl_parse_want_read,
 	kgl_parse_continue
 } kgl_parse_result;
 
@@ -40,7 +41,6 @@ typedef struct {
 	int header_len;
 	uint8_t started : 1;
 	uint8_t finished : 1;
-	uint8_t request : 1;
 	uint8_t first_same : 1;
 } khttp_parser;
 

@@ -49,7 +49,7 @@ restart:
 				work_len = -5;
 				return dechunk_failed;
 			}
-			memcpy(work + work_len, *buf, read_len);
+			kgl_memcpy(work + work_len, *buf, read_len);
 			work_len += read_len;
 			data = work;
 			data_len = work_len;
@@ -65,7 +65,7 @@ restart:
 			}
 			work = (char *)malloc(buf_len + 20);
 			work_len = buf_len;
-			memcpy(work, *buf, buf_len);
+			kgl_memcpy(work, *buf, buf_len);
 			//continue;
 			return dechunk_continue;
 		}

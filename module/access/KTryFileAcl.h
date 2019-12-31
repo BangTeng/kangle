@@ -56,8 +56,7 @@ public:
 	std::string getDisplay() {
 		return "";
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute){
 		
 	}
 	void buildXML(std::stringstream &s) {

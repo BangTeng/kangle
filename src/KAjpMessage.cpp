@@ -62,7 +62,7 @@ bool KAjpMessage::putString(const char *str, int len) {
 	if (!checkSend(len + 1)) {
 		return false;
 	}
-	memcpy(buf + pos, str, len + 1);
+	kgl_memcpy(buf + pos, str, len + 1);
 	pos+=(len+1);
 	return true;
 }

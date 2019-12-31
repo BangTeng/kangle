@@ -16,7 +16,7 @@ public:
 	int buffer(LPWSABUF buf, int bc)
 	{
 		int copy_bc = MIN(bc, this->bc);
-		memcpy(buf, this->buf, copy_bc * sizeof(WSABUF));
+		kgl_memcpy(buf, this->buf, copy_bc * sizeof(WSABUF));
 		return copy_bc;
 	}
 } ;
@@ -37,9 +37,9 @@ public:
 	{
 		us->SetDelay();
 	}
-	void SetNoDelay()
+	void SetNoDelay(bool forever)
 	{
-		us->SetNoDelay();
+		us->SetNoDelay(forever);
 	}
 	kconnection *GetConnection()
 	{
@@ -83,10 +83,6 @@ public:
 	void Shutdown();
 	void Destroy();
 	bool IsLocked();
-	bool GetSelfAddr(sockaddr_i *addr)
-	{
-
-	}
 	sockaddr_i *GetAddr()
 	{
 		return us->GetAddr();

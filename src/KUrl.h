@@ -15,7 +15,7 @@
 #define KGL_URL_RANGED    0x10
 #define KGL_URL_ENCODE    0x20
 #define KGL_URL_ORIG_SSL  0x40  //源建议的ssl
-#define KGL_URL_BAD       0x80
+//#define KGL_URL_BAD       0x80
 
 #define KGL_ENCODING_DEFLATE  1
 #define KGL_ENCODING_COMPRESS (1<<1)
@@ -36,6 +36,9 @@ public:
 		IF_FREE(path);
 		IF_FREE(param);
 		flag_encoding = 0;
+	}
+	bool IsContentEncoding() {
+		return TEST(encoding, KGL_ENCODING_YES) > 0;
 	}
 	bool match_accept_encoding(u_char accept_encoding) {
 		assert(TEST(accept_encoding, KGL_ENCODING_YES) == 0);
@@ -97,6 +100,9 @@ public:
 		clone_to(url);
 		return url;
 	}
+	bool IsBad() {
+		return host == NULL || path == NULL;
+	}
 	//clone this to url
 	void clone_to(KUrl *url) {
 
@@ -151,12 +157,12 @@ public:
 		char *new_param = (char *)xmalloc(new_len);
 		char *hot = new_param;
 		if (param_len>0) {
-			memcpy(hot,param,param_len);
+			kgl_memcpy(hot,param,param_len);
 			hot += param_len;
 		}
 		*hot = VARY_URL_KEY;
 		hot++;
-		memcpy(hot,vary_key,len);
+		kgl_memcpy(hot,vary_key,len);
 		hot+=len;
 		*hot = '\0';
 		if (param) {
@@ -215,12 +221,8 @@ public:
 			}
 		}
 	}
-	void GetHost(KStringBuf &s)
+	void GetHost(KStringBuf &s, uint16_t default_port)
 	{
-		int default_port = 80;
-		if (TEST(flags, KGL_URL_SSL)) {
-			default_port = 443;
-		}
 		if (unlikely(TEST(flags, KGL_URL_IPV6))) {
 			s << "[" << host << "]";
 		} else {
@@ -229,7 +231,14 @@ public:
 		if (unlikely(port != default_port)) {
 			s << ":" << port;
 		}
-		return;
+	}
+	void GetHost(KStringBuf &s)
+	{
+		int default_port = 80;
+		if (TEST(flags, KGL_URL_SSL)) {
+			default_port = 443;
+		}
+		GetHost(s, default_port);
 	}
 	bool getUrl(KStringBuf &s,bool urlEncode=false) {
 		if (unlikely(host == NULL || path == NULL)) {

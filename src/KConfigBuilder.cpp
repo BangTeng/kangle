@@ -122,6 +122,7 @@ void KConfigBuilder::build(std::stringstream &s) {
 #ifdef ENABLE_HTTP2
 			s << "http2='" << (conf.service[i]->http2 ?"1":"0") << "' ";
 #endif
+			s << "early_data='" << (conf.service[i]->early_data ? "1" : "0") << "' ";
 		}
 #endif
 		s << "/>\n";
@@ -158,9 +159,9 @@ void KConfigBuilder::build(std::stringstream &s) {
 			<< conf.min_gzip_length << "' gzip_level='" << conf.gzip_level
 			<< "'/>\n";
 	s << "\t<cache default='" << conf.default_cache << "' max_cache_size='" << get_size(conf.max_cache_size) << "'";
-		
 	s << " memory='" <<  get_size(conf.mem_cache) << "'";
 #ifdef ENABLE_DISK_CACHE
+	s << " max_bigobj_size='" << get_size(conf.max_bigobj_size) << "'";
 	s << " disk='" << get_size(conf.disk_cache);
 	if (conf.disk_cache_is_radio) {
 		s << "%";
@@ -256,7 +257,13 @@ void KConfigBuilder::build(std::stringstream &s) {
 	if (conf.log_sub_request) {
 		s << " log_sub_request='1'";
 	}
+	if (conf.log_radio > 0) {
+		s << " radio='" << conf.log_radio << "'";
+	}
 	s << "/>\n";
+	if (conf.http2https_code > 0) {
+		s << "\t<http2https_code>" << conf.http2https_code << "</http2https_code>\n";
+	}
 	if(*conf.server_software){
 		s << "\t<server_software>" << conf.server_software << "</server_software>\n";
 	}

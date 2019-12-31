@@ -32,7 +32,7 @@ static const char *get_value(void *server_ctx,const char *name)
 KF_STATUS_TYPE KAccessDso::process(KAccessRequest *ar,DWORD notify)
 {
 	kgl_access_context ar_ctx;
-	memcpy(&ar_ctx, &ctx, sizeof(ar_ctx));
+	kgl_memcpy(&ar_ctx, &ctx, sizeof(ar_ctx));
 	ar_ctx.cn = ar;
 	return access->process(&ar_ctx,notify);
 }
@@ -45,7 +45,7 @@ std::string KAccessDso::getDisplay()
 	return build(KF_ACCESS_BUILD_SHORT);
 }
 void KAccessDso::editHtml(std::map<std::string, std::string> &attribute)
-		throw (KHtmlSupportException)
+		
 {
 	kgl_access_parse parser;
 	memset(&parser,0,sizeof(parser));

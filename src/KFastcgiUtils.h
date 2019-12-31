@@ -187,7 +187,7 @@ public:
 				if (readLen > readLeft) {
 					readLen = readLeft;
 				}
-				memcpy(buf, readHot, readLen);
+				kgl_memcpy(buf, readHot, readLen);
 				readHot += readLen;
 				readLeft -= readLen;
 				return readLen;

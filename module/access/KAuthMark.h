@@ -39,7 +39,7 @@ public:
 	std::string getHtml(KModel *model);
 
 	std::string getDisplay();
-	void editHtml(std::map<std::string, std::string> &attribute) throw (KHtmlSupportException);
+	void editHtml(std::map<std::string, std::string> &attribute);
 	void buildXML(std::stringstream &s);
 private:
 	std::string getRequireUsers();

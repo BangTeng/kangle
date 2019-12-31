@@ -29,7 +29,9 @@ class KHttpObjectHash;
 
 #define MEMORY_OBJECT       0
 #define BIG_OBJECT          1
+#ifdef ENABLE_BIG_OBJECT_206
 #define BIG_OBJECT_PROGRESS 2
+#endif
 #define SWAPING_OBJECT      3
 /**
  * httpobject的信息主体
@@ -58,6 +60,9 @@ public:
 			break;
 #endif
 		
+		case BIG_OBJECT:
+			assert(bodys == NULL);
+			break;
 		default:
 			assert(bodys == NULL);
 			break;
@@ -122,6 +127,14 @@ public:
 		refs = 1;
 		data = NULL;
 	}
+	void Dead();
+	bool IsContentRangeComplete(KHttpRequest *rq)
+	{
+		if (!TEST(index.flags, ANSW_HAS_CONTENT_RANGE)) {
+			return false;
+		}
+		return rq->ctx->content_range_length==index.content_length;
+	}
 	inline char *getCharset()
 	{
 		if (data==NULL) {
@@ -146,7 +159,7 @@ public:
 				charsetend++;
 			int charset_len = (int)(charsetend - p);
 			char *charset = (char *)malloc(charset_len+1);
-			memcpy(charset,p,charset_len);
+			kgl_memcpy(charset,p,charset_len);
 			charset[charset_len] = '\0';
 			return charset;
 		}
@@ -251,11 +264,13 @@ public:
 	void count_size(INT64 &mem_size,INT64 &disk_size)
 	{
 		if (TEST(index.flags,FLAG_IN_MEM)) {
-		
+			mem_size += index.head_size;
+			if (data->type==MEMORY_OBJECT) {
 				mem_size += index.content_length;
+			}
 		}
 		if (TEST(index.flags,FLAG_IN_DISK)) {
-			disk_size += index.content_length;
+			disk_size += index.content_length + index.head_size;
 		}
 	}
 #ifdef ENABLE_DISK_CACHE

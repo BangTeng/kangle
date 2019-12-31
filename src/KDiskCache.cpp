@@ -25,14 +25,7 @@
 volatile bool index_progress = false;
 index_scan_state_t index_scan_state;
 static int load_count = 0;
-KMutex swapinQueueLock;
-std::list<KHttpRequest *> swapinQueue;
 static INT64 recreate_start_time = 0;
-
-#if 0
-static bool rebuild_cache_hash = false;
-static std::map<std::string,std::string> rebuild_cache_files;
-#endif
 using namespace std;
 bool skipString(char **hot,int &hotlen)
 {
@@ -40,7 +33,7 @@ bool skipString(char **hot,int &hotlen)
 		return false;
 	}
 	int len;
-	memcpy(&len,*hot,sizeof(int));
+	kgl_memcpy(&len,*hot,sizeof(int));
 	(*hot)+=sizeof(int);
 	hotlen-=sizeof(int);
 	if (hotlen<=len) {
@@ -64,7 +57,7 @@ char *readString(char **hot,int &hotlen,int &len)
 		len = -1;
 		return NULL;
 	}
-	memcpy(&len,*hot,sizeof(int));
+	kgl_memcpy(&len,*hot,sizeof(int));
 	hotlen-=sizeof(int);
 	(*hot) += sizeof(int);
 	if(len<0 || len>1000000){
@@ -79,7 +72,7 @@ char *readString(char **hot,int &hotlen,int &len)
 	char *buf = (char *)xmalloc(len+1);
 	buf[len]='\0';
 	if (len>0) {
-		memcpy(buf,*hot,len);
+		kgl_memcpy(buf,*hot,len);
 		hotlen -= len;
 		(*hot) += len;
 	}
@@ -107,9 +100,9 @@ char *readString(KFile *file,int &len)
 }
 int write_string(char *hot, const char *str, int len)
 {
-	memcpy(hot, (char *)&len, sizeof(int));
+	kgl_memcpy(hot, (char *)&len, sizeof(int));
 	if (len > 0) {
-		memcpy(hot + sizeof(int), str, len);
+		kgl_memcpy(hot + sizeof(int), str, len);
 	}
 	return len + sizeof(int);
 }
@@ -313,8 +306,23 @@ cor_result create_http_object(KHttpObject *obj,const char *url,u_short flag_enco
 			return cor_incache;
 		}
 	}
-	if (!TEST(obj->index.flags, OBJ_INDEX_SAVED)) {
-		SET(obj->index.flags, FLAG_DEAD);
+	if (TEST(obj->index.flags, FLAG_IN_DISK)) {
+		if (obj->index.head_size != kgl_align(obj->index.head_size, kgl_aio_align_size)) {
+			char *url = obj->url->getUrl();
+			char *filename = obj->getFileName();
+			klog(KLOG_ERR, "disk cache file head_size=[%d] is not align by size=[%d], url=[%s] file=[%s] now dead it.\n", obj->index.head_size, kgl_aio_align_size, url, filename);
+			free(filename);
+			free(url);
+			SET(obj->index.flags, FLAG_DEAD);
+		}
+		if (TEST(obj->index.flags, FLAG_BIG_OBJECT_PROGRESS)) {
+			char *url = obj->url->getUrl();
+			char *filename = obj->getFileName();
+			klog(KLOG_ERR, "disk cache file head_size=[%d] is part file that is not support by now size=[%d], url=[%s] file=[%s]. now dead it.\n", obj->index.head_size, kgl_aio_align_size, url, filename);
+			free(filename);
+			free(url);
+			SET(obj->index.flags, FLAG_DEAD);
+		}
 	}
 	if (stored_obj(obj,LIST_IN_DISK)) {
 		return cor_success;
@@ -355,7 +363,9 @@ int create_file_index(const char *file,void *param)
 			return 0;
 		}
 	}
-	
+	if (strstr(file,".part")) {
+		goto failed;
+	}
 	if (sscanf(file, "%x_%x", &f1, &f2)!=2) {
 		goto failed;
 	}
@@ -372,11 +382,14 @@ int create_file_index(const char *file,void *param)
 		klog(KLOG_ERR, "disk cache [%s] is not valide file\n", file_name);
 		goto failed;
 	}
+	if (header.body_complete) {
+		klog(KLOG_ERR, "disk cache [%s] is not complete.\n", file_name);
+		goto failed;
+	}
 	obj = new KHttpObject;
-	memcpy(&obj->index,&header.index,sizeof(obj->index));
+	kgl_memcpy(&obj->index,&header.index,sizeof(obj->index));
 	obj->dk.filename1 = f1;
 	obj->dk.filename2 = f2;
-	
 	result = create_http_object(&fp,obj,header.url_flag_encoding,file_name);
 	if (result==cor_success) {
 #ifdef ENABLE_DB_DISK_INDEX
@@ -395,16 +408,10 @@ failed:
 	}
 	return 0;
 }
-void clean_disk_orphan_files(const char *cache_dir)
-{
-	
-}
 void recreate_index_dir(const char *cache_dir)
 {
 	klog(KLOG_NOTICE,"scan cache dir [%s]\n",cache_dir);
-	
 	list_dir(cache_dir,create_file_index,(void *)cache_dir);
-	clean_disk_orphan_files(cache_dir);
 }
 bool recreate_index(const char *path,int &first_dir_index,int &second_dir_index,KTimeMatch *tm=NULL)
 {
@@ -508,6 +515,14 @@ void init_disk_cache(bool firstTime)
 	m_thread.start(NULL,load_cache_index);
 #endif
 }
+void get_disk_base_dir(KStringBuf &s)
+{
+	if (*conf.disk_cache_dir) {
+		s << conf.disk_cache_dir;
+	} else {
+		s << conf.path << "cache" << PATH_SPLIT_CHAR;
+	}
+}
 KTHREAD_FUNCTION scan_disk_cache_thread(void *param)
 {
 #if 0
@@ -530,13 +545,6 @@ KTHREAD_FUNCTION scan_disk_cache_thread(void *param)
 #if 0
 	rebuild_cache_hash = false;
 #endif
-	KTHREAD_RETURN;
-}
-KTHREAD_FUNCTION load_cache_index(void *param)
-{
-	//time_t nowTime = time(NULL);
-	//loadCacheIndex();
-	//klog(KLOG_ERR,"load_cache_index use time=%d seconds\n",time(NULL)-nowTime);
 	KTHREAD_RETURN;
 }
 void scan_disk_cache()
@@ -564,17 +572,11 @@ void rescan_disk_cache()
 	save_index_scan_state();
 }
 bool get_disk_size(INT64 &total_size,INT64 &free_size) {
-	string path;
-	if (*conf.disk_cache_dir) {
-		path = conf.disk_cache_dir;
-	} else {
-		path = conf.path;
-		path += "cache";
-		path += PATH_SPLIT_CHAR;
-	}
+	KStringBuf path;
+	get_disk_base_dir(path);
 #ifdef _WIN32
 	ULARGE_INTEGER FreeBytesAvailable, TotalNumberOfBytes, TotalNumberOfFreeBytes;
-	if (!GetDiskFreeSpaceEx(path.c_str(), &FreeBytesAvailable, &TotalNumberOfBytes, &TotalNumberOfFreeBytes)) {
+	if (!GetDiskFreeSpaceEx(path.getString(), &FreeBytesAvailable, &TotalNumberOfBytes, &TotalNumberOfFreeBytes)) {
 		return false;
 	}
 	total_size = TotalNumberOfBytes.QuadPart;
@@ -582,7 +584,7 @@ bool get_disk_size(INT64 &total_size,INT64 &free_size) {
 	return true;
 #elif LINUX
 	struct statfs buf;
-	if (statfs(path.c_str(), &buf) != 0) {
+	if (statfs(path.getString(), &buf) != 0) {
 		return false;
 	}
 	total_size = (INT64)buf.f_blocks * (INT64)buf.f_bsize;

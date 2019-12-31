@@ -46,8 +46,7 @@ public:
 		s << "total:" << m.size();
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute){
 		char *map = strdup(attibute["map"].c_str());
 		char *hot = map;
 		for (;;) {

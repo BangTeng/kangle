@@ -236,7 +236,7 @@ void KSubVirtualHost::setDocRoot(const char *doc_root, const char *dir) {
 #endif
 		){
 		sub_doc_root = (char *)xmalloc(doc_len+2);
-		memcpy(sub_doc_root,this->doc_root,doc_len);
+		kgl_memcpy(sub_doc_root,this->doc_root,doc_len);
 		sub_doc_root[doc_len] = PATH_SPLIT_CHAR;
 		sub_doc_root[doc_len+1] = '\0';
 		xfree(this->doc_root);
@@ -312,7 +312,7 @@ bool KSubVirtualHost::bindFile(KHttpRequest *rq, KHttpObject *obj,bool &exsit,KA
 		}
 		return bindFile(rq, exsit, false, true);
 	}//end subdir_local
-	if (rq->fetchObj != NULL) {
+	if (rq->hasFinalFetchObject()) {
 		return true;
 	}
 	if (type == subdir_http) {		
@@ -320,7 +320,7 @@ bool KSubVirtualHost::bindFile(KHttpRequest *rq, KHttpObject *obj,bool &exsit,KA
 			return false;
 		}
 		if (*(http->dst.host) == '-') {
-			rq->fetchObj = new KHttpProxyFetchObject();
+			rq->appendFetchObject(new KHttpProxyFetchObject());
 			return true;
 		}
 		const char *tssl = NULL;
@@ -330,7 +330,7 @@ bool KSubVirtualHost::bindFile(KHttpRequest *rq, KHttpObject *obj,bool &exsit,KA
 			tport = rq->url->port;
 			
 		}
-		rq->fetchObj = server_container->get(http->ip, http->dst.host, tport, tssl, http->lifeTime);		
+		rq->appendFetchObject(server_container->get(http->ip, http->dst.host, tport, tssl, http->lifeTime));
 		return true;
 	}//end subdir_http
 
@@ -342,7 +342,7 @@ bool KSubVirtualHost::bindFile(KHttpRequest *rq, KHttpObject *obj,bool &exsit,KA
 			proxy = server->https_proxy;
 		}
 	} else if (type == subdir_portmap) {
-		int port = (int)rq->sink->GetSelfPort();
+		int port = (int)rq->GetSelfPort();
 		if (port == 0) {
 			port = (int)rq->url->port;
 		}
@@ -363,7 +363,7 @@ bool KSubVirtualHost::bindFile(KHttpRequest *rq, KHttpObject *obj,bool &exsit,KA
 	KBaseRedirect *brd = new KBaseRedirect(rd, false);
 	fo->bindBaseRedirect(brd);
 	brd->release();
-	rq->fetchObj = fo;
+	rq->appendFetchObject(fo);
 	return true;	
 }
 bool KSubVirtualHost::bindFile(KHttpRequest *rq,bool &exsit,bool searchDefaultFile,bool searchAlias)

@@ -233,7 +233,7 @@ void kselector_check_timeout(kselector *selector,int event_number)
 			klog(KLOG_DEBUG, "request timeout st=%p\n", (kselectable *)rq);
 #endif
 			kassert(selector->count > 0);
-			if (TEST(rq->st_flags, STF_RTIME_OUT | STF_READ) == (STF_RTIME_OUT | STF_READ)) {
+			if (TEST(rq->st_flags, STF_RTIME_OUT) && TEST(rq->st_flags,STF_READ|STF_RECVFROM)>0) {
 				//set read time out
 				klist_append(&selector->list[i], l);
 				rq->active_msec = kgl_current_msec;

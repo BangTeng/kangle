@@ -253,7 +253,7 @@ public:
 		return s.str();
 	}
 	void editHtml(std::map<std::string, std::string> &attribute)
-			throw (KHtmlSupportException)
+			
 	{
 		ugid = attribute["ugid"];
 		reportPath = attribute["report_path"];

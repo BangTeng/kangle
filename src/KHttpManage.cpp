@@ -564,7 +564,9 @@ bool KHttpManage::config() {
 		s << klang["disk_work_time"] << ":<input type=text name=disk_work_time value='" << conf.disk_work_time << "'><br>";
 #endif
 		s << LANG_MAX_CACHE_SIZE << ":<input type=text name=max_cache_size size=6 value='"	<< get_size(conf.max_cache_size) << "'><br>";
-		
+#ifdef ENABLE_DISK_CACHE
+		s << klang["max_bigobj_size"] << ":<input type=text name=max_bigobj_size size=6 value='" << get_size(conf.max_bigobj_size) << "'><br>";
+#endif
 		s << LANG_MIN_REFRESH_TIME << ":<input type=text name=refresh_time size=4 value=" << conf.refresh_time << ">" << LANG_SECOND << "<br>";
 
 	} else if (item == 2) {
@@ -575,6 +577,7 @@ bool KHttpManage::config() {
 		s << klang["log_level"] << "<input type=text name=log_level value='" << conf.log_level << "'></br>\n";
 		s << klang["logs_day"] << "<input type=text name='logs_day' value='" << conf.logs_day << "'></br>\n";
 		s << klang["logs_size"] << "<input type=text name='logs_size' value='" << get_size(conf.logs_size) << "'></br>\n";
+		s << "log_radio:<input type=text name='log_radio' value='" << conf.log_radio << "'></br>\n";
 		s << "<input type=checkbox name='log_handle' value='1' ";
 		if (conf.log_handle) {
 			s << "checked";
@@ -740,17 +743,18 @@ bool KHttpManage::configsubmit() {
 		SAFE_STRCPY(conf.disk_work_time,getUrlValue("disk_work_time").c_str());
 		conf.diskWorkTime.set(conf.disk_work_time);
 		cache.init();
+		conf.max_bigobj_size = get_size(getUrlValue("max_bigobj_size").c_str());
 #endif
 		conf.mem_cache = get_size(getUrlValue("mem_cache").c_str());
 		conf.refresh_time = atoi(getUrlValue("refresh_time").c_str());
 		conf.max_cache_size = (unsigned) get_size(getUrlValue("max_cache_size").c_str());
 		conf.default_cache = atoi(getUrlValue("default_cache").c_str());
-		
 	} else if (item == 2) {
 		string access_log = getUrlValue("access_log");
 		SAFE_STRCPY(conf.log_rotate,getUrlValue("log_rotate_time").c_str());
 		conf.log_rotate_size = get_size(getUrlValue("log_rotate_size").c_str());
 		conf.error_rotate_size = get_size(getUrlValue("error_rotate_size").c_str());
+		conf.log_radio = atoi(getUrlValue("log_radio").c_str());
 		conf.log_level = atoi(getUrlValue("log_level").c_str());
 		conf.logs_day = atoi(getUrlValue("logs_day").c_str());
 		conf.logs_size = get_size(getUrlValue("logs_size").c_str());
@@ -934,8 +938,9 @@ bool KHttpManage::parseUrl(char *url) {
 bool KHttpManage::sendHttp(const char *msg, INT64 content_length,const char *content_type, const char *add_header, int max_age) {
 	KStringBuf s;
 	rq->responseStatus(STATUS_OK);
-	rq->responseHeader(kgl_response_server, conf.serverName, conf.serverNameLength);
+
 	timeLock.Lock();
+	rq->responseHeader(kgl_response_server, conf.serverName, conf.serverNameLength);
 	rq->responseHeader(kgl_response_date, (char *)cachedDateTime, 29);
 	timeLock.Unlock();
 	if (content_type) {
@@ -1386,6 +1391,12 @@ void KHttpManage::parsePostData() {
 	postData = buffer;
 }
 bool checkManageLogin(KHttpRequest *rq) {
+
+	const char *x_real_ip = rq->GetHttpValue(X_REAL_IP_HEADER);
+	if (x_real_ip != NULL) {
+		rq->sink->Shutdown();
+		return false;
+	}
 #ifdef KSOCKET_UNIX
 	kserver *server = rq->sink->GetBindServer();
 	if (server && server->addr.v4.sin_family == AF_UNIX) {
@@ -1475,6 +1486,7 @@ bool KHttpManage::start_listen(bool &hit) {
 			host->certificate_key = getUrlValue("certificate_key");
 			host->cipher = getUrlValue("cipher");
 			host->protocols = getUrlValue("protocols");
+			host->early_data = getUrlValue("early_data") == "1";
 #ifdef ENABLE_HTTP2
 			host->http2 = getUrlValue("http2")=="1";
 #endif
@@ -1517,10 +1529,10 @@ bool KHttpManage::start_listen(bool &hit) {
                 else\
                 el.style.display='none';}"
                 "function changeModel() {"
-                " if(listen.type.value=='https' || listen.type.value=='manages'){"
-                "show_div('ssl',true);"
+                " if(listen.type.value=='https' || listen.type.value=='manages' || listen.type.value=='tcps' ){"
+					"show_div('ssl',true);"
                 "} else {"
-                "show_div('ssl',false);"
+					"show_div('ssl',false);"
                 "}"
                 "}"
                 "</script>";
@@ -1550,6 +1562,9 @@ bool KHttpManage::start_listen(bool &hit) {
 #endif
 #ifdef WORK_MODEL_TCP
 				,"tcp"
+#ifdef HTTP_PROXY
+				,"tcps"
+#endif
 #endif
 				};
 		s << "<select name='type'  onChange='changeModel()'>";
@@ -1585,6 +1600,13 @@ bool KHttpManage::start_listen(bool &hit) {
 			s << "checked";
 		}
 		s << ">http2";
+#endif
+#ifdef SSL_READ_EARLY_DATA_SUCCESS
+		s << "<input type='checkbox' name='early_data' value='1' ";
+		if (host && host->early_data) {
+			s << "checked";
+		}
+		s << ">early_data";
 #endif
         s << "</div></td></tr>";
 #endif

@@ -179,13 +179,12 @@ bool KRewriteRule::mark(KHttpRequest *rq, KHttpObject *obj,
 			free(param_buf);
 		}
 		if (proxy && *proxy=='-') {
-			rq->closeFetchObject();
 			rq->rewriteUrl(url->getString(),0,(rewriteBase?rewriteBase:prefix.c_str()));
 			const char *ssl = NULL;
 			if (TEST(rq->url->flags, KGL_URL_SSL)) {
 				ssl = "s";
 			}
-			rq->fetchObj = server_container->get(NULL,rq->url->host,rq->url->port,ssl,0);
+			rq->appendFetchObject(server_container->get(NULL, rq->url->host, rq->url->port, ssl, 0));
 			jumpType = JUMP_ALLOW;
 		} else {
 			bool internal_flag = internal;
@@ -209,8 +208,7 @@ bool KRewriteRule::mark(KHttpRequest *rq, KHttpObject *obj,
 						subString
 						);
 					if (proxy_host) {
-						rq->closeFetchObject();
-						rq->fetchObj = server_container->get(proxy_host->getString());
+						rq->appendFetchObject(server_container->get(proxy_host->getString()));
 						jumpType = JUMP_ALLOW;
 						delete proxy_host;
 					}
@@ -301,7 +299,7 @@ std::string KRewriteMarkEx::getDisplay() {
 	return "not support in manage model";
 }
 void KRewriteMarkEx::editHtml(std::map<std::string, std::string> &attribute)
-		throw (KHtmlSupportException) {
+		 {
 	
 }
 bool KRewriteMarkEx::startCharacter(KXmlContext *context, char *character,

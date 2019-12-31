@@ -15,7 +15,7 @@ public:
 	{
 		this->access = access;
 		this->dso = dso;
-		init_access_dso_suuport(&ctx,notify_type);
+		init_access_dso_support(&ctx,notify_type);
 		ctx.model_ctx = access->create_ctx();
 		this->notify_type = notify_type;
 	}
@@ -36,8 +36,7 @@ public:
 	}
 	std::string getHtml(KModel *model);
 	std::string getDisplay();
-	void editHtml(std::map<std::string, std::string> &attribute)
-			throw (KHtmlSupportException);
+	void editHtml(std::map<std::string, std::string> &attribute);
 	void buildXML(std::stringstream &s);
 	friend class KAccessDsoMark;
 	friend class KAccessDsoAcl;
@@ -101,7 +100,6 @@ public:
 		return ad->getDisplay();
 	}
 	void editHtml(std::map<std::string, std::string> &attribute)
-			throw (KHtmlSupportException)
 	{
 		ad->editHtml(attribute);
 	}
@@ -154,7 +152,6 @@ public:
 		return ad->getDisplay();
 	}
 	void editHtml(std::map<std::string, std::string> &attribute)
-			throw (KHtmlSupportException)
 	{
 		ad->editHtml(attribute);
 	}

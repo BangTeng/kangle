@@ -76,9 +76,7 @@ public:
 	bool match(KHttpRequest *rq, KHttpObject *obj) {
 		return vhc.find(rq->url->host)!=NULL;		
 	}
-	void editHtml(std::map<std::string,std::string> &attibute)
-		throw (KHtmlSupportException)
-	{
+	void editHtml(std::map<std::string,std::string> &attibute) {
 		vhc.clear();
 		char *buf = strdup(attibute["v"].c_str());
 		char *hot = buf;

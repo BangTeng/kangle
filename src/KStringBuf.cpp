@@ -67,13 +67,13 @@ StreamState KStringBuf::write_all(const char *str, int len) {
 		if (!nb) {
 			return STREAM_WRITE_FAILED;
 		}
-		memcpy(nb, buf, current_size);
+		kgl_memcpy(nb, buf, current_size);
 		xfree(buf);
 		buf = nb;
 		hot = buf + used;
 		current_size += add_size;
 	}
-	memcpy(hot, str, len);
+	kgl_memcpy(hot, str, len);
 	hot += len;
 	return STREAM_WRITE_SUCCESS;
 }

@@ -209,7 +209,7 @@ KDechunkEngine.h KHttpEnv.h KHuffDecode.cpp KHttp2.h KHttp2.cpp KHttp2Table.cpp 
 KGeoMark.cpp KLogDrill.cpp KGeoMark.h KLogDrill.h KQueueMark.h KQueueMark.cpp KHttpObjectSwaping.cpp KHttpObjectSwaping.h\
 KMapRedirectMark.cpp KMapRedirectMark.h KProxy.cpp KProxy.h KConnectionLimit.h KConnectionLimit.cpp\
 KAutoBuffer.cpp KAutoBuffer.h KHttpResponseParser.cpp KHttpResponseParser.h KHttpParser.cpp KTcpUpstream.cpp KTcpUpstream.h KSink.cpp KSink.h KPreRequest.cpp KPreRequest.h \
-KBufferFetchObject.cpp KBufferFetchObject.h KSSLSniContext.cpp KHttpSink.cpp KHttpSink.h KHttp2Sink.h\
+KBufferFetchObject.cpp KBufferFetchObject.h KSSLSniContext.cpp KHttpSink.cpp KHttpSink.h KHttp2Sink.h KDiskCacheStream.cpp  KDiskCacheStream.h\
 KAccessDsoSupport.cpp KDsoExtendManage.cpp KDsoExtend.cpp KDsoExtend.h KDsoRedirect.cpp KDsoRedirect.h KDsoAsyncFetchObject.cpp KDsoAsyncFetchObject.h KTsUpstream.cpp KTsUpstream.h KDechunkContext.cpp KDechunkEngine.cpp\
 ../kasync/kaddr.c            ../kasync/kfile.c           ../kasync/kmalloc_debug.c        ../kasync/kserver.c\
 ../kasync/kasync_file.c      ../kasync/kgl_ssl.c         ../kasync/kmalloc_debug_win32.c  ../kasync/ksocket.c\

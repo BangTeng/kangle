@@ -47,8 +47,7 @@ public:
 		getFlagString(s);
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute){
 		flag = 0;
 		clear = (attibute["clear"] == "1");
 		if (attibute["no_cache"] == "1") {

@@ -35,12 +35,11 @@ static kev_result stage_request_write_clean(KHttpRequest *rq)
 {
 	if (rq->fetchObj && !rq->fetchObj->isClosed()) {
 		
-		if (rq->ctx->connection_upgrade) {
-			rq->sink->Flush();
-		}
+		//if (rq->ctx->connection_upgrade) {
+		///	rq->sink->Flush();
+		//}
 		return rq->fetchObj->readBody(rq);
 	}
-	rq->ctx->expected_done = 1;
 	return stageEndRequest(rq);
 }
 int buffer_http_transfer(void *arg, LPWSABUF buf, int bc)
@@ -57,7 +56,7 @@ kev_result result_http_transfer(void *arg, int got)
 	if (got == 0) {
 		return stage_request_write_clean(rq);
 	}
-	rq->addFlow(got);
+	rq->AddDownFlow(got);
 	if (rq->tr->buffer.readSuccess(got)) {
 		return rq->Write(rq, result_http_transfer, buffer_http_transfer);
 	}
@@ -82,6 +81,11 @@ kev_result KHttpTransfer::TryWrite()
 	if (rq->sink->HasHeaderDataToSend()) {
 		return rq->Write(rq, result_http_transfer, NULL);
 	}
+	if (rq->HasWriteHook()) {
+		rq->write_stack->arg = rq;
+		rq->write_stack->result = result_http_transfer;
+		return kgl_call_write_hook(rq, 0);
+	}
 	return kev_err;
 }
 KHttpTransfer::KHttpTransfer(KHttpRequest *rq, KHttpObject *obj) {
@@ -91,10 +95,8 @@ KHttpTransfer::KHttpTransfer() {
 	init(NULL, NULL);
 }
 void KHttpTransfer::init(KHttpRequest *rq, KHttpObject *obj) {
-	isHeadSend = false;
 	this->rq = rq;
 	this->obj = obj;
-	responseChecked = false;
 }
 KHttpTransfer::~KHttpTransfer() {
 	
@@ -104,7 +106,7 @@ StreamState KHttpTransfer::write_all(const char *str, int len) {
 	if (len<=0) {
 		return STREAM_WRITE_SUCCESS;
 	}
-	if (!isHeadSend) {
+	if (st==NULL) {
 		if (sendHead(false) != STREAM_WRITE_SUCCESS) {
 			SET(rq->flags,RQ_CONNECTION_CLOSE);
 			return STREAM_WRITE_FAILED;
@@ -116,7 +118,7 @@ StreamState KHttpTransfer::write_all(const char *str, int len) {
 	return st->write_all(str, len);
 }
 StreamState KHttpTransfer::write_end() {
-	if (!isHeadSend) {
+	if (st == NULL) {
 		if (sendHead(true) != STREAM_WRITE_SUCCESS) {
 			SET(rq->flags,RQ_CONNECTION_CLOSE);
 			return STREAM_WRITE_FAILED;
@@ -127,27 +129,27 @@ StreamState KHttpTransfer::write_end() {
 bool KHttpTransfer::support_sendfile()
 {
 	return false;
-	if (!isHeadSend) {
-		if (sendHead(false) != STREAM_WRITE_SUCCESS) {
-			SET(rq->flags, RQ_CONNECTION_CLOSE);
-			return false;
-		}
-	}
-	return true;
 }
 StreamState KHttpTransfer::sendHead(bool isEnd) {
 	INT64 start = 0;
 	INT64 send_len = 0;
 	StreamState result = STREAM_WRITE_SUCCESS;
-	isHeadSend = true;
 	INT64 content_len = (isEnd?0:-1);
-	cache_layer = cache_memory;
-	CLR(rq->flags,RQ_HAVE_RANGE);
+	cache_model cache_layer = cache_memory;
+	kassert(!TEST(rq->flags, RQ_HAVE_RANGE) || rq->ctx->obj->data->status_code==STATUS_CONTENT_PARTIAL);
 	if (TEST(obj->index.flags,ANSW_HAS_CONTENT_LENGTH)) {
 		content_len = obj->index.content_length;
+#ifdef ENABLE_DISK_CACHE
 		if (content_len > conf.max_cache_size) {
-			cache_layer = cache_none;
+			if (rq->IsSync() || content_len > conf.max_bigobj_size) {
+				cache_layer = cache_none;
+			} else {
+				cache_layer = cache_disk;
+			}
 		}
+#else
+		cache_layer = cache_none;
+#endif
 	}
 	if (rq->needFilter()) {
 		/*
@@ -156,9 +158,8 @@ StreamState KHttpTransfer::sendHead(bool isEnd) {
 		content_len = -1;
 		cache_layer = cache_memory;
 	}
-	gzip_layer = false;
-	if (rq->ctx->internal && !rq->ctx->replace) {
-	//if (TEST(workModel,WORK_MODEL_INTERNAL) && !TEST(workModel,WORK_MODEL_REPLACE)) {
+	bool gzip_layer = false;
+	if (unlikely(rq->ctx->internal && !rq->ctx->replace)) {
 		/* 子请求,内部但不是替换模式 */
 	} else {
 		if (check_need_gzip(rq, obj)) {
@@ -171,7 +172,10 @@ StreamState KHttpTransfer::sendHead(bool isEnd) {
 				obj->url->set_content_encoding(KGL_ENCODING_GZIP);
 			}
 		}
-		
+#ifdef WORK_MODEL_TCP
+		//端口映射不发送http头
+		if (!TEST(rq->GetWorkModel(), WORK_MODEL_TCP))
+#endif
 		build_obj_header(rq, obj, content_len, start, send_len);
 #ifndef NDEBUG
 		if (TEST(rq->flags,RQ_TE_GZIP)) {
@@ -183,7 +187,9 @@ StreamState KHttpTransfer::sendHead(bool isEnd) {
 	}
 	if (obj->in_cache) {
 		cache_layer = cache_none;
-	} else if (TEST(rq->filter_flags,RF_ALWAYS_ONLINE) && status_code_can_cache(obj->data->status_code)) {
+	}
+#if 0
+	else if (TEST(rq->filter_flags,RF_ALWAYS_ONLINE) && status_code_can_cache(obj->data->status_code)) {
 		//永久在线模式
 #if 0
 		if (TEST(obj->index.flags, ANSW_NO_CACHE)) {
@@ -198,10 +204,11 @@ StreamState KHttpTransfer::sendHead(bool isEnd) {
 		}
 #endif
 	}
-	loadStream();
+#endif
+	loadStream(gzip_layer,cache_layer);
 	return result;
 }
-bool KHttpTransfer::loadStream() {
+bool KHttpTransfer::loadStream(bool gzip_layer, cache_model cache_layer) {
 
 	/*
 	 从下到上开始串流
@@ -233,10 +240,10 @@ bool KHttpTransfer::loadStream() {
 	//检测是否加载cache层
 	
 	if (TEST(obj->index.flags,ANSW_NO_CACHE)==0) {
-		if (cache_layer == cache_memory) {
+		if (cache_layer != cache_none) {
 			KCacheStream *st_cache = new KCacheStream(st, autoDelete);
 			if (st_cache) {
-				st_cache->init(obj);
+				st_cache->init(rq,obj,cache_layer);
 				st = st_cache;
 				autoDelete = true;
 			}

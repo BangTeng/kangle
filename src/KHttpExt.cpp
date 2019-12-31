@@ -68,8 +68,7 @@ BOOL setVariable(LPVOID lpvBuffe, LPDWORD lpdwSize, const char *val,
 
 	return TRUE;
 }
-BOOL WINAPI GetServerVariable(HCONN hConn, LPSTR lpszVariableName,
-		LPVOID lpvBuffer, LPDWORD lpdwSize) {
+BOOL WINAPI GetServerVariable(HCONN hConn, LPSTR lpszVariableName,LPVOID lpvBuffer, LPDWORD lpdwSize) {
 	KStringBuf s(512);
 	KApiService *fo = (KApiService *) hConn;
 	//debug("fo=[%p]\n",fo);
@@ -268,7 +267,7 @@ BOOL WINAPI ServerSupportFunction(HCONN hConn, DWORD dwHSERequest,
 	if (dwHSERequest == HSE_REQ_GET_IMPERSONATION_TOKEN) {
 		Token_t token = fo->getToken();
 		if (token) {
-			memcpy(lpvBuffer, &token, sizeof(Token_t));
+			kgl_memcpy(lpvBuffer, &token, sizeof(Token_t));
 			return TRUE;
 		}
 		return FALSE;

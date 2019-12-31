@@ -185,7 +185,7 @@ bool KHttpDigestAuth::parse(KHttpRequest *rq, const char *str) {
 	char *cnonce = NULL;
 	char *qop = NULL;
 	KHttpField field;
-	field.parse(str);
+	field.parse(str,',');
 	http_field_t *header = field.getHeader();
 	while (header) {
 		if (strcasecmp(header->attr, "username") == 0) {
@@ -339,7 +339,7 @@ void KHttpDigestAuth::init(KHttpRequest *rq,const char *realm) {
 	s.add(rand(), "%x");
 	this->nonce = s.stealString();
 	KHttpDigestSession *session = new KHttpDigestSession(realm);
-	memcpy(&session->addr,rq->sink->GetAddr(),sizeof(sockaddr_i));
+	kgl_memcpy(&session->addr,rq->sink->GetAddr(),sizeof(sockaddr_i));
 	lock.Lock();
 	//debug("add nonce[%s] to session\n",this->nonce);
 	sessions.insert(pair<char *, KHttpDigestSession *> (

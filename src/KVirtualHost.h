@@ -327,10 +327,11 @@ public:
 	void setAccess(std::string access_file);
 	std::string htaccess;
 	KAccess access[2];
+#ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
 #ifdef ENABLE_HTTP2
 	bool http2;
 #endif
-#ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
+	bool early_data;
 	std::string certfile;
 	std::string keyfile;
 	char *cipher;

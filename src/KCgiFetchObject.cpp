@@ -63,7 +63,7 @@ static int loadStreamHead(KStream *stream, KHttpRequest *rq, KHttpObject *obj,KH
 				//head size is too large
 			}
 			char *nb = (char *) malloc(2*cursize+1);
-			memcpy(nb, answer, cursize + 1);
+			kgl_memcpy(nb, answer, cursize + 1);
 			free(answer);
 			answer = nb;
 			buf = answer + cursize;

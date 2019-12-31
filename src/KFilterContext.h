@@ -86,8 +86,8 @@ public:
 					assert(filterPrevDataLen>0);
 					*prevData = (char *) xmalloc(len+filterPrevDataLen);
 					assert(filterPrevData);
-					memcpy(*prevData, filterPrevData, filterPrevDataLen);
-					memcpy(*prevData + filterPrevDataLen, buf, len);
+					kgl_memcpy(*prevData, filterPrevData, filterPrevDataLen);
+					kgl_memcpy(*prevData + filterPrevDataLen, buf, len);
 				}
 				buf = *prevData;
 				len += (int)filterPrevDataLen;
@@ -138,7 +138,7 @@ public:
 				return JUMP_DENY;
 			}
 			int start = len - (int)filterPrevDataLen;
-			memcpy(filterPrevData, buf + start, filterPrevDataLen);
+			kgl_memcpy(filterPrevData, buf + start, filterPrevDataLen);
 		}
 		return action;
 	}

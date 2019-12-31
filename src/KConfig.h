@@ -77,6 +77,7 @@ public:
 	bool http2;
 #endif
 #ifdef KSOCKET_SSL
+	bool early_data;
 	std::string certificate;
 	std::string certificate_key;
 	std::string cipher;
@@ -115,6 +116,7 @@ public:
 	char hostname[32];
 	int log_event_id;
 	int log_level;
+	int http2https_code;
 	INT64 log_rotate_size;
 	INT64 error_rotate_size;
 	//默认是否缓存,1=是,其它=不
@@ -124,9 +126,7 @@ public:
 #ifdef ENABLE_DISK_CACHE
 	INT64 disk_cache;
 	bool disk_cache_is_radio;
-#ifdef ENABLE_BIG_OBJECT
 	INT64 max_bigobj_size;
-#endif
 #endif
 	int refresh;
 	int refresh_time;
@@ -160,6 +160,7 @@ public:
 #ifdef ENABLE_LOG_DRILL
 	int log_drill;
 #endif
+	int log_radio;
 	int autoupdate;
 	int autoupdate_time;
 	unsigned io_buffer;
@@ -280,8 +281,9 @@ void load_config(KConfig *cconf,bool firstTime);
 void parse_config(bool firstTime);
 //清除配置文件，用于内存泄漏检测时，才调用
 void clean_config();
-
+void wait_load_config_done();
 bool saveConfig();
+void parse_server_software();
 INT64 get_size(const char *size);
 std::string get_size(INT64 size);
 INT64 get_radio_size(const char *size,bool &is_radio);

@@ -29,7 +29,6 @@ public:
 	KHtmlSupport();
 	virtual ~KHtmlSupport();
 	virtual std::string getDisplay()=0;
-	virtual void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException)=0;
+	virtual void editHtml(std::map<std::string, std::string> &attibute)=0;
 };
 #endif /*KHTMLSUPPORT_H_*/

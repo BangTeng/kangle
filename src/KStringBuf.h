@@ -29,6 +29,7 @@
 #include <assert.h>
 #include "global.h"
 #include "KStream.h"
+#include "kmalloc.h"
 
 class KStringBuf : public KWStream {
 public:
@@ -82,7 +83,7 @@ public:
 		if(send_len<=0){
 			return STREAM_WRITE_FAILED;
 		}
-		memcpy(hot,str,send_len);
+		kgl_memcpy(hot,str,send_len);
 		hot += send_len;
 		left -= send_len;
 		return STREAM_WRITE_SUCCESS;

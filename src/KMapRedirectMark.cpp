@@ -74,7 +74,7 @@ std::string KMapRedirectMark::getDisplay()
 {
 	return this->getValList();
 }
-void KMapRedirectMark::editHtml(std::map<std::string, std::string> &attribute) throw (KHtmlSupportException)
+void KMapRedirectMark::editHtml(std::map<std::string, std::string> &attribute) 
 {
 	vhc.clear();
 	char *buf = strdup(attribute["v"].c_str());

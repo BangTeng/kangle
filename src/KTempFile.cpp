@@ -60,7 +60,7 @@ int KTempFile::write(const char *buf, int len)
 	}
 	size = MIN(len, size);
 	kassert(size > 0);
-	memcpy(t, buf, size);
+	kgl_memcpy(t, buf, size);
 	buf += size;
 	len -= size;
 	if (!writeSuccess(size)) {
@@ -192,7 +192,7 @@ int KTempFile::readBuffer(char *buf,int size)
 	char *t = buffer.getReadBuffer(len);
 	if (t) {
 		size = MIN(size,len);
-		memcpy(buf,t,size);
+		kgl_memcpy(buf,t,size);
 		buffer.readSuccess(size);
 		return size;
 	}

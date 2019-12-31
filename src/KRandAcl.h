@@ -36,8 +36,7 @@ public:
 		s << count << "/" << total;
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute){
 		setRand(attibute["rand"].c_str());
 	}
 	void buildXML(std::stringstream &s) {

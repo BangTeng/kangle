@@ -5,11 +5,11 @@
 #include "kstring.h"
 #ifdef KSOCKET_SSL
 #ifdef _WIN32
-#pragma comment(lib,"ssleay32.lib")
-#pragma comment(lib,"libeay32.lib")
+//#pragma comment(lib,"ssleay32.lib")
+//#pragma comment(lib,"libeay32.lib")
 #endif
 #include "kconnection.h"
-#define KGL_HTTP_NPN_ADVERTISE  "\x08http/1.1"
+
 static kmutex *ssl_lock = NULL;
 int kangle_ssl_conntion_index;
 int kangle_ssl_ctx_index;
@@ -108,6 +108,9 @@ void kssl_init(kgl_ssl_npn_f npn, kgl_ssl_create_sni_f create_sni, kgl_ssl_free_
 	}
 	kangle_ssl_conntion_index = SSL_get_ex_new_index(0, NULL, NULL, NULL, NULL);
 	kangle_ssl_ctx_index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, NULL);
+#ifdef ENABLE_KSSL_BIO
+	kgl_bio_init_method();
+#endif
 }
 
 static RSA * kgl_ssl_rsa512_key_callback(SSL *ssl_conn, int is_export, int key_length)
@@ -264,6 +267,8 @@ SSL_CTX * kgl_ssl_ctx_new(bool server,void *ssl_ctx_data)
 	SSL_CTX_set_options(ctx, SSL_OP_TLS_BLOCK_PADDING_BUG);
 	SSL_CTX_set_options(ctx, SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS);
 	SSL_CTX_set_options(ctx, SSL_OP_SINGLE_DH_USE);
+	//ssl_prefer_server_ciphers on
+	SSL_CTX_set_options(ctx, SSL_OP_CIPHER_SERVER_PREFERENCE);
 #ifdef SSL_OP_NO_COMPRESSION
 	SSL_CTX_set_options(ctx, SSL_OP_NO_COMPRESSION);
 #endif
@@ -308,7 +313,7 @@ SSL_CTX *kgl_ssl_ctx_new_client(const char *ca_path, const char *ca_file,void *s
 	SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_BOTH);
 	if (ssl_npn && ssl_ctx_data) {
 #ifdef TLSEXT_TYPE_next_proto_neg
-		SSL_CTX_set_next_proto_select_cb(ctx, kgl_ssl_npn_selected2, NULL);
+		//SSL_CTX_set_next_proto_select_cb(ctx, kgl_ssl_npn_selected2, NULL);
 #endif
 #ifdef TLSEXT_TYPE_application_layer_protocol_negotiation
 		const unsigned char *alpn_protos = NULL;
@@ -318,6 +323,26 @@ SSL_CTX *kgl_ssl_ctx_new_client(const char *ca_path, const char *ca_file,void *s
 #endif
 	}
 	return ctx;
+}
+void kgl_ssl_ctx_set_early_data(SSL_CTX *ssl_ctx,bool early_data)
+{
+	if (early_data) {
+#ifdef SSL_ERROR_EARLY_DATA_REJECTED
+		/* BoringSSL */
+		SSL_CTX_set_early_data_enabled(ssl_ctx, 1);
+#elif defined SSL_READ_EARLY_DATA_SUCCESS
+		/* OpenSSL */
+		SSL_CTX_set_max_early_data(ssl_ctx, 16384);
+#endif
+		return;
+	}
+#ifdef SSL_ERROR_EARLY_DATA_REJECTED
+	/* BoringSSL */
+	SSL_CTX_set_early_data_enabled(ssl_ctx, 0);
+#elif defined SSL_READ_EARLY_DATA_SUCCESS
+	/* OpenSSL */
+	SSL_CTX_set_max_early_data(ssl_ctx, 0);
+#endif
 }
 SSL_CTX * kgl_ssl_ctx_new_server(const char *cert_file, const char *key_file, const char *ca_path, const char *ca_file, void *ssl_ctx_data)
 {
@@ -395,38 +420,43 @@ SSL_CTX * kgl_ssl_ctx_new_server(const char *cert_file, const char *key_file, co
 	//SSL_CTX_sess_set_cache_size(ctx,1000);
 	return ctx;
 }
+kssl_status kgl_ssl_handshake_status(SSL *ssl, int re)
+{
+	int err = SSL_get_error(ssl, re);
+	//printf("ssl=[%p] ssl_get_error=[%d]\n", ssl, err);
+	switch (err) {
+	case SSL_ERROR_WANT_READ:
+		return ret_want_read;
+	case SSL_ERROR_WANT_WRITE:
+	case SSL_ERROR_WANT_CONNECT:
+	case SSL_ERROR_WANT_ACCEPT:
+		return ret_want_write;
+	case SSL_ERROR_SYSCALL:
+#ifndef _WIN32
+		if (errno == EAGAIN) {
+			//return ret_error;
+		}
+#endif
+		err = errno;
+		//printf("system errno=%d\n",err);
+		return ret_error;
+	case SSL_ERROR_SSL:
+	case SSL_ERROR_ZERO_RETURN:
+		//printf("error = %d\n",err);
+		return ret_error;
+	case SSL_ERROR_WANT_X509_LOOKUP:
+		//printf("SSL_ERROR_WANT_X509_LOOKUP\n");
+		return ret_sni_resolve;
+	default:
+		//printf("error = %d\n",err);
+		return ret_error;
+	}
+}
 kssl_status kgl_ssl_handshake(SSL *ssl)
 {
 	int re = SSL_do_handshake(ssl);
 	if (re <= 0) {
-		int err = SSL_get_error(ssl, re);
-		switch (err) {
-		case SSL_ERROR_WANT_READ:
-			return ret_want_read;
-		case SSL_ERROR_WANT_WRITE:
-		case SSL_ERROR_WANT_CONNECT:
-		case SSL_ERROR_WANT_ACCEPT:
-			return ret_want_write;
-		case SSL_ERROR_SYSCALL:
-#ifndef _WIN32
-			if (errno == EAGAIN) {
-				//return ret_error;
-			}
-#endif
-			err = errno;
-			//printf("system errno=%d\n",err);
-			return ret_error;
-		case SSL_ERROR_SSL:
-		case SSL_ERROR_ZERO_RETURN:
-			//printf("error = %d\n",err);
-			return ret_error;
-		case SSL_ERROR_WANT_X509_LOOKUP:
-			//printf("SSL_ERROR_WANT_X509_LOOKUP\n");
-			return ret_sni_resolve;
-		default:
-			//printf("error = %d\n",err);
-			return ret_error;
-		}
+		return kgl_ssl_handshake_status(ssl, re);
 	}
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 #ifdef SSL3_FLAGS_NO_RENEGOTIATE_CIPHERS
@@ -518,21 +548,24 @@ void kgl_ssl_ctx_set_protocols(SSL_CTX *ctx, const char *protocols)
 		SSL_CTX_set_options(ctx, SSL_OP_NO_TLSv1);
 	}
 #ifdef SSL_OP_NO_TLSv1_1
-	SSL_CTX_clear_options(ctx, SSL_OP_NO_TLSv1_1);
 	if (!(mask & KGL_SSL_TLSv1_1)) {
 		SSL_CTX_set_options(ctx, SSL_OP_NO_TLSv1_1);
+	} else {
+		SSL_CTX_clear_options(ctx, SSL_OP_NO_TLSv1_1);
 	}
 #endif
 #ifdef SSL_OP_NO_TLSv1_2
-	SSL_CTX_clear_options(ctx, SSL_OP_NO_TLSv1_2);
 	if (!(mask & KGL_SSL_TLSv1_2)) {
 		SSL_CTX_set_options(ctx, SSL_OP_NO_TLSv1_2);
+	} else {
+		SSL_CTX_clear_options(ctx, SSL_OP_NO_TLSv1_2);
 	}
 #endif
 #ifdef SSL_OP_NO_TLSv1_3
-	SSL_CTX_clear_options(ctx, SSL_OP_NO_TLSv1_3);
 	if (!(mask & KGL_SSL_TLSv1_3)) {
 		SSL_CTX_set_options(ctx, SSL_OP_NO_TLSv1_3);
+	} else {
+		SSL_CTX_clear_options(ctx, SSL_OP_NO_TLSv1_3);
 	}
 #endif
 }

@@ -27,7 +27,6 @@ private:
 	std::map<char *, char *, lessp_icase > httpVars;
 	const char *getHttpEnv(const char *val);
 	const char *getHeaderEnv(const char *val);
-
 private:
 	bool addEnv(const char *attr, const char *val, std::map<char *, char *,
 			lessp_icase > &vars);

@@ -63,6 +63,7 @@
 #include "ksapi.h"
 #include "kaddr.h"
 #include "KLogDrill.h"
+volatile uint32_t kgl_log_count = 0;
 using namespace std;
 
 void free_url(KUrl *url) {
@@ -99,7 +100,7 @@ bool is_request_locked(KHttpRequest *rq)
 	}
 	return false;
 }
-kev_result stageEndRequest(KHttpRequest *rq, bool expected)
+kev_result stageEndRequest(KHttpRequest *rq)
 {
 	//printf("stageEndRequest=[%p]\n", rq);
 	if (rq->IsSync()) {
@@ -137,6 +138,14 @@ kev_result stageEndRequest(KHttpRequest *rq, bool expected)
 
 void log_access(KHttpRequest *rq) {
 	//printf("log_access=[%p]\n", rq);
+	int log_radio = conf.log_radio;
+	if (log_radio > 1) {
+		//ÈÕÖ¾³éÑù
+		uint32_t log_count = katom_inc((void *)&kgl_log_count);
+		if (log_count%log_radio != 0) {
+			return;
+		}
+	}
 	if (rq->isBad()) {
 		klog(KLOG_ERR,"BAD REQUEST FROM [%s].\n", rq->getClientIp());
 		return;
@@ -246,8 +255,16 @@ void log_access(KHttpRequest *rq) {
 	l << "F" << (unsigned)rq->flags << "f" << (unsigned)rq->filter_flags;
 	//l << "u" << (int)rq->ctx->upstream_socket;
 	if (!rq->ctx->upstream_expected_done) {
+		l.WSTR("d");
+	}
+#endif
+#ifdef KSOCKET_SSL
+#ifdef SSL_READ_EARLY_DATA_SUCCESS
+	kssl_session *ssl = rq->sink->GetSSL();
+	if (ssl && ssl->in_early) {
 		l.WSTR("e");
 	}
+#endif
 #endif
 	if (rq->ctx->read_huped) {
 		l.WSTR("h");
@@ -282,14 +299,17 @@ void log_access(KHttpRequest *rq) {
 	if (rq->ctx->upstream_connection_keep_alive) {
 		l.WSTR("l");
 	}
+	if (TEST(rq->url->flags,KGL_URL_VARIED)) {
+		l.WSTR("v");
+	}
+	if (TEST(rq->flags,RQ_INPUT_CHUNKED)) {
+		l.WSTR("I");
+	}
 	
-	l.WSTR("t");
-	INT64 t = kgl_current_msec - rq->begin_time_msec;
-	l << t;
 	if (rq->first_response_time_msec > 0) {
 		l.WSTR("T");
-		t = rq->first_response_time_msec - rq->begin_time_msec ;
-		l << t;
+		INT64 t2 = rq->first_response_time_msec - rq->begin_time_msec ;
+		l << t2;
 	}
 	if (rq->mark!=0) {
 		l.WSTR("m");
@@ -334,11 +354,10 @@ inline int checkRequest(KHttpRequest *rq)
 {
 	return kaccess[REQUEST].check(rq, NULL);
 }
-void handleConnectMethod(KHttpRequest *rq)
+kev_result handleConnectMethod(KHttpRequest *rq)
 {
 
-	send_error(rq,NULL,STATUS_METH_NOT_ALLOWED,"The requested method CONNECT is not allowed");
-
+	return send_error(rq,NULL,STATUS_METH_NOT_ALLOWED,"The requested method CONNECT is not allowed");
 }
 kev_result stageHttpManageLogin(KHttpRequest *rq)
 {
@@ -399,7 +418,7 @@ kev_result stageHttpManage(KHttpRequest *rq)
 	return processRequest(rq);
 }
 kev_result stageDeniedRequest(KHttpRequest *rq) {
-	if (rq->fetchObj != NULL) {
+	if (rq->hasFinalFetchObject()) {
 		if (rq->status_code == 0) {
 			rq->responseConnection();
 			rq->responseStatus(STATUS_OK);
@@ -409,7 +428,7 @@ kev_result stageDeniedRequest(KHttpRequest *rq) {
 	}
 	if (rq->status_code > 0) {
 		rq->startResponseBody(0);
-		return stageEndRequest(rq,true);
+		return stageEndRequest(rq);
 	}
 	if (TEST(rq->filter_flags, RQ_SEND_AUTH)) {
 		return send_auth(rq);
@@ -419,13 +438,11 @@ kev_result stageDeniedRequest(KHttpRequest *rq) {
 	}
 	return kev_err;
 }
-kev_result check_virtual_host_request(KHttpRequest *rq) {
+kev_result check_virtual_host_request(KHttpRequest *rq,int header_length) {
 	if (rq->svh==NULL) {
 		return kev_err;
 	}
-	if (rq->svh->vh->status != 0) {
-		return handleError(rq, STATUS_SERVICE_UNAVAILABLE, "virtual host is closed");
-	}
+
 #ifdef ENABLE_VH_RS_LIMIT
 	KSpeedLimit *sl= rq->svh->vh->refsSpeedLimit();
 	if (sl) {
@@ -438,6 +455,10 @@ kev_result check_virtual_host_request(KHttpRequest *rq) {
 		rq->pushFlowInfo(flow);
 	}
 #endif
+	rq->AddUpFlow(header_length);
+	if (rq->svh->vh->status != 0) {
+		return handleError(rq, STATUS_SERVICE_UNAVAILABLE, "virtual host is closed");
+	}
 #ifndef HTTP_PROXY
 #ifdef ENABLE_USER_ACCESS
 	switch(rq->svh->vh->checkRequest(rq)) {
@@ -453,7 +474,7 @@ kev_result check_virtual_host_request(KHttpRequest *rq) {
 #endif
 	return kev_err;
 }
-kev_result bind_virtual_host(KHttpRequest *rq,const char *hostname,int len) {
+kev_result bind_virtual_host(KHttpRequest *rq,const char *hostname,int len,int header_length) {
 	query_vh_result vh_result;
 #ifdef KSOCKET_SSL
 	kconnection *c = rq->sink->GetConnection();
@@ -479,7 +500,7 @@ kev_result bind_virtual_host(KHttpRequest *rq,const char *hostname,int len) {
 	}
 	u_short flags = rq->raw_url.flags;
 	rq->raw_url.flags = 0;
-	kev_result ret = check_virtual_host_request(rq);
+	kev_result ret = check_virtual_host_request(rq,header_length);
 	if (KEV_HANDLED(ret)) {
 		if (KEV_AVAILABLE(ret)) {
 			SET(rq->raw_url.flags, flags);
@@ -502,11 +523,11 @@ kev_result bind_virtual_host(KHttpRequest *rq,const char *hostname,int len) {
 	SET(rq->raw_url.flags, flags);
 	return kev_err;
 }
-kev_result bind_virtual_host(KHttpRequest *rq)
+kev_result bind_virtual_host(KHttpRequest *rq,int header_length)
 {
-	return bind_virtual_host(rq,rq->url->host,0);
+	return bind_virtual_host(rq,rq->url->host,0,header_length);
 }
-kev_result handleStartRequest(KHttpRequest *rq,int got)
+kev_result handleStartRequest(KHttpRequest *rq,int header_length)
 {
 	kev_result ret;
 	rq->beginRequest();
@@ -515,20 +536,15 @@ kev_result handleStartRequest(KHttpRequest *rq,int got)
 		return handleConnectMethod(rq);
 	}
 #endif
-	if (rq->ctx->read_huped) {
+	if (unlikely(rq->ctx->read_huped)) {
 		SET(rq->flags,RQ_CONNECTION_CLOSE);
 		return send_error(rq,NULL,STATUS_BAD_REQUEST,"Client close connection");
 	}
-	if (TEST(rq->raw_url.flags,KGL_URL_BAD)) {
-		SET(rq->flags,RQ_CONNECTION_CLOSE);
-		return send_error(rq, NULL, STATUS_BAD_REQUEST, "Bad url");
-	}
-
-	if (rq->isBad()) {
+	if (unlikely(rq->isBad())) {
 		SET(rq->flags,RQ_CONNECTION_CLOSE);
 		return send_error(rq, NULL, STATUS_BAD_REQUEST, "Bad request format.");
 	}
-	if (rq->IsWorkModel(WORK_MODEL_MANAGE)) {
+	if (unlikely(TEST(rq->GetWorkModel(), WORK_MODEL_MANAGE))) {
 		return stageHttpManage(rq);
 	}
 #ifdef ENABLE_STAT_STUB
@@ -547,7 +563,7 @@ kev_result handleStartRequest(KHttpRequest *rq,int got)
 		case JUMP_DENY:
 			return stageDeniedRequest(rq);
 		case JUMP_VHS:
-			ret = bind_virtual_host(rq);
+			ret = bind_virtual_host(rq,header_length);
 			if (KEV_HANDLED(ret)) {
 				return ret;
 			}

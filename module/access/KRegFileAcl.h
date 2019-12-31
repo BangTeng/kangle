@@ -68,8 +68,7 @@ public:
 		path.setModel(value,flag);
 		return true;
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute){
 		nc = (attibute["nc"]=="1");
 		if (attibute["file"].size() > 0) {
 			setPath(attibute["file"].c_str());
@@ -142,8 +141,7 @@ public:
 		path.setModel(value,flag);
 		return true;
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute){
 		nc = (attibute["nc"]=="1");
 		if (attibute["filename"].size() > 0) {
 			setPath(attibute["filename"].c_str());

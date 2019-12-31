@@ -211,9 +211,13 @@ INLINE uint16_t ksocket_addr_port(const sockaddr_i *addr)
 	}
 	return 0;
 }
-INLINE int ksocket_no_delay(SOCKET sockfd) {
+INLINE int ksocket_no_delay(SOCKET sockfd,bool forever) {
 #ifdef LINUX
 	int flag = 0;
+	if (forever) {
+		int n = 1;
+		setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (const char *)&n, sizeof(int));
+	}
 	return setsockopt(sockfd, IPPROTO_TCP, TCP_CORK, (const void *)&flag, sizeof(int));
 #elif BSD_OS
 	int flag = 0;
@@ -259,6 +263,7 @@ INLINE void ksocket_block(SOCKET sockfd) {
 #ifdef ENABLE_TPROXY
 #define KSOCKET_TPROXY            8
 #endif
+#define KSOCKET_FASTOPEN          16
 #define KSOCKET_PROTO_IPV4        KSOCKET_ONLY_IPV4
 #define KSOCKET_PROTO_IPV6        KSOCKET_ONLY_IPV6   
 void ksocket_startup();

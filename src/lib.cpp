@@ -34,7 +34,24 @@ static const char *days[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
 static const char *months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun","Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 static int make_month(const char *s);
 static int make_num(const char *s);
-
+static int timz_minutes = 0;
+void init_time_zone()
+{
+	time_t tt = time(NULL);
+	struct tm t;
+#if defined(HAVE_GMTOFF)
+	localtime_r(&tt, &t);
+	timz_minutes = (int)(t.tm_gmtoff / 60);
+#else
+	struct tm gmt;	
+	int days, hours;
+	gmtime_r(&tt, &gmt);
+	localtime_r(&tt, &t);
+	days = t.tm_yday - gmt.tm_yday;
+	hours = ((days < -1 ? 24 : 1 < days ? -24 : days * 24) + t.tm_hour - gmt.tm_hour);
+	timz_minutes = hours * 60 + t.tm_min - gmt.tm_min;
+#endif
+}
 void CTIME_R(time_t *a, char *b, size_t l) {
 #if	defined(HAVE_CTIME_R)
 #if	defined(CTIME_R_3)
@@ -209,12 +226,7 @@ int make_http_time(time_t time,char *buf,int size)
 			tm.tm_min, tm.tm_sec);
 }
 const char * mk1123time(time_t time, char *buf, int size) {
-	struct tm tm;
-	time_t holder = time;
-	gmtime_r(&holder, &tm);
-	snprintf(buf, size, "%s, %02d %s %d %02d:%02d:%02d GMT", days[tm.tm_wday],
-			tm.tm_mday, months[tm.tm_mon], tm.tm_year + 1900, tm.tm_hour,
-			tm.tm_min, tm.tm_sec);
+	make_http_time(time, buf, size);
 	return buf;
 }
 #if	!defined(_WIN32)
@@ -268,7 +280,7 @@ void my_msleep(int msec) {
 }
 #define	BU_FREE	1
 #define	BU_BUSY	2
-
+#if 0
 #if defined(HAVE_GMTOFF)
 struct tm * get_gmtoff(int *tz, struct tm *t) {
 	time_t tt = time(NULL);
@@ -277,24 +289,24 @@ struct tm * get_gmtoff(int *tz, struct tm *t) {
 	return t;
 }
 #else
-struct tm * get_gmtoff(int *tz, struct tm *t) {
-	time_t tt = time(NULL);
+struct tm * get_gmtoff(time_t tt,int *tz, struct tm *t) {
+	//time_t tt = time(NULL);
 	struct tm gmt;
 	int days, hours, minutes;
 	gmtime_r(&tt, &gmt);
 	localtime_r(&tt, t);
 	days = t->tm_yday - gmt.tm_yday;
-	hours = ((days < -1 ? 24 : 1 < days ? -24 : days * 24) + t->tm_hour
-			- gmt.tm_hour);
+	hours = ((days < -1 ? 24 : 1 < days ? -24 : days * 24) + t->tm_hour	- gmt.tm_hour);
 	minutes = hours * 60 + t->tm_min - gmt.tm_min;
 	*tz = minutes;
 	return t;
 }
 #endif
-const char *log_request_time(char *buf, size_t buf_size) {
-	int timz;
+#endif
+const char *log_request_time(time_t time,char *buf, size_t buf_size) {
+	int timz = timz_minutes;
 	struct tm t;
-	get_gmtoff(&timz, &t);
+	localtime_r(&time, &t);
 	char sign = (timz < 0 ? '-' : '+');
 	if (timz < 0) {
 		timz = -timz;
@@ -302,7 +314,6 @@ const char *log_request_time(char *buf, size_t buf_size) {
 	snprintf(buf, buf_size - 1, "[%02d/%s/%d:%02d:%02d:%02d %c%.2d%.2d]",
 			t.tm_mday, months[t.tm_mon], t.tm_year + 1900, t.tm_hour, t.tm_min,
 			t.tm_sec, sign, timz / 60, timz % 60);
-
 	return buf;
 }
 

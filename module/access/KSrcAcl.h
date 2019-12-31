@@ -28,8 +28,7 @@ public:
 		}
 		return matchIP(addr);
 	}
-	void editHtml(std::map<std::string,std::string> &attibute)
-			throw(KHtmlSupportException) {
+	void editHtml(std::map<std::string,std::string> &attibute) {
 		addIpModel(attibute["ip"].c_str(), ip);
 	}
 	std::string getHtml(KModel *acl) {

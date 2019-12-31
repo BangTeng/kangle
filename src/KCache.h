@@ -57,7 +57,7 @@ public:
 		klog(KLOG_DEBUG, "dead obj=[%p] from [%s:%d]\n", obj, file, line);
 		cacheLock.Lock();
 		assert(obj->list_state != LIST_IN_NONE);
-		SET(obj->index.flags, FLAG_DEAD | OBJ_INDEX_UPDATE);
+		obj->Dead();
 		objList[obj->list_state].dead(obj);
 		cacheLock.Unlock();
 	}
@@ -150,7 +150,7 @@ public:
 		}
 		objList[LIST_IN_DISK].move(&bf, last_msec,kill_disk_size, false);
 #endif
-		klog(KLOG_NOTICE, "cache flush, killed memory size=[" INT64_FORMAT "],killed disk size=[" INT64_FORMAT "]\n", kill_mem_size, kill_disk_size);
+		klog(KLOG_DEBUG, "cache flush, killed memory size=[" INT64_FORMAT "],killed disk size=[" INT64_FORMAT "]\n", kill_mem_size, kill_disk_size);
 		return;
 	}
 	void getSize(INT64 &memSize,INT64 &diskSize)
@@ -217,8 +217,8 @@ public:
 		for (int i=0;i<2;i++) {
 			KHttpObject *obj = objList[i].getHead();
 			while (obj) {
-				if (TEST(obj->index.flags,OBJ_INDEX_UPDATE|FLAG_IN_DISK) == (OBJ_INDEX_UPDATE|FLAG_IN_DISK)) {
-					CLR(obj->index.flags,OBJ_INDEX_UPDATE);
+				if (TEST(obj->index.flags,FLAG_IN_DISK) && obj->dc_index_update) {
+					obj->dc_index_update = 0;
 					if (dci) {
 						dci->start(ci_update,obj);
 					}

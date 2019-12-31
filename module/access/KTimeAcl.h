@@ -60,8 +60,7 @@ public:
 		}
 		return true;
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute){
 		ts = attibute["time"];
 		t.set(ts.c_str());
 	}

@@ -55,7 +55,7 @@ public:
 		s << this->name << " " << total_item;
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attr)	throw(KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attr)	{
 		lock.WLock();
 		this->file = attr["file"];
 		this->name = attr["name"];
@@ -146,7 +146,7 @@ private:
 				geo_lable *lable = (geo_lable *)kgl_pnalloc(pool, sizeof(geo_lable));
 				lable->data = (char *)kgl_pnalloc(pool, len);
 				lable->len = len;
-				memcpy(lable->data, str, len);
+				kgl_memcpy(lable->data, str, len);
 				lable->next = last;
 				last = lable;
 			}

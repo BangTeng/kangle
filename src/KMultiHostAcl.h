@@ -14,8 +14,7 @@ public:
 	const char *getName();
 	bool match(KHttpRequest *rq, KHttpObject *obj);
 	std::string getDisplay();
-	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException);
+	void editHtml(std::map<std::string, std::string> &attibute);
 	void buildXML(std::stringstream &s);
 private:
 	bool loadFile(KHttpRequest *rq);

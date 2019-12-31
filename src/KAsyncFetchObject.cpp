@@ -32,8 +32,32 @@ kev_result next_connection_result(void *arg, int got)
 	KAsyncFetchObject *fo = static_cast<KAsyncFetchObject *>(rq->fetchObj);
 	return fo->connect_result(rq, got>0);
 }
+#ifdef ENABLE_PROXY_PROTOCOL
+kev_result proxyTcpConnect(KHttpRequest *rq)
+{
+	char ips[MAXIPLEN];
+	kconnection *cn = rq->sink->GetConnection();
+	if (cn->proxy == NULL || cn->proxy->dst == NULL) {
+		return	stageEndRequest(rq);	
+	}
+	if (!ksocket_sockaddr_ip(cn->proxy->dst, ips, MAXIPLEN-1)) {
+		return stageEndRequest(rq);
+	}
+	uint16_t port = ntohs(cn->proxy->dst->v4.sin_port);
+	KSingleAcserver *server = new KSingleAcserver;
+	server->proto = Proto_tcp;
+	server->sockHelper->setHostPort(ips, port, NULL);
+	server->sockHelper->setLifeTime(0);
+	return server->connect(rq);
+}
+#endif
 kev_result proxyConnect(KHttpRequest *rq)
 {
+#ifdef ENABLE_PROXY_PROTOCOL
+	if (TEST(rq->GetWorkModel(), WORK_MODEL_PROXY|WORK_MODEL_SSL_PROXY)) {
+		return proxyTcpConnect(rq);
+	}
+#endif
 	KAsyncFetchObject *fo = static_cast<KAsyncFetchObject *>(rq->fetchObj);
 	const char *ip = rq->bind_ip;
 	KUrl *url = (TEST(rq->filter_flags,RF_PROXY_RAW_URL)?&rq->raw_url:rq->url);
@@ -44,7 +68,7 @@ kev_result proxyConnect(KHttpRequest *rq)
 #ifdef IP_TRANSPARENT
 #ifdef ENABLE_TPROXY
 	char mip[MAXIPLEN];
-	if (rq->IsWorkModel(WORK_MODEL_TPROXY) && TEST(rq->filter_flags,RF_TPROXY_TRUST_DNS)) {
+	if (TEST(rq->GetWorkModel(),WORK_MODEL_TPROXY) && TEST(rq->filter_flags,RF_TPROXY_TRUST_DNS)) {
 		if (TEST(rq->filter_flags,RF_TPROXY_UPSTREAM)) {
 			if (ip==NULL) {
 				ip = rq->getClientIp();
@@ -64,7 +88,7 @@ kev_result proxyConnect(KHttpRequest *rq)
 	}
 #endif
 #endif
-	if (TEST(url->flags,KGL_URL_SSL)) {
+	if (TEST(url->flags, KGL_URL_ORIG_SSL)) {
 		ssl = "s";
 	}
 #ifdef ENABLE_SIMULATE_HTTP
@@ -356,7 +380,7 @@ kev_result KAsyncFetchObject::startReadHead(KHttpRequest *rq)
 	if (client->ReadHttpHeader(rq,resultUpstreamHttp2ReadHeader)) {
 		return kev_ok;
 	}
-	client->SetNoDelay();
+	client->SetNoDelay(false);
 	return client->Read(rq,resultUpstreamReadHead, bufferUpstreamRead);
 }
 kev_result KAsyncFetchObject::handleSendHead(KHttpRequest *rq,int got)
@@ -380,6 +404,9 @@ kev_result KAsyncFetchObject::handleSendPost(KHttpRequest *rq,int got)
 	if (buffer->readSuccess(got)) {
 		return client->Write(rq,resultUpstreamSendPost,bufferUpstreamSendPost);
 	}
+	//if (rq->ctx->connection_upgrade) {
+		//client->Flush();
+	//}
 	buffer->destroy();
 	//try to read post
 	if (!rq->ctx->connection_upgrade && rq->left_read==0) {
@@ -391,7 +418,7 @@ kev_result KAsyncFetchObject::shutdown(KHttpRequest *rq)
 {
 	if (!rq->sink->IsLocked() &&
 		!client->IsLocked() &&
-		rq->ctx->write_timer==0) {
+		rq->ctx->write_hook==0) {
 		return stageEndRequest(rq);
 	}
 	client->Shutdown();
@@ -416,6 +443,7 @@ kev_result KAsyncFetchObject::handleReadPost(KHttpRequest *rq,int got)
 		}
 		return stageEndRequest(rq);
 	}
+	rq->AddUpFlow(got);
 	if (!rq->ctx->connection_upgrade && rq->left_read!=-1) {
 		rq->left_read -= got;
 	}
@@ -454,6 +482,8 @@ kev_result KAsyncFetchObject::readHeadSuccess(KHttpRequest *rq)
 {
 	client->IsGood();
 	if (rq->ctx->connection_upgrade) {
+		rq->sink->SetNoDelay(true);
+		client->SetNoDelay(true);
 		int tmo = rq->sink->GetTimeOut();
 		if (tmo < 5) {
 			tmo = 5;
@@ -473,7 +503,6 @@ kev_result KAsyncFetchObject::handleReadHead(KHttpRequest *rq,int got)
 		return handleUpstreamError(rq,STATUS_GATEWAY_TIMEOUT,"cann't recv head from remote server",got);
 	}
 	ks_write_success(&us_buffer, got);
-
 	char *data = us_buffer.buf;
 	int len = us_buffer.used;
 	switch (ParseHeader(rq, &data, &len)) {
@@ -487,6 +516,9 @@ kev_result KAsyncFetchObject::handleReadHead(KHttpRequest *rq,int got)
 		}
 		ks_save_point(&us_buffer, data, len);
 		return client->Read(rq, resultUpstreamReadHead, bufferUpstreamRead);
+	case kgl_parse_want_read:
+		//ajp协议会发送一个JK_AJP13_GET_BODY_CHUNK过来，此时要发送一个空的数据包过去
+		return sendPost(rq);
 	default:
 		return handleUpstreamError(rq, STATUS_GATEWAY_TIMEOUT, "cann't parse upstream protocol", got);
 	}

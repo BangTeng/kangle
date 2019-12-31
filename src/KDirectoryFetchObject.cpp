@@ -40,7 +40,6 @@ KDirectoryFetchObject::~KDirectoryFetchObject()
 }
 kev_result KDirectoryFetchObject::open(KHttpRequest *rq)
 {
-	setClosed(false);
 	assert(rq->file->isDirectory());
 	rq->ctx->obj->insertHttpHeader(kgl_expand_string("Content-Type"),kgl_expand_string("text/html"));
 #ifndef _WIN32

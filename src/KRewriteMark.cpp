@@ -103,7 +103,7 @@ std::string KRewriteMark::getDisplay() {
 	return s.str();
 }
 void KRewriteMark::editHtml(std::map<std::string, std::string> &attribute)
-		throw (KHtmlSupportException) {
+		 {
 	prefix = attribute["prefix"];
 	rule.parse(attribute);
 }

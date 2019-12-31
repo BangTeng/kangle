@@ -417,14 +417,18 @@ bool KHttpServerParser::buildVirtualHost(KAttributeHelper *ah,
 	std::string cipher;
 	std::string protocols;
 #ifdef ENABLE_HTTP2
-	std::string http2;
 	virtualHost->http2 = false;
-	if (ah->getValue("http2", http2)) {
-		virtualHost->http2 = atoi(http2.c_str())==1;
+	if (ah->getValue("http2", value)) {
+		virtualHost->http2 = atoi(value.c_str())==1;
 	} else if (tm) {
 		virtualHost->http2 = tm->http2;
 	}
 #endif
+	if (ah->getValue("early_data",value)) {
+		virtualHost->early_data = atoi(value.c_str()) == 1;
+	} else if (tm) {
+		virtualHost->early_data = tm->early_data;
+	}
 	if (!ah->getValue("certificate",certfile) && tm) {
 		certfile = tm->certfile;		
 	}

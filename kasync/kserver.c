@@ -21,10 +21,11 @@ void accept_result(kserver_selectable *ss, SOCKET sockfd, sockaddr_i *sockaddr)
 {
 	sockaddr_i addr;
 	if (sockaddr == NULL) {
-		socklen_t socklen = sizeof(sockaddr_i);
-		getpeername(sockfd, (struct sockaddr *) &addr, &socklen);
+		socklen_t name_len = sizeof(sockaddr_i);
+		getpeername(sockfd, (struct sockaddr *) &addr, &name_len);
 		sockaddr = &addr;
-		kassert(socklen == ksocket_addr_len(sockaddr));
+		//printf("ret=[%d] ksockaddr len=[%d]\n", ret,ksocket_addr_len(sockaddr));
+		//kassert(name_len == ksocket_addr_len(sockaddr));
 	}
 #ifndef NDEBUG
 	//klog(KLOG_DEBUG,"new client %s:%d connect to %s:%d sockfd=%d\n", socket->get_remote_ip().c_str(), socket->get_remote_port(),socket->get_self_ip().c_str(),socket->get_self_port(),socket->get_socket());

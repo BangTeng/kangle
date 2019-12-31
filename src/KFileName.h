@@ -259,7 +259,7 @@ public:
 				continue;
 			}
 			if (buf != NULL) {
-				memcpy(hot, buf, write_len);
+				kgl_memcpy(hot, buf, write_len);
 				buf += write_len;
 			}
 			hot += write_len;

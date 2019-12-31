@@ -8,7 +8,7 @@ char *my_strndup(const char *s, int length)
         if (p == NULL) {
                 return p;
         }
-        memcpy(p, s, length);
+        kgl_memcpy(p, s, length);
         p[length] = 0;
         return p;
 }
@@ -410,7 +410,7 @@ char *KMultiPartInputFilter::parseBody(KInputFilterContext *fc,int *len,bool &al
 	*len = max;
 	if (*len > 0) {
 		char *buf = (char *)malloc(*len+1);
-		memcpy(buf,fc->mb->buf_begin,*len);
+		kgl_memcpy(buf,fc->mb->buf_begin,*len);
 		buf[*len] = '\0';
 		if (bound && buf[*len-1] == '\r') {
 			buf[--(*len)] = 0;

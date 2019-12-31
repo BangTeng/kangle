@@ -61,7 +61,7 @@ public:
 		return false;
 	}
 	//返回头长度,-1表示出错
-	int StartResponseBody(bool sync, int64_t body_size)
+	int StartResponseBody(KHttpRequest *rq, int64_t body_size)
 	{
 		if (header) {
 			header(arg, status_code, header_manager.header);
@@ -125,7 +125,7 @@ public:
 	}
 	bool GetSelfAddr(sockaddr_i *addr)
 	{
-		memcpy(addr, &c->addr, sizeof(sockaddr_i));
+		kgl_memcpy(addr, &c->addr, sizeof(sockaddr_i));
 		return true;
 	}
 	void EndRequest(KHttpRequest *rq);

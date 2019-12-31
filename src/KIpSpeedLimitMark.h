@@ -95,7 +95,6 @@ public:
 		return s.str();
 	}
 	void editHtml(std::map<std::string, std::string> &attribute)
-			throw (KHtmlSupportException)
 	{
 		speed_limit = (int)get_size(attribute["speed_limit"].c_str());
 	}

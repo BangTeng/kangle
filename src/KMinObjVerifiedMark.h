@@ -55,7 +55,7 @@ public:
 		}
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attribute) throw (KHtmlSupportException)
+	void editHtml(std::map<std::string, std::string> &attribute)
 	{
 		v = (time_t)(string2int(attribute["v"].c_str()));
 		if (v > kgl_current_sec) {

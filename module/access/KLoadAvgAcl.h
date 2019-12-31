@@ -56,8 +56,7 @@ public:
 		s << "&gt;" << maxavg << "(cur:" << loadavg << ")";
 		return s.str();
 	}
-	void editHtml(std::map<std::string,std::string> &attibute)
-			throw(KHtmlSupportException) {
+	void editHtml(std::map<std::string,std::string> &attibute){
 		maxavg = atoi(attibute["maxavg"].c_str());
 	}
 	bool startElement(KXmlContext *context,

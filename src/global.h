@@ -35,7 +35,7 @@
 #endif
 #endif
 #ifndef VERSION
-#define VERSION         "3.5.16"
+#define VERSION         "3.5.18"
 #endif
 #define VER_ID   VERSION
 #ifndef MAX
@@ -76,7 +76,9 @@
 #define WORK_MODEL_SSL       (1<<2)
 
 #ifdef  ENABLE_PROXY_PROTOCOL
-#define WORK_MODEL_PROXY     (1<<6)
+#define WORK_MODEL_PROXY     (1<<5)
+//proxy in ssl
+#define WORK_MODEL_SSL_PROXY (1<<6)
 #endif
 #define WORK_MODEL_TPROXY    (1<<7)
 
@@ -160,9 +162,9 @@
 #define ANSW_XSENDFILE          (1<<26) /* x-accel-redirect */
 /////////////////////////////////////////////////////////////////////
 #define FLAG_BIG_OBJECT_PROGRESS (1<<27)
-#define FLAG_BIG_OBJECT          (1<<28)
-#define OBJ_INDEX_SAVED          (1<<29)
-#define OBJ_INDEX_UPDATE         (1<<30)
+//#define FLAG_BIG_OBJECT          (1<<28)
+//#define OBJ_INDEX_SAVED          (1<<29)
+//#define OBJ_INDEX_UPDATE         (1<<30)
 #define OBJ_NOT_OK               (1<<31)
 
 #define STATUS_OK               200
@@ -182,6 +184,7 @@
 #define STATUS_PROXY_UNAUTH     407
 #define STATUS_CONFLICT         409
 #define STATUS_PRECONDITION     412
+#define STATUS_HTTP_TO_HTTPS    497
 #define STATUS_SERVER_ERROR     500
 #define STATUS_NOT_IMPLEMENT    501
 #define STATUS_BAD_GATEWAY      502
@@ -197,7 +200,7 @@
 #define RQ_HAS_IF_MOD_SINCE    (1<<1)
 #define RQ_HAS_IF_NONE_MATCH   (1<<2)
 #define RQ_HAS_NO_CACHE        (1<<3)
-#define RQ_BIG_OBJECT_CTX      (1<<5)
+//#define RQ_BIG_OBJECT_CTX      (1<<5)
 #define RQ_INPUT_CHUNKED       (1<<6)
 #define RQ_SYNC                (1<<7)
 #define RQ_HAS_ONLY_IF_CACHED  (1<<8)
@@ -297,13 +300,13 @@
 #define ENABLE_SUB_VIRTUALHOST     1
 #define ENABLE_BASED_PORT_VH       1
 #define ENABLE_LOG_DRILL           1
-#define ENABLE_LOCAL_ERROR         1
 //#define ENABLE_PIPE_LOG            1
 #if defined(ENABLE_FORCE_CACHE) || defined(ENABLE_STATIC_URL)
 	#define ENABLE_STATIC_ENGINE       1
 #endif
 #define DEFAULT_COOKIE_STICK_NAME  "kangle_runat"
 #define X_REAL_IP_SIGN             "x-real-ip-sign"
+#define X_REAL_IP_HEADER           "X-Real-IP"
 #define VARY_URL_KEY               1
 enum Proto_t {
 	Proto_http, Proto_fcgi, Proto_ajp,

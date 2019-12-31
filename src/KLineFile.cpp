@@ -122,7 +122,7 @@ char *KStreamFile::read()
 		return line;
 	}
 	int hot_len = strlen(hot);
-	memcpy(buf, hot, hot_len);
+	kgl_memcpy(buf, hot, hot_len);
 	hot = buf + hot_len;
 	*hot = '\0';
 	int left_size = KGL_STREAM_FILE_SIZE - hot_len - 1;

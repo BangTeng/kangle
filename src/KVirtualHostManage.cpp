@@ -1097,16 +1097,23 @@ void KVirtualHostManage::getVhDetail(std::stringstream &s, KVirtualHost *vh,bool
 	s << "<input name='http2' type='checkbox' value='1'"
 		<< ((vh && vh->http2) ? "checked" : "") << ">http2";
 #endif
+#ifdef SSL_READ_EARLY_DATA_SUCCESS
+	s << "<input type='checkbox' name='early_data' value='1' ";
+	if (vh && vh->early_data) {
+		s << "checked";
+	}
+	s << ">early_data";
+#endif
 #endif
 	s << "</td></tr>\n";
 #ifdef ENABLE_USER_ACCESS
 	s << "<tr><td>" << klang["access_file"]
-			<< "</td><td><input name='access' value='" << (vh ? vh->user_access
-			: "") << "'></td></tr>\n";
+		<< "</td><td><input name='access' value='" 
+		<< (vh ? vh->user_access : "") << "'></td></tr>\n";
 #endif
 	s << "<tr><td>" << klang["htaccess"]
-			<< "</td><td><input name='htaccess' value='" << (vh ? vh->htaccess
-			: "") << "'></td></tr>\n";
+		<< "</td><td><input name='htaccess' value='"
+		<< (vh ? vh->htaccess : "") << "'></td></tr>\n";
 	s <<  "<tr><td>" << klang["app_count"] << "</td><td>";
 	s << "<input name='app' value='" << (vh ? vh->app : 1) << "' size='4'>";
 	s << "<input type='checkbox' name='ip_hash' value='1' " ;
@@ -1357,6 +1364,7 @@ void KVirtualHostManage::dumpLoad(KVirtualHostEvent *ctx,bool revers,const char 
 	lock.Unlock();
 	ctx->add("load",s2.getString());
 }
+//extend=4,导出上下行，及缓存流量
 void KVirtualHostManage::dumpFlow(KVirtualHostEvent *ctx,bool revers,const char *prefix,int prefix_len,int extend)
 {
 	char buf[64];
@@ -1372,10 +1380,14 @@ void KVirtualHostManage::dumpFlow(KVirtualHostEvent *ctx,bool revers,const char 
 		if (prefix && revers == (strncmp(vh->name.c_str(),prefix,prefix_len)==0)) {
 			continue;			
 		}
-		int len = vh->flow->dump(buf,sizeof(buf));
+		int64_t post_flow;
+		int len = vh->flow->dump(buf,sizeof(buf),post_flow);
 		s << vh->name.c_str() << "\t";
 		if (len>0) {
 			s.write_all(buf,len);
+		}
+		if (extend == 4) {
+			s << "\t" << (INT64)post_flow;
 		}
 		
 		s << "\n";

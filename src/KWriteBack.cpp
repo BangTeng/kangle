@@ -62,10 +62,7 @@ void KWriteBack::buildRequest(KHttpRequest *rq)
 	rq->responseConnection();
 	if (rq->meth!=METH_HEAD) {
 		KAutoBuffer buffer(rq->pool);
-		buffer.write_all(body.getBuf(),body.getSize());
-		if (rq->fetchObj) {
-			rq->closeFetchObject();
-		}
-		rq->fetchObj = new KBufferFetchObject(buffer.getHead(), 0, buffer.getLen(), NULL);
+		buffer.write_all(body.getBuf(),body.getSize());		
+		rq->appendFetchObject(new KBufferFetchObject(buffer.getHead(), 0, buffer.getLen(), NULL));
 	}
 }

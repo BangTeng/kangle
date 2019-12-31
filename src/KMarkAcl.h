@@ -58,7 +58,7 @@ public:
 		return s.str();
 	}
 	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+			 {
 		op = getMarkOp(attibute["op"].c_str());
 		mark = atoi(attibute["v"].c_str());
 	}

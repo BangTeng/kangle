@@ -162,8 +162,7 @@ public:
 
 	std::string getDisplay();
 	static void getEnv(KHttpRequest *rq, char *env, KStringBuf &s);
-	void editHtml(std::map<std::string, std::string> &attribute)
-			throw (KHtmlSupportException);
+	void editHtml(std::map<std::string, std::string> &attribute);
 	bool startElement(KXmlContext *context,
 			std::map<std::string, std::string> &attribute);
 	bool startCharacter(KXmlContext *context, char *character, int len);

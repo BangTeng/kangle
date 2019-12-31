@@ -4,6 +4,7 @@
 #include "ksocket.h"
 #include "kfeature.h"
 #include "kfile.h"
+#include "kmalloc.h"
 #ifdef _WIN32
 LPFN_ACCEPTEX lpfnAcceptEx = NULL;
 LPFN_CONNECTEX lpfnConnectEx = NULL;
@@ -66,10 +67,10 @@ bool ksocket_ipaddr_ip(const ip_addr *ia, char *ip, int ip_len)
 #endif	
 #ifdef KSOCKET_IPV6
 	if (ia->sin_family == PF_INET6) {
-		memcpy(&a.v6.sin6_addr, ia, sizeof(a.v6.sin6_addr));
+		kgl_memcpy(&a.v6.sin6_addr, ia, sizeof(a.v6.sin6_addr));
 	} else
 #endif
-		memcpy(&a.v4.sin_addr, ia, sizeof(a.v4.sin_addr));
+		kgl_memcpy(&a.v4.sin_addr, ia, sizeof(a.v4.sin_addr));
 	return ksocket_sockaddr_ip(&a, ip, ip_len);
 }
 bool ksocket_get_ipaddr(const char *host, ip_addr *ip) {
@@ -86,7 +87,7 @@ void ksocket_ipaddr(const sockaddr_i *addr, ip_addr *to) {
 	if (addr->v4.sin_family == PF_INET) {
 		to->addr32[0] = addr->v4.sin_addr.s_addr;
 	} else {
-		memcpy(&to->data, &addr->v6.sin6_addr, MIN(sizeof(to->data), sizeof(addr->v6.sin6_addr)));
+		kgl_memcpy(&to->data, &addr->v6.sin6_addr, MIN(sizeof(to->data), sizeof(addr->v6.sin6_addr)));
 	}
 #else
 	*to = addr->v4.sin_addr.s_addr;
@@ -157,6 +158,11 @@ SOCKET ksocket_listen(const sockaddr_i *addr,int flag)
 		setsockopt(sockfd, IPPROTO_IPV6, IPV6_V6ONLY, (const char *)&n, sizeof(int));
 	}
 #endif
+#ifdef TCP_FASTOPEN
+	if (TEST(flag, KSOCKET_FASTOPEN)) {
+		setsockopt(sockfd, IPPROTO_TCP, TCP_FASTOPEN, (const void *)&n, sizeof(n));
+	}
+#endif
 #ifdef IP_TRANSPARENT
 #ifdef KSOCKET_TPROXY
 	if (TEST(flag, KSOCKET_TPROXY)) {
@@ -218,7 +224,7 @@ void ksocket_addrinfo_sockaddr(struct addrinfo *ai, uint16_t port,sockaddr_i *ad
 #endif
 		((struct sockaddr_in *)ai->ai_addr)->sin_port = htons(port);
 	int copy_len = MIN((socklen_t)ai->ai_addrlen, sizeof(sockaddr_i));
-	memcpy(addr, ai->ai_addr, copy_len);
+	kgl_memcpy(addr, ai->ai_addr, copy_len);
 }
 bool ksocket_getaddr(const char *host, uint16_t port,int ai_family, int ai_flags, sockaddr_i *addr)
 {

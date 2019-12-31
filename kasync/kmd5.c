@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "kmd5.h"
-
+#include "kmalloc.h"
 
 #define S11 7
 #define S12 12
@@ -106,7 +106,7 @@ static unsigned char PADDING[64] =
 	/* Transform as many times as possible.
 	 */
 	if (inputLen >= partLen) {
-		memcpy
+		kgl_memcpy
 			((unsigned char*) & context->buffer[index], (unsigned char*) input, partLen);
 		KMD5Transform(context->state, context->buffer);
 
@@ -118,7 +118,7 @@ static unsigned char PADDING[64] =
 		i = 0;
 
 	/* Buffer remaining input */
-	memcpy
+	kgl_memcpy
 		((unsigned char*) & context->buffer[index], (unsigned char*) & input[i],
 		 inputLen - i);
 }

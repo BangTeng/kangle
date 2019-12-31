@@ -55,8 +55,7 @@ public:
 		s << port;
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute) {
 		if(attibute["port"].size()>0){
 			port = atoi(attibute["port"].c_str());
 		}

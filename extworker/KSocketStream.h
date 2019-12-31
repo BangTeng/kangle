@@ -16,7 +16,7 @@ public:
 	}
 	void set_nodelay()
 	{
-		ksocket_no_delay(sockfd);
+		ksocket_no_delay(sockfd,false);
 	}
 	void set_delay()
 	{

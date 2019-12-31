@@ -206,7 +206,7 @@ char *KFastcgiFetchObject::parse(KHttpRequest *rq,char **str,int *len,int *packe
 		if (*len < (int)sizeof(FCGI_Header)) {
 			return NULL;
 		}		
-		memcpy(((char *)&buf),*str,sizeof(FCGI_Header));
+		kgl_memcpy(((char *)&buf),*str,sizeof(FCGI_Header));
 		(*str) += sizeof(FCGI_Header);
 		(*len) -= sizeof(FCGI_Header);		
 		body_len = ntohs(buf.contentLength);

@@ -48,12 +48,12 @@ public:
 	bool isLoad();
 	void clear();
 	bool ext;
-	void *createConnection();
-	void freeConnection(void *cn);
+	kgl_vh_connection createConnection();
+	void freeConnection(kgl_vh_connection cn);
 private:
 	//bool delInfo(KVirtualHostConnection *cn,const char *vhName,const char *name,int type,const char *value);
 
-	bool loadInfo(KVirtualHost *vh,void *cn);
+	bool loadInfo(KVirtualHost *vh, kgl_vh_connection cn);
 	//int getColIndex(const char *name);
 	KVirtualHost *newVirtualHost(void *cn,std::map<std::string,std::string> &attribute,KVirtualHostManage *vm,KVirtualHost *ov);
 	//bool buildVhAttribute(const char *name,KVirtualHostData *rs,std::map<std::string,std::string> &attribute);

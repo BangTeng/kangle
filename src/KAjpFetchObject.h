@@ -26,7 +26,7 @@ protected:
 	void buildPost(KHttpRequest *rq);
 	//½âÎöbody
 	StreamState ParseBody(KHttpRequest *rq, char **data, int *len);
-	void appendPostEnd();
+	void BuildPostEnd();
 	bool checkContinueReadBody(KHttpRequest *rq)
 	{
 		return !bodyEnd;

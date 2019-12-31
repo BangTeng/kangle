@@ -25,9 +25,9 @@ protected:
 		KAsyncFetchObject::expectDone(rq);
 	}
 	*/
-	bool needTempFile()
+	bool NeedTempFile(bool upload, KHttpRequest *rq)
 	{
-		return true;
+		return KFetchObject::NeedTempFile(upload, rq);
 	}
 	bool checkContinueReadBody(KHttpRequest *rq)
 	{
@@ -65,8 +65,8 @@ protected:
 	{
 		if (pad_buf) {
 			char *nb = (char *)xmalloc(pad_len + *packet_len);
-			memcpy(nb, pad_buf, pad_len);
-			memcpy(nb + pad_len, *packet, *packet_len);
+			kgl_memcpy(nb, pad_buf, pad_len);
+			kgl_memcpy(nb + pad_len, *packet, *packet_len);
 			xfree(pad_buf);
 			pad_buf = nb;
 			pad_len += *packet_len;
@@ -79,7 +79,7 @@ protected:
 		char *save_pad_buf = NULL;
 		if (packet_len > 0) {
 			save_pad_buf = (char *)xmalloc(packet_len);
-			memcpy(save_pad_buf, packet, packet_len);
+			kgl_memcpy(save_pad_buf, packet, packet_len);
 		}
 		if (pad_buf) {
 			xfree(pad_buf);

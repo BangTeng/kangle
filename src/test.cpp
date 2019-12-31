@@ -158,13 +158,13 @@ void test_timematch()
 void test_url_decode() {
 	char buf2[5];
     //strcpy(buf2,"test");
-    memcpy(buf2,"test",4);
+    kgl_memcpy(buf2,"test",4);
     buf2[4] = '*';
     url_decode(buf2, 4,NULL,true);
    // printf("buf=[%s]\n",buf2);
     assert(buf2[4]=='*');
     //strcpy(buf2,"test");
-    memcpy(buf2,"%20t",4);
+    kgl_memcpy(buf2,"%20t",4);
     url_decode(buf2, 4,NULL,true);
     //printf("buf=[%s]\n",buf2);
     assert(buf2[2]=='\0');
@@ -218,19 +218,19 @@ void test_line_file()
 }
 void test_suffix_corrupt() {
         char *str = new char[4];
-        memcpy(str,"test1",5);
+        kgl_memcpy(str,"test1",5);
 	delete[] str;
 }
 void test_prefix_corrupt() {
         char *str = (char *)malloc(4);
 	void *pp = str - 1;
-	memcpy(pp,"test",4);
+	kgl_memcpy(pp,"test",4);
         free(str);
 }
 void test_freed_memory() {
         char *str = (char *)malloc(4);
         free(str);
-        memcpy(str,"test",4);
+        kgl_memcpy(str,"test",4);
 }
 void test_http_parser()
 {

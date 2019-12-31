@@ -43,7 +43,7 @@ public:
 	{
 		return Parse_Success;
 	}
-	bool needTempFile()
+	bool NeedTempFile(bool upload, KHttpRequest *rq)
 	{
 		return false;
 	}
@@ -64,7 +64,7 @@ public:
 	{
 		return Parse_Success;
 	}
-	bool needTempFile()
+	bool NeedTempFile(bool upload, KHttpRequest *rq)
 	{
 		return false;
 	}

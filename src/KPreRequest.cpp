@@ -9,6 +9,7 @@
 #include "KProxy.h"
 #include "KConfig.h"
 #include "KVirtualHostManage.h"
+kev_result handle_ssl_accept(void *arg, int got);
 #define KGL_BUSY_MSG "HTTP/1.0 503 Service Unavailable\r\nConnection: close\r\n\r\nServer is busy."
 unsigned total_connect = 0;
 typedef std::map<ip_addr, unsigned> intmap;
@@ -138,6 +139,7 @@ max_per_ip: ipLock.Unlock();
 	
 	return kgl_connection_per_limit;
 }
+
 static kev_result handle_http_request(kconnection *cn)
 {
 	
@@ -146,6 +148,52 @@ static kev_result handle_http_request(kconnection *cn)
 	sink->cn->st.app_data = rq;
 	return sink->ReadHeader(rq);
 }
+
+static kev_result handle_ssl_proxy_callback(void *arg, int got)
+{
+	kconnection *c = (kconnection *)arg;
+	if (got == 0) {
+		return handle_http_request((kconnection *)arg);
+	}
+	kconnection_destroy(c);
+	return kev_destroy;
+}
+static kev_result handle_request(kconnection *c)
+{
+#ifdef KSOCKET_SSL
+	if (c->server->ssl_ctx) {
+		if (!kconnection_ssl_accept(c, c->server->ssl_ctx)) {
+			kconnection_destroy(c);
+			return kev_destroy;
+		}
+		return kconnection_ssl_handshake(c, handle_ssl_accept, c);
+	}
+#endif
+	return handle_http_request(c);
+}
+static kev_result handle_first_package_ready(void *arg, int got)
+{
+	kconnection *c = (kconnection *)arg;
+	u_char buf[2];
+	int n = recv(c->st.fd, (char *)buf, 1, MSG_PEEK);
+	if (n <= 0) {
+		kconnection_destroy(c);
+		return kev_destroy;
+	}
+	if (buf[0] & 0x80 /* SSLv2 */ || buf[0] == 0x16 /* SSLv3/TLSv1 */) {
+		return handle_request(c);
+	}
+	return handle_http_request(c);
+}
+static kev_result handle_http_https_request(kconnection *c)
+{
+#ifdef KSOCKET_SSL
+	if (c->server->ssl_ctx) {
+		return selectable_read(&c->st, handle_first_package_ready, NULL, c);
+	}
+#endif
+	return handle_http_request(c);
+}
 static kev_result result_proxy_request(void *arg, int got)
 {
 	kconnection *cn = (kconnection *)arg;
@@ -153,19 +201,10 @@ static kev_result result_proxy_request(void *arg, int got)
 		kconnection_destroy(cn);
 		return kev_destroy;
 	}
-	return handle_http_request(cn);
-}
-static kev_result handle_request(kconnection *cn)
-{
-#ifdef ENABLE_PROXY_PROTOCOL
-	if (TEST(cn->server->flags, WORK_MODEL_PROXY)) {
-		return handl_proxy_request(cn, result_proxy_request);
-	}
-#endif
-	return handle_http_request(cn);
+	return handle_http_https_request(cn);
 }
 
-static kev_result handle_ssl_accept(void *arg,int got)
+kev_result handle_ssl_accept(void *arg,int got)
 {
 	kconnection *cn = (kconnection *)arg;
 	if (got < 0) {
@@ -184,6 +223,11 @@ static kev_result handle_ssl_accept(void *arg,int got)
 		cn->st.app_data = http2;
 		http2->server(cn);
 		return kev_ok;
+	}
+#endif
+#ifdef HTTP_PROXY
+	if (TEST(cn->server->flags, WORK_MODEL_SSL_PROXY)) {
+		return handl_proxy_request(cn, handle_ssl_proxy_callback);
 	}
 #endif
 	return handle_http_request(cn);
@@ -218,22 +262,25 @@ void handle_connection_failed(kconnection *c, kgl_connection_result result)
 	send(c->st.fd, KGL_BUSY_MSG,sizeof(KGL_BUSY_MSG),0);
 	kconnection_destroy(c);
 }
+
 void handle_connection(kconnection *c, void *ctx)
 {
 	kgl_connection_result result = add_request(c);
 	if (unlikely(result != kgl_connection_success)) {
 		handle_connection_failed(c, result);
 		return;
-	}	
-#ifdef KSOCKET_SSL
-	if (c->server->ssl_ctx) {
-		if (!kconnection_ssl_accept(c, c->server->ssl_ctx)) {
-			kconnection_destroy(c);
-			return;
-		}
-		kconnection_ssl_handshake(c, handle_ssl_accept, c);
+	}
+#ifdef ENABLE_PROXY_PROTOCOL
+	if (TEST(c->server->flags, WORK_MODEL_PROXY)) {
+		handl_proxy_request(c, result_proxy_request);
+		return;
+	}
+#ifdef HTTP_PROXY
+	if (c->server->ssl_ctx && TEST(c->server->flags, WORK_MODEL_SSL_PROXY)) {
+		handle_request(c);
 		return;
 	}
 #endif
-	handle_http_request(c);
+#endif
+	handle_http_https_request(c);
 }

@@ -80,7 +80,7 @@ void kconnection::update_remote_addr()
 }
 bool kconnection::HalfConnect(sockaddr_i *addr, sockaddr_i *bind_addr,int tproxy_mask)
 {
-	memcpy(&this->addr, addr, sizeof(sockaddr_i));
+	kgl_memcpy(&this->addr, addr, sizeof(sockaddr_i));
 	fd = ksocket_half_connect((struct sockaddr *)addr, addr->get_addr_len(), (struct sockaddr *)bind_addr, bind_addr? bind_addr->get_addr_len():0, tproxy_mask);
 	return ksocket_opened(fd);
 }
@@ -91,7 +91,7 @@ bool kconnection::HalfConnect(const char *unix_path)
 bool kconnection::HalfConnect(struct sockaddr *addr, socklen_t addr_size, struct sockaddr *bind_addr, socklen_t bind_addr_size, int tproxy_mask)
 {
 	kassert(addr_size <= sizeof(sockaddr_i));
-	memcpy(&this->addr, addr, addr_size);
+	kgl_memcpy(&this->addr, addr, addr_size);
 	fd = ksocket_half_connect(addr, addr_size, bind_addr, bind_addr_size, tproxy_mask);
 	return ksocket_opened(fd);
 }

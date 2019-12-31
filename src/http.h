@@ -83,7 +83,7 @@ kev_result send_auth(KHttpRequest *rq,KAutoBuffer *body=NULL);
 bool stageContentType(KHttpRequest *rq,KHttpObject *obj);
 bool build_obj_header(KHttpRequest *rq, KHttpObject *obj,INT64 content_len, INT64 &start, INT64 &send_len);
 bool push_redirect_header(KHttpRequest *rq,const char *url,int url_len,int code);
-kev_result stageEndRequest(KHttpRequest *rq,bool expected=false);
+kev_result stageEndRequest(KHttpRequest *rq);
 void insert_via(KHttpRequest *rq, KWStream &s, char *old_via = NULL);
 bool make_http_env(KHttpRequest *rq, KBaseRedirect *rd,time_t lastModified,KFileName *file,KEnvInterface *env, bool chrooted=false);
 KWStream *makeWriteStream(KHttpRequest *rq,KHttpObject *obj,KWStream *st,bool &autoDelete);
@@ -137,6 +137,22 @@ inline kev_result processReadyedRequest(KHttpRequest *rq)
 	}
 	return kev_ok;
 }
+inline kev_result processRequestUseQueue(KHttpRequest *rq, KRequestQueue *queue)
+{
+#ifdef ENABLE_REQUEST_QUEUE
+	if (queue->getMaxWorker() > 0) {
+		if (!queue->start(rq)) {
+			if (TEST(rq->flags, RQ_SYNC)) {
+				send_error(rq, NULL, STATUS_SERVICE_UNAVAILABLE, "Server is busy.");
+				return stageEndRequest(rq);
+			}
+			return send_error(rq, NULL, STATUS_SERVICE_UNAVAILABLE, "Server is busy.");
+		}
+		return kev_ok;
+	}
+#endif
+	return processReadyedRequest(rq);
+}
 //处理请求的队列,根据数据源的特点处理请求是否放入队列
 inline kev_result processQueueRequest(KHttpRequest *rq)
 {
@@ -144,7 +160,7 @@ inline kev_result processQueueRequest(KHttpRequest *rq)
 		rq->AddSync();
 	}
 #ifdef ENABLE_REQUEST_QUEUE
-	if (rq->IsWorkModel(WORK_MODEL_MANAGE) || rq->ctx->internal || !rq->fetchObj->needQueue()) {
+	if (TEST(rq->GetWorkModel(),WORK_MODEL_MANAGE) || rq->ctx->internal || !rq->fetchObj->needQueue()) {
 		//后台管理及内部调用，不用排队
 		return processReadyedRequest(rq);
 	}
@@ -157,16 +173,7 @@ inline kev_result processQueueRequest(KHttpRequest *rq)
 		}
 #endif
 	}
-	if (queue->getMaxWorker() > 0) {
-		if (!queue->start(rq)) {
-			if (TEST(rq->flags, RQ_SYNC)) {
-				send_error(rq, NULL, STATUS_SERVICE_UNAVAILABLE, "Server is busy.");
-				return stageEndRequest(rq);
-			}
-			return send_error(rq, NULL, STATUS_SERVICE_UNAVAILABLE, "Server is busy.");
-		}
-		return kev_ok;
-	}
+	return processRequestUseQueue(rq, queue);
 #endif
 	return processReadyedRequest(rq);
 }
@@ -190,7 +197,7 @@ inline kev_result processRequest(KHttpRequest *rq)
 {
 	kassert(rq->fetchObj!=NULL);
 #ifdef ENABLE_TF_EXCHANGE
-	if (unlikely(!rq->ctx->internal && ((rq->content_length==-1 && rq->fetchObj->needTempFile()) || rq->hasInputFilter()))) {
+	if (unlikely(!rq->ctx->internal && (rq->fetchObj->NeedTempFile(true,rq) || rq->hasInputFilter()))) {
 		//post chunked
 		return process_read_post_to_temp_file(rq);
 	}

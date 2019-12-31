@@ -74,8 +74,7 @@ public:
 		}
 		return s.str();
 	}
-	void editHtml(std::map<std::string,std::string> &attibute)
-			throw(KHtmlSupportException) {
+	void editHtml(std::map<std::string,std::string> &attibute){
 		minlen = get_size(attibute["min"].c_str());
 		maxlen = get_size(attibute["max"].c_str());
 		contentRange = (attibute["content_range"] == "1");

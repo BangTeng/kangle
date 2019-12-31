@@ -108,6 +108,7 @@ KVirtualHost::KVirtualHost() {
 	app = 0;
 	ip_hash = false;
 #ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
+	early_data = false;
 	ssl_ctx = NULL;
 	cipher = NULL;
 	protocols = NULL;
@@ -698,6 +699,11 @@ void KVirtualHost::buildXML(std::stringstream &s) {
 		s << " http2='1'";
 	}
 #endif
+#ifdef SSL_READ_EARLY_DATA_SUCCESS
+	if (early_data) {
+		s << " early_data='1'";
+	}
+#endif
 #endif
 	if(status != 0 || tvh){
 		s << " status='" << status << "'";
@@ -990,6 +996,9 @@ bool KVirtualHost::setSSLInfo(std::string certfile,std::string keyfile,std::stri
 			certfile.c_str(),
 			keyfile.c_str());
 		return false;
+	}
+	if (early_data) {
+		kgl_ssl_ctx_set_early_data(ssl_ctx, true);
 	}
 	if (this->cipher) {
 		if (!kgl_ssl_ctx_set_cipher_list(ssl_ctx, this->cipher)) {

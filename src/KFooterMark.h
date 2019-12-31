@@ -23,8 +23,7 @@ public:
 	std::string getDisplay() {
 		return "hidden";
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-		throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute) {
 		footer = attibute["footer"];
 		if(attibute["head"]=="1"){
 			head = true;

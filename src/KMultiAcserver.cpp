@@ -122,7 +122,7 @@ int KMultiAcserver::getCookieStick(const char *attr,const char *cookie_stick_nam
 	free(buf);
 	return cookie_stick_value;
 }
-unsigned short KMultiAcserver::getNodeIndex(KHttpRequest *rq)
+uint16_t KMultiAcserver::getNodeIndex(KHttpRequest *rq, int *set_cookie_stick)
 {
 	if (cookie_stick) {
 		const char *cookie_stick_name = conf.cookie_stick_name;
@@ -154,40 +154,54 @@ unsigned short KMultiAcserver::getNodeIndex(KHttpRequest *rq)
 	}
 	index = index % vnodes.size();
 	if (cookie_stick) {
-		rq->cookie_stick = index + 1;
+		*set_cookie_stick = index + 1;
 	}
 	return (unsigned short)index;
+}
+static kev_result connect_result(KHttpRequest *rq, KSockPoolHelper *sa, int cookie_stick)
+{
+	if (cookie_stick > 0 && !TEST(rq->flags,RQ_UPSTREAM_ERROR)) {
+		KStringBuf b;
+		if (*conf.cookie_stick_name) {
+			b << conf.cookie_stick_name;
+		} else {
+			b.WSTR(DEFAULT_COOKIE_STICK_NAME);
+		}
+		b.WSTR("=");
+		b << cookie_stick;
+		b.WSTR("; path=/");
+		rq->responseHeader(kgl_expand_string("Set-Cookie"), b.getBuf(), b.getSize());
+	}
+	kev_result ret = sa->connect(rq);
+	sa->release();
+	return ret;
 }
 kev_result KMultiAcserver::connect(KHttpRequest *rq)
 {
 	kev_result ret;
 	KSockPoolHelper *sockHelper = NULL;
+	int set_cookie_stick = 0;
 	lock.Lock();
 	if (!vnodes.empty()) {
-		unsigned short index = getNodeIndex(rq);
+		uint16_t index = getNodeIndex(rq,&set_cookie_stick);
 		sockHelper = vnodes[index];
 		if (sockHelper->isEnable()) {
 			//the node is active
 			sockHelper->addRef();
 			sockHelper->hit++;
 			lock.Unlock();
-			ret = sockHelper->connect(rq);
-			sockHelper->release();
-			return ret;
+			return connect_result(rq, sockHelper, set_cookie_stick);
 		}
 		//look for next active node
 		KSockPoolHelper *na = nextActiveNode(sockHelper, index);
-		if (na) {
-			if (cookie_stick) {
-				//重新粘到新服务器上
-				rq->cookie_stick = index + 1;
-			}
+		if (na) {		
 			na->addRef();
 			na->hit++;
 			lock.Unlock();
-			ret = na->connect(rq);
-			na->release();
-			return ret;
+			if (cookie_stick) {
+				set_cookie_stick = index + 1;
+			}
+			return connect_result(rq, na, set_cookie_stick);
 		}
 	}
 	KSockPoolHelper *fast_node = NULL;
@@ -205,9 +219,7 @@ kev_result KMultiAcserver::connect(KHttpRequest *rq)
 		fast_node->addRef();
 		fast_node->hit++;
 		lock.Unlock();
-		ret = fast_node->connect(rq);
-		fast_node->release();
-		return ret;
+		return connect_result(rq, fast_node, 0);
 	}
 	
 	//reset all node
@@ -216,9 +228,7 @@ kev_result KMultiAcserver::connect(KHttpRequest *rq)
 		sockHelper->addRef();
 		sockHelper->hit++;
 		lock.Unlock();
-		ret = sockHelper->connect(rq);
-		sockHelper->release();
-		return ret;
+		return connect_result(rq, sockHelper, set_cookie_stick);
 	}
 	lock.Unlock();
 	return	static_cast<KAsyncFetchObject *>(rq->fetchObj)->connectCallBack(rq,NULL);	

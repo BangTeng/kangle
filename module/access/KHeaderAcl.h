@@ -69,8 +69,7 @@ public:
 		}
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attribute)
-			throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attribute){
 		header = attribute["header"];
 		nc = attribute["nc"] == "1";
 		reg.setModel(attribute["val"].c_str(), nc ? PCRE_CASELESS : 0);
@@ -135,8 +134,7 @@ public:
 		s << name << ":" << KMultiAcl::getDisplay();
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attribute)
-		throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attribute){
 		name = attribute["name"];
 		KMultiAcl::editHtml(attribute);
 	}

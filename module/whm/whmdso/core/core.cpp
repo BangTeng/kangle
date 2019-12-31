@@ -476,10 +476,15 @@ int WINAPI WhmCoreCall(const char *callName, const char *event, WHM_CONTEXT *con
 #ifdef ENABLE_DISK_CACHE
 			INT64 total_size, free_size;
 			ctx->add("cache_disk", total_disk_size);
-			if (get_disk_size(total_size, free_size)) {
-				ctx->add("disk_total", total_size);
-				ctx->add("disk_free", free_size);
+			KStringBuf s;
+			if (dci) {
+				get_disk_base_dir(s);
+				if (get_disk_size(total_size, free_size)) {
+					ctx->add("disk_total", total_size);
+					ctx->add("disk_free", free_size);
+				}
 			}
+			ctx->add("disk_cache_dir", s.getString());
 #endif
 			int vh_count = conf.gvm->getCount();
 			ctx->add("vh",vh_count);
@@ -1010,6 +1015,7 @@ int WINAPI WhmCoreCall(const char *callName, const char *event, WHM_CONTEXT *con
 	}
 	if (cmd==CALL_RELOAD) {
 		do_config(false);
+		wait_load_config_done();
 		return WHM_OK;
 	}
 	if (cmd == CALL_RELOAD_VH_ACCESS) {

@@ -18,7 +18,7 @@
 void print_buff(kbuf *buf) {
 	while (buf && buf->used > 0) {
 		char *s = (char *) xmalloc(buf->used+1);
-		memcpy(s, buf->data, buf->used);
+		kgl_memcpy(s, buf->data, buf->used);
 		s[buf->used] = '\0';
 		printf("%s", s);
 		xfree(s);
@@ -31,7 +31,12 @@ void upstream_sign_request(KHttpRequest *rq, KHttpEnv *s)
 	if (TEST(rq->raw_url.flags, KGL_URL_SSL)) {
 		v.WSTR("p=https,");
 	}
-	v.WSTR("ip=");
+	v.WSTR("sp=");
+	v << rq->GetSelfPort();
+	if (TEST(rq->raw_url.flags, KGL_URL_SSL)) {
+		v.WSTR("s");
+	}
+	v.WSTR(",ip=");
 	v << rq->getClientIp();
 	v.WSTR(",t=");
 	v << (int)kgl_current_sec;

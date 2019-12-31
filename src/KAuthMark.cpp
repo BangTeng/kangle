@@ -356,7 +356,7 @@ std::string KAuthMark::getDisplay() {
 	return s.str();
 }
 void KAuthMark::editHtml(std::map<std::string, std::string> &attribute)
-		throw (KHtmlSupportException) {
+		 {
 	file = attribute["file"];
 	lock.Lock();
 	cryptType = parseCryptType(attribute["crypt_type"].c_str());

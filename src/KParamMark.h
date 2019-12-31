@@ -135,7 +135,6 @@ public:
 		return false;
 	}
 	void editHtml(std::map<std::string, std::string> &attribute)
-			throw (KHtmlSupportException)
 	{	
 		icase = atoi(attribute["icase"].c_str());
 		charset = attribute["charset"];
@@ -314,7 +313,6 @@ public:
 		return s.str();
 	}
 	void editHtml(std::map<std::string, std::string> &attribute)
-			throw (KHtmlSupportException)
 	{	
 		max_count = atoi(attribute["max_count"].c_str());
 		get = attribute["get"]=="1";

@@ -452,12 +452,11 @@ u_char * KHttp2::state_process_header( u_char *pos,	u_char *end)
 
 	len = header->name.len + header->value.len;
 
-	if (len > state.header_limit) {
+	state.header_length += len;
+	if (state.header_length > 1048576) {
 		klog(KLOG_ERR, "client exceeded http2_max_header_size limit\n");
 		return this->close(true,KGL_HTTP_V2_ENHANCE_YOUR_CALM);
 	}
-
-	state.header_limit -= len;
 
 	if (state.index) {
 		if (!add_header(header)) {
@@ -605,7 +604,7 @@ u_char *KHttp2::state_header_complete(u_char *pos,u_char *end)
 			assert(processing >= 0);
 			katom_inc((void *)&processing);
 			state.stream = NULL;
-			handleStartRequest(rq, 0);
+			handleStartRequest(rq, state.header_length);
 		
 	} 
 	if (!state.keep_pool && state.pool) {
@@ -883,7 +882,7 @@ int KHttp2::copyReadBuffer(KHttp2Context *ctx,buffer_callback buffer,void *arg)
 			int this_len;
 			char *data = ctx->read_buffer->getReadBuffer(this_len);
 			this_len = MIN(this_len,(int)vc[i].iov_len);
-			memcpy(vc[i].iov_base,data,this_len);
+			kgl_memcpy(vc[i].iov_base,data,this_len);
 			total_send += this_len;
 			vc[i].iov_len -= this_len;
 			vc[i].iov_base = (char *)vc[i].iov_base + this_len;
@@ -1203,6 +1202,15 @@ bool KHttp2::add_header(KHttp2Context *ctx, const char *name, hlen_t name_len, c
 		if (strcasecmp(name, "cookie") == 0) {
 			return add_header_cookie(ctx,val, val_len);
 		}
+		break;
+	case 7:
+		if (strcasecmp(name, "upgrade") == 0) {
+			if ((val_len == 2 && strncasecmp(val, "h2",val_len) == 0) || (val_len == 3 && strncasecmp(val, "h2c",val_len) == 0)) {
+				//in http2 skip upgrade: h2/h2c header
+				return true;
+			}
+		}
+		break;
 	default:
 		break;
 	}
@@ -1538,7 +1546,7 @@ u_char *KHttp2::state_headers(u_char *pos, u_char *end)
 	uintptr_t               padded, priority, depend, dependency, excl, weight;
 	KHttp2Node      *node;
 	KHttp2Context    *stream;
-
+	state.header_length = 0;
 	padded = state.flags & KGL_HTTP_V2_PADDED_FLAG;
 	priority = state.flags & KGL_HTTP_V2_PRIORITY_FLAG;
 
@@ -1593,8 +1601,6 @@ u_char *KHttp2::state_headers(u_char *pos, u_char *end)
 
 		pos += sizeof(uint32_t) + 1;
 	}
-	//limit to 1M
-	state.header_limit = 1048576;
 
 	klog(KLOG_DEBUG,"http2 HEADERS frame sid:%ui on %ui excl:%ui weight:%ui",state.sid, depend, excl, weight);
 
@@ -1653,7 +1659,6 @@ u_char *KHttp2::state_headers(u_char *pos, u_char *end)
 u_char *KHttp2::state_priority(u_char *pos, u_char *end)
 {
 	uintptr_t           depend, dependency, excl, weight;
-	//KHttp2Node  *node;
 	if (state.length != KGL_HTTP_V2_PRIORITY_SIZE) {
 		klog(KLOG_WARNING, "client sent PRIORITY frame with incorrect length %d\n",state.length);
 		return this->close(true, KGL_HTTP_V2_SIZE_ERROR);

@@ -306,7 +306,7 @@ void *kgl_array_push(kgl_array_t *a)
 				return NULL;
 			}
 
-			memcpy(new_elt, a->elts, size);
+			kgl_memcpy(new_elt, a->elts, size);
 			a->elts = new_elt;
 			a->nalloc *= 2;
 		}
@@ -354,7 +354,7 @@ void *kgl_array_push_n(kgl_array_t *a, size_t n)
 				return NULL;
 			}
 
-			memcpy(new_elt, a->elts, a->nelts * a->size);
+			kgl_memcpy(new_elt, a->elts, a->nelts * a->size);
 			a->elts = new_elt;
 			a->nalloc = nalloc;
 		}

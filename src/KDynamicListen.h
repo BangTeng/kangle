@@ -17,6 +17,7 @@ public:
 		port = 0;
 #ifdef ENABLE_PROXY_PROTOCOL
 		proxy = false;
+		ssl_proxy = false;
 #endif
 		
 		ipv4 = false;
@@ -43,6 +44,8 @@ public:
 #ifdef ENABLE_PROXY_PROTOCOL
 		if (proxy) {
 			SET(server->flags, WORK_MODEL_PROXY);
+		} else if (ssl_proxy) {
+			SET(server->flags, WORK_MODEL_SSL_PROXY);
 		}
 #endif
 		
@@ -53,6 +56,7 @@ public:
 	bool ssl;
 #ifdef ENABLE_PROXY_PROTOCOL
 	bool proxy;
+	bool ssl_proxy;
 #endif
 	
 };

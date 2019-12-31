@@ -44,8 +44,7 @@ public:
 	bool startCharacter(KXmlContext *context, char *character, int len) {		
 		return true;
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute){
 		
 	}
 	void buildXML(std::stringstream &s) {

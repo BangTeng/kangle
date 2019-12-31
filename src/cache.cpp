@@ -75,17 +75,6 @@ void clean_static_obj_header(KHttpObject *obj) {
 	}
 }
 bool stored_obj(KHttpObject *obj, int list_state) {
-#ifdef ENABLE_DISK_CACHE
-	if (TEST(obj->index.flags, FLAG_IN_DISK) &&
-		obj->index.head_size != kgl_align(obj->index.head_size, kgl_aio_align_size)) {
-		char *url = obj->url->getUrl();
-		char *filename = obj->getFileName();
-		klog(KLOG_ERR, "disk cache file head_size=[%d] is not align by size=[%d], url=[%s] file=[%s] now dead it.\n", obj->index.head_size, kgl_aio_align_size, url, filename);
-		free(filename);
-		free(url);
-		SET(obj->index.flags, FLAG_DEAD);
-	}
-#endif
 	return cache.add(obj,list_state);
 }
 bool stored_obj(KHttpRequest *rq, KHttpObject *obj,KHttpObject *old_obj) {
@@ -126,10 +115,15 @@ bool stored_obj(KHttpRequest *rq, KHttpObject *obj,KHttpObject *old_obj) {
 	}
 #endif
 	if (old_obj) {
-		SET(old_obj->index.flags, FLAG_DEAD|OBJ_INDEX_UPDATE );
-	}
+		old_obj->Dead();
+	}	
 	if (stored_obj(obj,(TEST(obj->index.flags,FLAG_IN_MEM)?LIST_IN_MEM:LIST_IN_DISK))) {
 		SET(rq->flags,RQ_OBJ_STORED);
+#ifdef ENABLE_DB_DISK_INDEX
+		if (TEST(obj->index.flags, FLAG_IN_DISK)) {
+			dci->start(ci_add, obj);
+		}
+#endif
 		return true;
 	}
 	return false;

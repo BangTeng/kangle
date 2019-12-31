@@ -44,7 +44,7 @@ public:
 		}
 		return new KHttpProxyFetchObject();
 	}
-	bool needTempFile()
+	bool NeedTempFile(bool upload, KHttpRequest *rq)
 	{
 		return false;
 	}

@@ -50,8 +50,7 @@ public:
 		s << getValList();
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute){
 		freeMap();
 		if (attibute["split"].size() > 0) {
 			split = attibute["split"][0];

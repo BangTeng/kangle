@@ -18,8 +18,8 @@ public:
 						if (cookie.match(h->val,val_len,0)>0) {
 							int new_len = val_len + sizeof(HTTP_ONLY_STRING);
 							char *buf = (char *)malloc(new_len);
-							memcpy(buf,h->val,val_len);
-							memcpy(buf+val_len,HTTP_ONLY_STRING,sizeof(HTTP_ONLY_STRING));
+							kgl_memcpy(buf,h->val,val_len);
+							kgl_memcpy(buf+val_len,HTTP_ONLY_STRING,sizeof(HTTP_ONLY_STRING));
 							free(h->val);
 							h->val = buf;
 							h->val_len += sizeof(HTTP_ONLY_STRING)-1;
@@ -55,7 +55,7 @@ public:
 	{
 		return cookie.getModel();
 	}
-	void editHtml(std::map<std::string, std::string> &attribute) throw (KHtmlSupportException)
+	void editHtml(std::map<std::string, std::string> &attribute)
 	{
 		cookie.setModel(attribute["cookie"].c_str(),0);
 	}
@@ -96,8 +96,8 @@ public:
 				if (http_only && kgl_memstr(h->val,h->val_len,kgl_expand_string(HTTP_ONLY_STRING))==NULL) {										
 					int new_len = h->val_len + sizeof(HTTP_ONLY_STRING);
 					char *buf = (char *)malloc(new_len);
-					memcpy(buf,h->val,h->val_len);
-					memcpy(buf+h->val_len,HTTP_ONLY_STRING,sizeof(HTTP_ONLY_STRING));
+					kgl_memcpy(buf,h->val,h->val_len);
+					kgl_memcpy(buf+h->val_len,HTTP_ONLY_STRING,sizeof(HTTP_ONLY_STRING));
 					free(h->val);
 					h->val = buf;
 					h->val_len += sizeof(HTTP_ONLY_STRING)-1;
@@ -106,8 +106,8 @@ public:
 				if (secure && kgl_memstr(h->val,h->val_len,kgl_expand_string(COOKIE_SECURE_STRING))==NULL) {									
 					int new_len = h->val_len + sizeof(COOKIE_SECURE_STRING);
 					char *buf = (char *)malloc(new_len);
-					memcpy(buf,h->val,h->val_len);
-					memcpy(buf+h->val_len,COOKIE_SECURE_STRING,sizeof(COOKIE_SECURE_STRING));
+					kgl_memcpy(buf,h->val,h->val_len);
+					kgl_memcpy(buf+h->val_len,COOKIE_SECURE_STRING,sizeof(COOKIE_SECURE_STRING));
 					free(h->val);
 					h->val = buf;
 					h->val_len += sizeof(COOKIE_SECURE_STRING)-1;
@@ -161,7 +161,7 @@ public:
 		}
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attribute) throw (KHtmlSupportException)
+	void editHtml(std::map<std::string, std::string> &attribute)
 	{
 		if (cookie) {
 			delete cookie;

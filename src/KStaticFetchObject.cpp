@@ -28,7 +28,7 @@ kev_result KStaticFetchObject::open(KHttpRequest *rq)
 	KFetchObject::open(rq);
 	kassert(!rq->file->isDirectory());
 	KHttpObject *obj = rq->ctx->obj;
-	SET(obj->index.flags,ANSW_HAS_CONTENT_LENGTH|ANSW_LOCAL_SERVER);
+	SET(obj->index.flags,ANSW_HAS_CONTENT_LENGTH|ANSW_LOCAL_SERVER|FLAG_NO_DISK_CACHE);
 	if (rq->ctx->lastModified > 0 && rq->ctx->lastModified == rq->file->getLastModified()) {
 		if (rq->ctx->mt==modified_if_modified) {
 			obj->data->status_code = STATUS_NOT_MODIFIED;
@@ -84,9 +84,12 @@ kev_result KStaticFetchObject::open(KHttpRequest *rq)
 	char tmp_buf[42];
 	mk1123time(obj->index.last_modified, tmp_buf, 41);
 	obj->insertHttpHeader(kgl_expand_string("Last-Modified"),(const char *)tmp_buf,29);
-
+	if (obj->need_gzip && TEST(rq->raw_url.encoding, KGL_ENCODING_GZIP) && rq->file->fileSize >= conf.min_gzip_length) {
+		//如果可能压缩，则不回应206
+		CLR(rq->flags, RQ_HAVE_RANGE);
+	}
 	if (TEST(rq->flags,RQ_HAVE_RANGE)) {
-		//处理部分数据请求		
+		//处理部分数据请求
 		rq->ctx->content_range_length = rq->file->fileSize;
 		INT64 content_length = rq->file->fileSize;
 		if(!adjust_range(rq,rq->file->fileSize)){

@@ -3,9 +3,9 @@
 #include "ksapi.h"
 #include "KAutoBuffer.h"
 #include "KHttpRequest.h"
-
-void init_access_dso_suuport(kgl_access_context *ctx,int notify);
+void init_access_dso_support(kgl_access_context *ctx,int notify);
 KGL_RESULT add_api_var(LPVOID buffer, LPDWORD size, const char *val, int len = 0);
+KGL_RESULT get_request_variable(KHttpRequest *rq, KGL_VAR type, LPSTR  name, LPVOID  buffer, LPDWORD size);
 class KAccessRequest
 {
 public:

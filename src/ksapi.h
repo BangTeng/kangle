@@ -8,6 +8,7 @@
 #ifndef KSAPI_H_
 #define KSAPI_H_
 #include "kfeature.h"
+#include "kforwin32.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -179,6 +180,7 @@ typedef enum _KF_REQ_TYPE
 	KF_REQ_REWRITE_URL           = 11,
 	KF_REQ_SAVE_POST             = 12,
 	KF_REQ_RESTORE_POST          = 13,
+	KF_REQ_UPSTREAM              = 14,
 } KF_REQ_TYPE;
 
 typedef enum _KF_STATUS_TYPE
@@ -205,10 +207,34 @@ typedef enum _KGL_RESULT
 } KGL_RESULT;
 
 typedef enum {
-	KGL_VAR_HEADER = 0
+	KGL_VAR_HEADER = 0,
+	KGL_VAR_SSL_VAR,
+	KGL_VAR_HTTPS,//int
+	KGL_VAR_SERVER_PROTOCOL,
+	KGL_VAR_SERVER_NAME,
+	KGL_VAR_REQUEST_METHOD,
+	KGL_VAR_PATH_INFO,
+	KGL_VAR_REQUEST_URI,
+	KGL_VAR_SCRIPT_NAME,
+	KGL_VAR_QUERY_STRING,
+	KGL_VAR_SERVER_ADDR,
+	KGL_VAR_SERVER_PORT,//uint16_t
+	KGL_VAR_REMOTE_ADDR,
+	KGL_VAR_REMOTE_PORT,//uint16_t
+	KGL_VAR_PEER_ADDR,
+	KGL_VAR_DOCUMENT_ROOT,
+	KGL_VAR_CONTENT_LENGTH, //int64_t
+	KGL_VAR_CONTENT_TYPE,
+	KGL_VAR_IF_MODIFIED_SINCE,//time_t
+	KGL_VAR_IF_NONE_MATCH,
+	KGL_VAR_IF_RANGE_TIME,//time_t
+	KGL_VAR_IF_RANGE_STRING,
+	KGL_VAR_CONTENT_LEFT
 } KGL_VAR;
 
-typedef   LPVOID          KCONN;
+typedef LPVOID KCONN;
+typedef LPVOID KSOCKET;
+typedef KGL_RESULT(*kgl_get_variable_f) (KCONN cn, KGL_VAR type, LPSTR  name, LPVOID value, LPDWORD size);
 
 typedef enum _KF_ALLOC_MEMORY_TYPE
 {
@@ -222,20 +248,12 @@ typedef struct _kgl_access_context
 	DWORD          ver;
 	KCONN          cn;
 	PVOID          model_ctx;
-	KGL_RESULT(*get_variable) (
-		KCONN cn,
-		LPSTR                        lpszVariableName,
-		LPVOID                       lpvBuffer,
-		LPDWORD                      lpdwSize
-		);
-
+	kgl_get_variable_f get_variable;
 	KGL_RESULT(*support_function) (
 		KCONN cn,
-		KF_REQ_TYPE             kfReq,		
+		KF_REQ_TYPE					 kfReq,		
 		PVOID                        pData,
-		DWORD                        ul1,
-		DWORD                        ul2
-		);
+		PVOID                        *ret);
 
 	KGL_RESULT (*write_client) (
 		KCONN cn,
@@ -244,24 +262,15 @@ typedef struct _kgl_access_context
 	VOID * (*alloc_memory) (
 		KCONN cn,
 		DWORD                        cbSize,
-		KF_ALLOC_MEMORY_TYPE         memory_type
-		);
-	KGL_RESULT(*get_header) (
-		KCONN cn,
-		LPSTR                         lpszName,
-		LPVOID                        lpvBuffer,
-		LPDWORD                       lpdwSize
-		);
+		KF_ALLOC_MEMORY_TYPE         memory_type);
 	KGL_RESULT(*set_header) (
 		KCONN cn,
 		LPSTR                         lpszName,
-		LPSTR                         lpszValue
-		);
+		LPSTR                         lpszValue);
 	KGL_RESULT(*add_header) (
 		KCONN cn,
 		LPSTR                         lpszName,
-		LPSTR                         lpszValue
-		);
+		LPSTR                         lpszValue);
 	KGL_RESULT(*response_header) (
 		KCONN cn,
 		const char *attr,
@@ -272,41 +281,39 @@ typedef struct _kgl_access_context
 
 
 typedef struct _kgl_async_context {
-	DWORD          size;
-	DWORD          ver;
-	KCONN          cn;
-	PVOID          model_ctx;
-	INT64  	   content_length;
-	INT64        *left;
-	KGL_RESULT(*get_variable) (
-		KCONN       cn,
-		KGL_VAR     var,
-		LPVOID      buffer,
-		LPDWORD     size);
-
-	KGL_RESULT(*response_header) (
+	DWORD         size;
+	DWORD         ver;
+	KCONN         cn;
+	PVOID         model_ctx;
+	kgl_get_variable_f get_variable;
+	KGL_RESULT(*response_unknow_header) (
 		KCONN cn,
 		const char *attr,
 		hlen_t attr_len,
 		const char *val,
 		hlen_t val_len);
+	KGL_RESULT (*response_know_header)();
 
-	kev_result(*start_response_body)(KCONN cn);
+	kev_result (*start_response_body) (KCONN cn);
 
-	KGL_RESULT(*push_data) (
+	KGL_RESULT (*push_data) (
 		KCONN    cn,
 		LPVOID   Buffer,
 		DWORD    lpdwBytes);
 
+	kev_result(*next_upstream)(
+		KCONN cn,
+		void *queue);
+
 	kev_result (*try_write) (
 		KCONN    cn);
 
-	kev_result (*read)  (
+	kev_result (*read_post)  (
 		KCONN    cn,
 		LPVOID   lpvBuffer,
 		DWORD    lpdwSize);
 
-	kev_result(*end_request) (
+	kev_result (*end_request) (
 		KCONN    cn,
 		BOOL expected_end);
 
@@ -418,8 +425,10 @@ typedef struct _kgl_async_upstream
 	kev_result (*open)(kgl_async_context *ctx);
 	kev_result (*read_body)(kgl_async_context *ctx);
 	void (*close)(kgl_async_context *ctx);
-	kev_result (*read_callback)(kgl_async_context *ctx,int got);	
+	kev_result (*read_post_callback)(kgl_async_context *ctx,int got);	
 } kgl_async_upstream;
+
+typedef kev_result(*socket_callback)(void *arg, int result);
 
 typedef struct _kgl_dso_version
 {
@@ -440,6 +449,22 @@ typedef struct _kgl_dso_version
 		LPVOID                       lpvBuffer,
 		LPDWORD                      lpdwSize
 		);
+	kev_result (*write_socket) (
+		KSOCKET s,
+		LPWSABUF buf,
+		int bc,
+		socket_callback cb,
+		void *arg);
+	kev_result (*read_socket)(
+		KSOCKET s,
+		LPDWORD buf,
+		DWORD len,
+		socket_callback cb,
+		void *arg);
+	void (*bind_socket)(KSOCKET s);
+	KSOCKET (*create_socket)(DWORD flags);
+	kev_result(*connect_socket)(KSOCKET s, const char *host, int port, const char *ssl, socket_callback cb,void *arg);
+	void(*close_socket)(KSOCKET s);
 	int(*get_selector_count)();
 	int(*get_selector_index)();
 } kgl_dso_version;

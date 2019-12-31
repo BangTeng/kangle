@@ -54,7 +54,7 @@ public:
 	char *getWriteBuffer(int &len);
 	void Insert(const char *str, int len) {
 		kbuf *buf = new_buff(len);
-		memcpy(buf->data, str, len);
+		kgl_memcpy(buf->data, str, len);
 		buf->used = len;
 		Insert(buf);
 	}

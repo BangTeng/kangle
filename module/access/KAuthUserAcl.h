@@ -86,8 +86,7 @@ public:
 		s << user.getModel();
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute){
 		user.setModel(attibute["user"].c_str(),0);
 	}
 	void buildXML(std::stringstream &s) {

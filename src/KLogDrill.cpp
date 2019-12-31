@@ -161,11 +161,11 @@ void add_log_drill(KHttpRequest *rq,KStringBuf &s)
 	ld->len = s.getSize();
 	ld->buf = s.stealString();
 	/*
-	memcpy(ld->magic1,CHECK_MAGIC_STR,sizeof(CHECK_MAGIC_STR)-1);
-	memcpy(ld->magic2,CHECK_MAGIC_STR,sizeof(CHECK_MAGIC_STR)-1);
-	memcpy(ld->magic3,CHECK_MAGIC_STR,sizeof(CHECK_MAGIC_STR)-1);
-	memcpy(ld->magic4,CHECK_MAGIC_STR,sizeof(CHECK_MAGIC_STR)-1);
-	memcpy(ld->magic5,CHECK_MAGIC_STR,sizeof(CHECK_MAGIC_STR)-1);
+	kgl_memcpy(ld->magic1,CHECK_MAGIC_STR,sizeof(CHECK_MAGIC_STR)-1);
+	kgl_memcpy(ld->magic2,CHECK_MAGIC_STR,sizeof(CHECK_MAGIC_STR)-1);
+	kgl_memcpy(ld->magic3,CHECK_MAGIC_STR,sizeof(CHECK_MAGIC_STR)-1);
+	kgl_memcpy(ld->magic4,CHECK_MAGIC_STR,sizeof(CHECK_MAGIC_STR)-1);
+	kgl_memcpy(ld->magic5,CHECK_MAGIC_STR,sizeof(CHECK_MAGIC_STR)-1);
 	*/
 	//*
 	ld->next = NULL;

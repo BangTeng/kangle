@@ -7,7 +7,7 @@ void updateTime()
 {
 	timeLock.Lock();
 	mk1123time(kgl_current_sec, (char *)cachedDateTime, sizeof(cachedDateTime));
-	log_request_time((char *)cachedLogTime, sizeof(cachedLogTime));
+	log_request_time(kgl_current_sec,(char *)cachedLogTime, sizeof(cachedLogTime));
 	timeLock.Unlock();
 	setActive();
 	if (unlikely(configReload)) {

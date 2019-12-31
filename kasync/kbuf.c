@@ -82,7 +82,7 @@ void ks_save_point(ks_buffer *buf, const char *hot, int len)
 		kassert(buf->buf == hot);
 		int new_size = buf->buf_size * 2;
 		char *nb = (char *)xmalloc(new_size);
-		memcpy(nb, buf->buf, len);
+		kgl_memcpy(nb, buf->buf, len);
 		xfree(buf->buf);
 		buf->buf = nb;
 		buf->buf_size = new_size;
@@ -190,7 +190,7 @@ void krw_write_str(krw_buffer *rw_buffer, const char *buf, int len)
 		char *t = krw_get_write_buffer(rw_buffer,&wlen);
 		kassert(t);
 		wlen = MIN(len, wlen);
-		memcpy(t, buf, wlen);
+		kgl_memcpy(t, buf, wlen);
 		buf += wlen;
 		len -= wlen;
 		krw_write_success(rw_buffer,wlen);
@@ -224,7 +224,7 @@ int krw_read(krw_buffer *rw_buffer, char *buf, int len)
 		if (length <= 0) {
 			break;
 		}
-		memcpy(hot, read_data, length);
+		kgl_memcpy(hot, read_data, length);
 		hot += length;
 		len -= length;
 		got += length;		
@@ -245,7 +245,7 @@ void ks_write_str(ks_buffer *buf, const char *str, int len)
 		char *t = ks_get_write_buffer(buf, &wlen);
 		kassert(t);
 		wlen = MIN(len, wlen);
-		memcpy(t, str, wlen);
+		kgl_memcpy(t, str, wlen);
 		str += wlen;
 		len -= wlen;
 		ks_write_success(buf, wlen);
@@ -275,7 +275,7 @@ char *ks_get_write_buffer(ks_buffer *buf, int *len)
 			new_size = kgl_align(new_size, 1024);
 			buf->buf_size = new_size;
 			char *n = (char *)xmalloc(buf->buf_size);
-			memcpy(n, buf->buf, buf->used);
+			kgl_memcpy(n, buf->buf, buf->used);
 			xfree(buf->buf);
 			buf->buf = n;
 			continue;

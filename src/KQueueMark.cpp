@@ -20,7 +20,7 @@ bool KQueueMark::mark(KHttpRequest *rq, KHttpObject *obj,const int chainJumpType
 	}
 	return true;
 }
-void KQueueMark::editHtml(std::map<std::string, std::string> &attribute) throw (KHtmlSupportException)
+void KQueueMark::editHtml(std::map<std::string, std::string> &attribute) 
 {
 	int max_worker = atoi(attribute["max_worker"].c_str());
 	int max_queue = atoi(attribute["max_queue"].c_str());
@@ -130,7 +130,7 @@ bool KPerQueueMark::mark(KHttpRequest *rq, KHttpObject *obj, const int chainJump
 	delete ss;
 	return true;
 }
-void KPerQueueMark::editHtml(std::map<std::string, std::string> &attribute) throw (KHtmlSupportException)
+void KPerQueueMark::editHtml(std::map<std::string, std::string> &attribute) 
 {
 	max_worker = atoi(attribute["max_worker"].c_str());
 	max_queue = atoi(attribute["max_queue"].c_str());

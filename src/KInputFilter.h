@@ -165,15 +165,15 @@ public:
 		if (buffer) {
 			bufsize = len + bytes_in_buffer;
 			char *t = (char *)malloc(bufsize+1);
-			memcpy(t,buf_begin,bytes_in_buffer);
-			memcpy(t+bytes_in_buffer,str,len);
+			kgl_memcpy(t,buf_begin,bytes_in_buffer);
+			kgl_memcpy(t+bytes_in_buffer,str,len);
 			t[bufsize] = '\0';
 			free(buffer);
 			buffer = t;
 		} else {
 			bufsize = len;
 			buffer = (char *)malloc(bufsize+1);
-			memcpy(buffer,str,len);
+			kgl_memcpy(buffer,str,len);
 			buffer[bufsize] = '\0';
 		}
 		bytes_in_buffer = bufsize;

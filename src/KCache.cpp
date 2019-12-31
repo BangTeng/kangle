@@ -30,7 +30,7 @@ void handle_purge_object(KHttpObject *obj,void *param)
 	//char *url = obj->url->getUrl();
 	//klog(KLOG_NOTICE,"purge obj [%s]\n",url);
 	//free(url);
-	SET(obj->index.flags,FLAG_DEAD|OBJ_INDEX_UPDATE);
+	obj->Dead();
 }
 void handle_cache_info(KHttpObject *obj,void *param)
 {

@@ -92,7 +92,7 @@ int KReadWriteBuffer::write(const char *buf, int len)
 	char *t = getWriteBuffer(wlen);
 	assert(t);
 	wlen = MIN(len,wlen);
-	memcpy(t,buf,wlen);
+	kgl_memcpy(t,buf,wlen);
 	writeSuccess(wlen);	
 	return wlen;
 }
@@ -110,7 +110,7 @@ int KReadWriteBuffer::read(char *buf,int len)
 		if (length<=0) {
 			break;
 		}
-		memcpy(hot,read_data,length);
+		kgl_memcpy(hot,read_data,length);
 		hot += length;
 		len -= length;
 		got += length;

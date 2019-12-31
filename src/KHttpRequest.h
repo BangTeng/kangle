@@ -87,14 +87,26 @@ class KContext;
 class KOutputFilterContext;
 class KHttpFilterContext;
 class KHttpRequest;
+typedef kev_result(*KHttpRequestWriteHook)(KHttpRequest *rq);
+
+struct kgl_write_hook {
+	void *arg;
+	KHttpRequestWriteHook call;
+	kgl_write_hook *next;
+};
+typedef struct {
+	kgl_app_event ev;
+	KHttpRequest *rq;
+} kgl_request_event_context;
 
 typedef struct {
 	void *arg;
+	int got;
 	result_callback result;
-	buffer_callback buffer;
-	KHttpRequest *rq;
+	kgl_write_hook *hook_head;
+	kgl_write_hook *hook_last;
 } kgl_request_stack;
-
+kev_result kgl_call_write_hook(void *arg, int got);
 class KHttpRequestData
 {
 public:
@@ -108,11 +120,13 @@ public:
 	time_t min_obj_verified;
 	INT64 range_from;
 	INT64 range_to;
-	unsigned short status_code;
-	unsigned short cookie_stick;
+	uint16_t status_code;
+	uint16_t self_port;
+	//unsigned short cookie_stick;
 	INT64 send_size;
 	INT64 begin_time_msec;
 	INT64 first_response_time_msec;
+	//发送数据后的hook
 	kgl_request_stack *write_stack;
 };
 class KHttpRequest : public KHttpRequestData,public KHttpHeaderManager {
@@ -230,6 +244,7 @@ public:
 			//status_code只能发送一次
 			return false;
 		}
+		first_response_time_msec = kgl_current_msec;
 		setState(STATE_SEND);
 		this->status_code = status_code;
 		return sink->ResponseStatus(status_code);
@@ -308,6 +323,14 @@ public:
 		}
 		return sleepTime;
 	}
+	uint16_t GetSelfPort()
+	{
+		if (self_port > 0) {
+			return self_port;
+		}
+		return sink->GetSelfPort();
+	}
+	void SetSelfPort(uint16_t port, bool ssl);
 	//客户真实ip(有可能被替换)
 	const char *getClientIp()
 	{
@@ -339,12 +362,22 @@ public:
 	}
 	//流量统计
 	KFlowInfoHelper *fh;
-	void addFlow(INT64 flow)
+	void AddUpFlow(int flow)
 	{
-		send_size += (int)flow;
 		KFlowInfoHelper *helper = fh;
 		while (helper) {
-			helper->fi->addFlow(flow, ctx->cache_hit);
+			helper->fi->AddUpFlow((INT64)flow);
+			helper = helper->next;
+		}
+	}
+	void AddDownFlow(int flow,bool is_header_length=false)
+	{
+		if (!is_header_length) {
+			send_size += flow;
+		}
+		KFlowInfoHelper *helper = fh;
+		while (helper) {
+			helper->fi->AddDownFlow((INT64)flow, ctx->cache_hit);
 			helper = helper->next;
 		}
 	}
@@ -354,6 +387,27 @@ public:
 		helper->next = fh;
 		fh = helper;
 	}
+	uint8_t GetWorkModel()
+	{
+		kserver *server = sink->GetBindServer();
+		if (server == NULL) {
+			return 0;
+		}
+		return server->flags;
+	}
+	kev_result NextFetchObject(KRequestQueue *queue);
+	void pushFetchObject(KFetchObject *fo);
+	void appendFetchObject(KFetchObject *fo);
+	bool hasFinalFetchObject();
+#if 0
+	bool HasWorkModel(int work_model)
+	{
+		kserver *server = sink->GetBindServer();
+		if (server == NULL) {
+			return false;
+		}
+		return TEST(server->flags, work_model) > 0;
+	}
 	bool IsWorkModel(int work_model)
 	{
 		kserver *server = sink->GetBindServer();
@@ -362,6 +416,7 @@ public:
 		}
 		return TEST(server->flags, work_model) == work_model;
 	}
+#endif
 	
 #ifdef ENABLE_REQUEST_QUEUE
 	KRequestQueue *queue;
@@ -402,8 +457,20 @@ public:
 		CLR(flags, RQ_SYNC);
 	}
 	int Read(char *buf, int len);
+	kev_result WriteExpectedCallback(void *arg, result_callback result, buffer_callback buffer);
 	kev_result Read(void *arg, result_callback result, buffer_callback buffer);
 	kev_result Write(void *arg, result_callback result, buffer_callback buffer);
+	void *GetCurrentWriteHookContext()
+	{
+		kassert(write_stack && write_stack->hook_head);
+		return write_stack->hook_head->arg;
+	}
+	bool HasWriteHook()
+	{
+		return write_stack && write_stack->hook_head;
+	}
+	void AddWriteHook(void *arg, KHttpRequestWriteHook result,bool last);
+	kev_result WriteHookCallBack();
 private:
 	kev_result LowRead(void *arg, result_callback result, buffer_callback buffer);
 	void InitPool(kgl_pool_t *pool) {
@@ -418,6 +485,9 @@ private:
 	bool parseConnectUrl(char *src);
 	bool parseHttpVersion(char *ver);
 	kgl_header_result parseHost(char *val);
+#ifdef ENABLE_REQUEST_QUEUE
+	void ReleaseQueue();
+#endif
 };
 struct RequestError
 {
@@ -463,7 +533,7 @@ kev_result stageWriteRequest(KHttpRequest *rq, KAutoBuffer *buffer);
 * 进入发送数据，发送指定的kbuf
 */
 kev_result stageWriteRequest(KHttpRequest *rq,kbuf *buf,int start,int len);
-kev_result handleStartRequest(KHttpRequest *rq, int got);
+kev_result handleStartRequest(KHttpRequest *rq, int header_length);
 #ifdef ENABLE_TF_EXCHANGE
 kev_result startTempFileWriteRequest(KHttpRequest *rq);
 kev_result stageTempFileWriteEnd(KHttpRequest *rq);

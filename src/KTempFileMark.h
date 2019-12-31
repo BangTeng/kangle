@@ -56,7 +56,7 @@ public:
 		s << (tf?"on":"off");
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attribute) throw (KHtmlSupportException)
+	void editHtml(std::map<std::string, std::string> &attribute)
 	{
 		if (attribute["tf"]=="1") {
 			tf = true;

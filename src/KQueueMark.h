@@ -47,7 +47,7 @@ public:
 	}
 	std::string getHtml(KModel *model);
 	std::string getDisplay();
-	void editHtml(std::map<std::string, std::string> &attribute) throw (KHtmlSupportException);
+	void editHtml(std::map<std::string, std::string> &attribute) ;
 	void buildXML(std::stringstream &s);
 private:
 	KRequestQueue *queue;
@@ -86,7 +86,7 @@ public:
 	void callBack(char *key);
 	std::string getHtml(KModel *model);
 	std::string getDisplay();
-	void editHtml(std::map<std::string, std::string> &attribute) throw (KHtmlSupportException);
+	void editHtml(std::map<std::string, std::string> &attribute) ;
 	void buildXML(std::stringstream &s);
 private:
 	void build_matcher(std::stringstream &s);

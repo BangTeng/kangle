@@ -512,6 +512,9 @@ static int Usage(bool only_version = false) {
 #ifdef ENABLE_KSSL_BIO
 			"B"
 #endif
+#ifdef SSL_READ_EARLY_DATA_SUCCESS
+			"E"
+#endif
 			"] "
 #endif
 #ifdef _LARGE_FILE
@@ -997,6 +1000,7 @@ void StopAll() {
 int main(int argc, char **argv) {
 
 	srand((unsigned) time(NULL));
+	init_time_zone();
 	program_rand_value = rand();
 	ksocket_startup();
 	kthread_init();

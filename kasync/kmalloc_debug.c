@@ -219,10 +219,10 @@ void *realloc(void *old_ptr,size_t size) {
 		abort();
 		return NULL;
 	}
-	memcpy(real_addr, start_magic, sizeof(start_magic));
+	kgl_memcpy(real_addr, start_magic, sizeof(start_magic));
 	ptr->user_addr = real_addr + sizeof(start_magic);
 	memset(ptr->user_addr, 0xcc, size);
-	memcpy(ptr->user_addr + size, end_magic, sizeof(end_magic));
+	kgl_memcpy(ptr->user_addr + size, end_magic, sizeof(end_magic));
 	ptr->next = NULL;
 	ptr->size = size;
 	generate_traceback(ptr->where_alloced);
@@ -245,7 +245,7 @@ void *realloc(void *old_ptr,size_t size) {
 			}
 			check_ptr(ptr_head);
 			size_t copy_size = ptr_head->size<size?ptr_head->size:size;
-			memcpy(ptr->user_addr,old_ptr,copy_size);
+			kgl_memcpy(ptr->user_addr,old_ptr,copy_size);
 #ifdef ENABLE_FREE_MEMORY_CHECK
 			ptr_head->next = delay_freed2[old_hash];
 			delay_freed2[old_hash] = ptr_head;

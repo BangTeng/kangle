@@ -42,7 +42,7 @@
 #define WSTR(x) write_all(x,sizeof(x)-1)
 
 #define INT2STRING_LEN	32
-
+class KHttpRequest;
 inline const char * int2string(INT64 value, char *buf,bool hex=false) {
 	const char *formatString = INT64_FORMAT;
 	if (hex) {
@@ -65,7 +65,7 @@ inline char *upstrdup(const char *val)
 	return buf;
 }
 enum StreamState {
-	STREAM_WRITE_FAILED, STREAM_WRITE_SUCCESS, STREAM_WRITE_END
+	STREAM_WRITE_FAILED, STREAM_WRITE_SUCCESS,STREAM_WRITE_HANDLED, STREAM_WRITE_END
 };
 class KRStream {
 public:

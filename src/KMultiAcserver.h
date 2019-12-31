@@ -64,7 +64,7 @@ private:
 	bool addNode(std::map<std::string, std::string> &attr);
 	bool addNode(std::map<std::string, std::string> &attr, char *self_ip);
 	void addNode(KSockPoolHelper *sockHelper);
-	unsigned short getNodeIndex(KHttpRequest *rq);
+	uint16_t getNodeIndex(KHttpRequest *rq,int *set_cookie_stick);
 	int getCookieStick(const char *attr,const char *cookie_stick_name);
 	KSockPoolHelper *getIndexNode(int index);
 	KSockPoolHelper *nextActiveNode(KSockPoolHelper *node,unsigned short &index);

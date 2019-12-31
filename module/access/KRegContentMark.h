@@ -65,8 +65,7 @@ public:
 				<< (partial ? "yes" : "no") << "</a>";
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attribute)
-			throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attribute){
 		charset = attribute["charset"];
 		reg = attribute["content"];
 		setCharsetReg();
@@ -146,7 +145,7 @@ public:
 				*keys = new KFilterKey;
 				(*keys)->key = (char *) xmalloc(key_len+1);
 				(*keys)->len = key_len;
-				memcpy((*keys)->key, data + ovector[0], ovector[1] - ovector[0]);
+				kgl_memcpy((*keys)->key, data + ovector[0], ovector[1] - ovector[0]);
 				(*keys)->key[key_len] = 0;
 				return FILTER_MATCH;
 			}

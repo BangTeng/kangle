@@ -134,7 +134,7 @@ public:
 		return s.str();
 	}
 	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException)
+			
 	{
 		sign = attibute["sign"];
 		expire = attibute["expire"];

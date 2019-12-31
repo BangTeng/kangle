@@ -226,7 +226,7 @@ KUpstream *KSockPoolHelper::newConnection(KHttpRequest *rq, bool &need_name_reso
 		return socket;
 	}
 #endif
-	if (!try_numerichost_connect(rq,socket, need_name_resolved) && !need_name_resolved) {			
+	if (!try_numerichost_connect(rq,socket, need_name_resolved) && !need_name_resolved) {
 		socket->Destroy();
 		return NULL;
 	}
@@ -267,7 +267,7 @@ bool KSockPoolHelper::connect_addr(KHttpRequest *rq, KTcpUpstream *socket, socka
 		}
 	}
 	kconnection *cn = socket->GetConnection();
-	memcpy(&cn->addr, &addr, sizeof(cn->addr));
+	kgl_memcpy(&cn->addr, &addr, sizeof(cn->addr));
 	int tproxy_mask = 0;
 #ifdef ENABLE_TPROXY
 	if (rq && TEST(rq->filter_flags, RF_TPROXY_UPSTREAM)) {
@@ -289,6 +289,7 @@ bool KSockPoolHelper::connect_addr(KHttpRequest *rq, KTcpUpstream *socket, socka
 		if (!kconnection_ssl_connect(cn, ssl_ctx, sni_host)) {
 			klog(KLOG_ERR, "cann't bind_fd for ssl socket.\n");
 		}
+		
 	}
 #endif
 	return result;

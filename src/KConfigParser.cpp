@@ -79,7 +79,6 @@ bool KConfigParser::startElement(std::string &context, std::string &qName,
 		if (!attribute["max_cache_size"].empty()) {
 			cconf->max_cache_size = (unsigned)get_size(attribute["max_cache_size"].c_str());
 		}
-		
 		if (attribute["memory"].size()>0) {
 			cconf->mem_cache = get_size(attribute["memory"].c_str());
 		}
@@ -87,6 +86,9 @@ bool KConfigParser::startElement(std::string &context, std::string &qName,
 			cconf->refresh_time = atoi(attribute["refresh_time"].c_str());
 		}
 #ifdef ENABLE_DISK_CACHE
+		if (!attribute["max_bigobj_size"].empty()) {
+			cconf->max_bigobj_size = get_size(attribute["max_bigobj_size"].c_str());
+		}
 		if (attribute["disk"].size()>0) {
 			cconf->disk_cache = get_radio_size(attribute["disk"].c_str(),cconf->disk_cache_is_radio);
 		}
@@ -129,6 +131,9 @@ bool KConfigParser::startElement(std::string &context, std::string &qName,
 		}
 		if (attribute["error_rotate_size"].size()>0) {
 			cconf->error_rotate_size = get_size(attribute["error_rotate_size"].c_str());
+		}
+		if (!attribute["radio"].empty()) {
+			cconf->log_radio = atoi(attribute["radio"].c_str());
 		}
 		cconf->log_handle = attribute["log_handle"]=="1";
 		cconf->log_sub_request = attribute["log_sub_request"]=="1";
@@ -213,6 +218,9 @@ bool KConfigParser::startCharacter(std::string &context, std::string &qName,
 			}
 		}
 #endif
+		if (qName == "http2https_code") {
+			cconf->http2https_code = atoi(character);
+		}
 		if(qName == "lang"){
 			SAFE_STRCPY(cconf->lang , character);
 			return true;

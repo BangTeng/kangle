@@ -53,8 +53,7 @@ public:
 		s << meth.getMethod();
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attibute)
-			throw (KHtmlSupportException) {
+	void editHtml(std::map<std::string, std::string> &attibute) {
 		if(!attibute["meth"].empty()){
 			meth.setMethod(attibute["meth"].c_str());
 		}

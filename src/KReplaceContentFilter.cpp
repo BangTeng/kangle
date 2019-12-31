@@ -76,8 +76,8 @@ StreamState KReplaceContentFilter::write_all(const char *buf, int len)
 	if (prevData) {
 		int new_len = len + prevDataLength;
 		buffer = (char *)malloc(new_len + 1);
-		memcpy(buffer,prevData,prevDataLength);
-		memcpy(buffer + prevDataLength,buf,len);
+		kgl_memcpy(buffer,prevData,prevDataLength);
+		kgl_memcpy(buffer + prevDataLength,buf,len);
 		free(prevData);
 		prevData = NULL;
 		hot = buffer;
@@ -119,7 +119,7 @@ StreamState KReplaceContentFilter::write_all(const char *buf, int len)
 		if (ret<-1) {
 			prevDataLength = len;
 			prevData = (char *)malloc(prevDataLength);
-			memcpy(prevData,hot,prevDataLength);
+			kgl_memcpy(prevData,hot,prevDataLength);
 			break;
 		}
 		if (!writeBuffer(hot,len)) {

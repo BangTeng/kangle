@@ -32,7 +32,9 @@ bool kserver_start(kserver *server,const KListenKey &lk)
 		return false;
 	}
 #endif
-	kserver_open(server, lk.ip.c_str(), lk.port, lk.ipv4);
+	int flag = (lk.ipv4 ? KSOCKET_ONLY_IPV4 : KSOCKET_ONLY_IPV6);
+	SET(flag, KSOCKET_FASTOPEN);
+	kserver_open(server, lk.ip.c_str(), lk.port, flag);
 	return kserver_accept(server);
 }
 void kserver_bind_vh(kserver *server, KVirtualHost *vh,bool high)
@@ -61,6 +63,12 @@ void kserver_remove_static_vh(kserver *server, KVirtualHost *vh)
 #endif
 }
 #ifdef KSOCKET_SSL
+void kserver_flush_early_data(kserver *server)
+{
+	if (server->ssl_ctx) {		
+		kgl_ssl_ctx_set_early_data(server->ssl_ctx, server->early_data);		
+	}
+}
 void kserver_load_ssl(kserver *server, const char *cert_file, const char *key_file, const char *cipher, const char *protocol)
 {
 	server->ssl = 1;
@@ -77,11 +85,14 @@ void kserver_load_ssl(kserver *server, const char *cert_file, const char *key_fi
 	}
 	SSL_CTX *ssl_ctx = kgl_ssl_ctx_new_server(cert_file, key_file, NULL, NULL, &server->http2);
 	if (ssl_ctx) {
+		if (server->early_data) {
+			kgl_ssl_ctx_set_early_data(ssl_ctx, true);
+		}
 		if (cipher && *cipher) {
 			if (!kgl_ssl_ctx_set_cipher_list(ssl_ctx, cipher)) {
 				klog(KLOG_ERR, "set chiper [%s] failed.\n", cipher);
 			}
-		}		
+		}
 		kgl_ssl_ctx_set_protocols(ssl_ctx, protocol);
 		kassert(server->ssl_ctx == NULL);
 		server->ssl_ctx = ssl_ctx;
@@ -119,6 +130,7 @@ void KDynamicListen::add_dynamic(const char *listen,KVirtualHost *vh)
 #ifdef ENABLE_HTTP2
 				server->http2 = vh->http2;
 #endif	
+				server->early_data = vh->early_data;
 				kserver_load_ssl(server,
 					vh->getCertfile().c_str(),
 					vh->getKeyfile().c_str(),
@@ -135,6 +147,8 @@ void KDynamicListen::add_dynamic(const char *listen,KVirtualHost *vh)
 #ifdef ENABLE_HTTP2
 			server->http2 = vh->http2;
 #endif
+#ifdef KSOCKET_SSL
+			server->early_data = vh->early_data;
 #ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
 			if (server->ssl_ctx==NULL && server->ss==NULL && (*it2).ssl && server->dynamic) {
 				//update ssl certificate and try it again.
@@ -143,8 +157,9 @@ void KDynamicListen::add_dynamic(const char *listen,KVirtualHost *vh)
 					vh->getKeyfile().c_str(),
 					vh->cipher,
 					vh->protocols);
-				initListen((*it2),server);
+				initListen((*it2),server);			
 			}
+#endif
 #endif
 			(*it2).set_work_model(server);
 			server->dynamic = true;
@@ -234,6 +249,7 @@ bool KDynamicListen::add_static(KListenHost *listen)
 #ifdef ENABLE_HTTP2
 				server->http2 = listen->http2;
 #endif
+				server->early_data = listen->early_data;
 				kserver_load_ssl(server,
 					listen->certificate.c_str(),
 					listen->certificate_key.c_str(),
@@ -256,6 +272,8 @@ bool KDynamicListen::add_static(KListenHost *listen)
 			server->http2 = listen->http2;
 #endif
 #ifdef KSOCKET_SSL
+			server->early_data = listen->early_data;
+#ifdef KSOCKET_SSL
 			if (server->ssl_ctx==NULL && server->ss == NULL && (*it2).ssl) {
 				//update ssl certificate and try it again.
 				kserver_load_ssl(server,
@@ -264,7 +282,10 @@ bool KDynamicListen::add_static(KListenHost *listen)
 					listen->cipher.c_str(),
 					listen->protocols.c_str());
 				initListen((*it2), server);
+			} else {
+				kserver_flush_early_data(server);
 			}
+#endif
 #endif
 			(*it2).set_work_model(server);
 		}
@@ -418,6 +439,10 @@ void KDynamicListen::parse_port(const char *p, KListenKey *lk)
 #ifdef WORK_MODEL_PROXY
 	if (strchr(p, 'P')) {
 		lk->proxy = true;
+		lk->ssl_proxy = false;
+	} else if(strchr(p, 'p')) {
+		lk->ssl_proxy = true;
+		lk->proxy = false;
 	}
 #endif
 }

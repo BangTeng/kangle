@@ -22,12 +22,15 @@ public:
 		if (header.empty()) {
 #ifdef ENABLE_PROXY_PROTOCOL
 			kconnection *c = rq->sink->GetConnection();
-			if (c && c->proxy_ip) {
-				if (rq->client_ip) {
-					free(rq->client_ip);
+			if (c && c->proxy && c->proxy->src) {				
+				char ips[MAXIPLEN];
+				if (ksocket_sockaddr_ip(c->proxy->src, ips, MAXIPLEN - 1)) {
+					if (rq->client_ip) {
+						free(rq->client_ip);
+					}
+					rq->client_ip = strdup(ips);
+					return true;
 				}
-				rq->client_ip = strdup(c->proxy_ip);
-				return true;
 			}
 #endif
 			return false;
@@ -114,7 +117,7 @@ public:
 		}
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attribute) throw (KHtmlSupportException)
+	void editHtml(std::map<std::string, std::string> &attribute)
 	{
 		header = attribute["header"];
 		std::string val = attribute["val"];
@@ -205,17 +208,9 @@ public:
 						}
 						rq->client_ip = strdup(val);
 					} else if (strcmp(hot, "p") == 0) {
-						if (strcmp(val, "https") == 0) {
-							SET(rq->raw_url.flags, KGL_URL_SSL);
-							if (rq->raw_url.port == 80) {
-								rq->raw_url.port = 443;
-							}
-						} else {
-							CLR(rq->raw_url.flags, KGL_URL_SSL);
-							if (rq->raw_url.port == 443) {
-								rq->raw_url.port = 80;
-							}
-						}
+						rq->SetSelfPort(0, strcmp(val, "https") == 0);
+					} else if (strcmp(hot, "sp") == 0) {
+						rq->SetSelfPort(uint16_t(atoi(val)), strchr(val, 's') != NULL);
 					}
 				}
 				if (p == NULL) {
@@ -268,7 +263,7 @@ public:
 		}
 		return s.str();
 	}
-	void editHtml(std::map<std::string, std::string> &attribute) throw (KHtmlSupportException)
+	void editHtml(std::map<std::string, std::string> &attribute)
 	{
 		
 		for (int i = 0; i < 2; i++) {
@@ -358,7 +353,7 @@ public:
 	{
 		return ip;
 	}
-	void editHtml(std::map<std::string, std::string> &attribute) throw (KHtmlSupportException)
+	void editHtml(std::map<std::string, std::string> &attribute)
 	{
 		ip = attribute["ip"];
 	}

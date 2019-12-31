@@ -5,17 +5,31 @@
 /**
 * 流量统计类
 */
-class KFlowInfo : public KCountableEx
+class KFlowData {
+public:
+	//总流量
+	INT64 flow;
+	//缓存的流量
+	INT64 cache;
+	//post上行流量
+	volatile int64_t post;
+	INT64 last_flow;
+	INT64 last_time;
+};
+class KFlowInfo : public KCountableEx,public KFlowData
 {
 public:
 	KFlowInfo()
 	{
-		flow = 0;
-		cache = 0;
-		last_flow = 0;
+		KFlowData *data = static_cast<KFlowData *>(this);
+		memset(data,0,sizeof(KFlowData));
 		last_time = kgl_current_msec;
 	}
-	void addFlow(INT64 flow,bool cache_hit)
+	void AddUpFlow(INT64 flow)
+	{
+		katom_add64((void *)&post, flow);
+	}
+	void AddDownFlow(INT64 flow,bool cache_hit)
 	{
 		refsLock.Lock();
 		if (cache_hit) {
@@ -32,7 +46,7 @@ public:
 		cache = 0;
 		refsLock.Unlock();
 	}
-	int dump(char *buf,int len)
+	int dump(char *buf,int len,int64_t &post)
 	{
 #ifdef _WIN32
 		const char *formatString="%I64d\t%I64d";
@@ -45,6 +59,7 @@ public:
 		flow = 0;
 		cache = 0;
 		refsLock.Unlock();
+		post = katom_set64((void *)&this->post, 0);
 		return len;
 	}
 	INT64 get_speed(bool reset)
@@ -64,12 +79,7 @@ public:
 		refsLock.Unlock();
 		return (INT64)((inc_flow*1000)/inc_time);
 	}
-	//总流量
-	INT64 flow;
-	//缓存的流量
-	INT64 cache;
-	INT64 last_flow;
-	INT64 last_time;
+
 };
 class KFlowInfoHelper
 {

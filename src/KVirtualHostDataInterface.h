@@ -41,6 +41,7 @@ public:
 	virtual ~KVirtualHostConnection()
 	{
 	}
+	virtual KVirtualHostData *loadBlackList() = 0;
 	virtual KVirtualHostData *loadVirtualHost() = 0;
 	virtual KVirtualHostData *flushVirtualHost(const char *name) = 0;
 	virtual KVirtualHostData *loadInfo(const char *name) = 0;

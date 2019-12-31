@@ -115,7 +115,7 @@ StreamState KDeChunked::write_all(const char *buf, int buf_len) {
 				work = NULL;
 				return STREAM_WRITE_FAILED;
 			}
-			memcpy(work + work_len, buf, read_len);
+			kgl_memcpy(work + work_len, buf, read_len);
 			work_len += read_len;
 			data = work;
 			data_len = work_len;
@@ -132,7 +132,7 @@ StreamState KDeChunked::write_all(const char *buf, int buf_len) {
 			}
 			work = (char *) xmalloc(buf_len+20);
 			work_len = buf_len;
-			memcpy(work, buf, buf_len);
+			kgl_memcpy(work, buf, buf_len);
 			//continue;
 			return STREAM_WRITE_SUCCESS;
 		}

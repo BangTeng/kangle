@@ -57,7 +57,7 @@ KVirtualHostDatabase::KVirtualHostDatabase()
 	ext = false;
 	lastStatus = false;
 	memset(&vhm,0,sizeof(vhm));
-	vhm.vhi_version = 1;
+	vhm.vhi_version = 2;
 	vhm.cbsize = sizeof(vhm);
 	vhm.getConfigValue = getSystemEnv;
 }
@@ -72,7 +72,7 @@ bool KVirtualHostDatabase::	check()
 		lock.Unlock();
 		return false;
 	}
-	void *cn = vhm.createConnection();
+	kgl_vh_connection cn = vhm.createConnection();
 	lock.Unlock();
 	bool result = false;
 	if(cn){
@@ -162,10 +162,11 @@ bool KVirtualHostDatabase::loadVirtualHost(KVirtualHostManage *vm,std::string &e
 		return false;
 	}
 	lastStatus = true;
-	void *rs = vhm.loadVirtualHost(cn);
+	kgl_vh_stmt rs = vhm.loadVirtualHost(cn);
 	lastStatus = (rs!=NULL);
 	lock.Unlock();
 	if(rs==NULL){
+		errMsg = "load virtual host error";
 		vhm.freeConnection(cn);
 		return true;
 	}
@@ -182,6 +183,21 @@ bool KVirtualHostDatabase::loadVirtualHost(KVirtualHostManage *vm,std::string &e
 		attribute.clear();
 	}
 	vhm.freeStmt(rs);
+#ifdef ENABLE_BLACK_LIST
+	if (vhm.loadBlackList) {
+		rs = vhm.loadBlackList(cn);
+		if (rs) {
+			while (vhm.query(rs, &vd)) {
+				const char *ip = attribute["ip"].c_str();
+				if (*ip) {
+					int flags = atoi(attribute["flags"].c_str());
+					conf.gvm->globalVh.blackList->AddStatic(ip, TEST(flags,1));
+				}
+			}
+			vhm.freeStmt(rs);
+		}
+	}
+#endif
 	vhm.freeConnection(cn);
 	return true;
 }
@@ -223,7 +239,7 @@ bool KVirtualHostDatabase::parseAttribute(std::map<std::string,std::string> &att
 	lock.Unlock();
 	return result;
 }
-KVirtualHost *KVirtualHostDatabase::newVirtualHost(void *cn,std::map<std::string,std::string> &attribute,KVirtualHostManage *vm,KVirtualHost *ov)
+KVirtualHost *KVirtualHostDatabase::newVirtualHost(kgl_vh_connection cn,std::map<std::string,std::string> &attribute,KVirtualHostManage *vm,KVirtualHost *ov)
 {
 	KTempleteVirtualHost *tm = NULL;
 	KVirtualHost *vh = NULL;
@@ -260,7 +276,7 @@ KVirtualHost *KVirtualHostDatabase::newVirtualHost(void *cn,std::map<std::string
 	}
 	return vh;
 }
-bool KVirtualHostDatabase::loadInfo(KVirtualHost *vh,void *cn)
+bool KVirtualHostDatabase::loadInfo(KVirtualHost *vh, kgl_vh_connection cn)
 {
 	if(vhm.loadInfo == NULL){
 		return false;
@@ -268,7 +284,7 @@ bool KVirtualHostDatabase::loadInfo(KVirtualHost *vh,void *cn)
 	std::map<std::string,std::string> attribute;
 	vh_data vd;
 	init_vh_data(&vd,&attribute);
-	void *rs = vhm.loadInfo(cn,vh->name.c_str());
+	kgl_vh_stmt rs = vhm.loadInfo(cn,vh->name.c_str());
 	if(rs==NULL){
 		return false;
 	}
@@ -394,20 +410,20 @@ void KVirtualHostDatabase::clear()
 		return;
 	}	
 }
-void KVirtualHostDatabase::freeConnection(void *cn)
+void KVirtualHostDatabase::freeConnection(kgl_vh_connection cn)
 {
 	if (vhm.freeConnection) {
 		vhm.freeConnection(cn);
 	}
 }
-void *KVirtualHostDatabase::createConnection()
+kgl_vh_connection KVirtualHostDatabase::createConnection()
 {
 	lock.Lock();
 	if(vhm.createConnection == NULL){
 		lock.Unlock();
 		return NULL;
 	}
-	void *cn = vhm.createConnection();
+	kgl_vh_connection cn = vhm.createConnection();
 	lock.Unlock();
 	return cn;
 }

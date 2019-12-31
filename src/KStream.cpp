@@ -75,7 +75,7 @@ StreamState KWStream::write_all(const char *buf) {
 }
 int KConsole::write(const char *buf, int len) {
 	char *str = (char *) xmalloc(len+1);
-	memcpy(str, buf, len);
+	kgl_memcpy(str, buf, len);
 	str[len] = 0;
 	printf("%s", str);
 	xfree(str);

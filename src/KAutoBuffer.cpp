@@ -5,7 +5,7 @@ int KAutoBuffer::write(const char *buf, int len)
 	char *t = getWriteBuffer(wlen);
 	assert(t);
 	wlen = MIN(len, wlen);
-	memcpy(t, buf, wlen);		
+	kgl_memcpy(t, buf, wlen);		
 	writeSuccess(wlen);
 	return wlen;
 }
@@ -24,7 +24,7 @@ kbuf *KAutoBuffer::stealBuff()
 	kassert(pool == NULL);
 	if (last->used > 0) {
 		char *nb = (char *)xmalloc(last->used);
-		memcpy(nb, last->data, last->used);
+		kgl_memcpy(nb, last->data, last->used);
 		xfree(last->data);
 		last->data = nb;
 	}

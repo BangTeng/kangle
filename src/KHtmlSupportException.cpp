@@ -17,6 +17,7 @@
  */
 #include "KHtmlSupportException.h"
 #include "kmalloc.h"
+#if 0
 KHtmlSupportException::KHtmlSupportException()
 {
 }
@@ -32,3 +33,4 @@ void KHtmlSupportException::setMsg(const char *msg)
 {
 	this->msg=msg;
 }
+#endif

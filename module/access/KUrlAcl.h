@@ -76,8 +76,7 @@ public:
 		s << reg.getModel();
 		return s.str();
 	}
-	void editHtml(std::map<std::string,std::string> &attibute)
-			throw(KHtmlSupportException) {
+	void editHtml(std::map<std::string,std::string> &attibute){
 		nc = (attibute["nc"]=="1");
 		if(attibute["url"].size()>0){
 			reg.setModel(attibute["url"].c_str(), (nc?PCRE_CASELESS:0));

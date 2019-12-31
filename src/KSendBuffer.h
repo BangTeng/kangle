@@ -82,7 +82,7 @@ public:
 	void append(const char *str,uint16_t len)
 	{
 		char *data = (char *)malloc(len);
-		memcpy(data,str,len);
+		kgl_memcpy(data,str,len);
 		pushEnd(data,len);
 	}
 	void pushEnd(kbuf *buf)
@@ -92,7 +92,7 @@ public:
 	void insert(const char *str,uint16_t len)
 	{
 		char *data = (char *)malloc(len);
-		memcpy(data,str,len);
+		kgl_memcpy(data,str,len);
 		pushHead(data,len);
 	}
 	void pushHead(char *str,uint16_t len)

@@ -17,7 +17,7 @@ enum know_http_header
 };
 extern kgl_str_t know_http_headers[];
 void *kgl_memstr(char *haystack, int haystacklen, char *needle, int needlen);
-#define kgl_cpymem(dst, src, n)   (((u_char *) memcpy(dst, src, n)) + (n))
+#define kgl_cpymem(dst, src, n)   (((u_char *) kgl_memcpy(dst, src, n)) + (n))
 inline KHttpHeader *new_http_header(kgl_pool_t *pool,const char *attr, int attr_len, const char *val, int val_len) {
 	if (attr_len > MAX_HEADER_ATTR_VAL_SIZE || val_len > MAX_HEADER_ATTR_VAL_SIZE) {
 		return NULL;
@@ -25,11 +25,11 @@ inline KHttpHeader *new_http_header(kgl_pool_t *pool,const char *attr, int attr_
 	KHttpHeader *header = (KHttpHeader *)kgl_pnalloc(pool,sizeof(KHttpHeader));
 	header->next = NULL;
 	header->attr = (char *)kgl_pnalloc(pool,attr_len + 1);
-	memcpy(header->attr, attr, attr_len);
+	kgl_memcpy(header->attr, attr, attr_len);
 	header->attr[attr_len] = '\0';
 	header->attr_len = attr_len;
 	header->val = (char *)kgl_pnalloc(pool, val_len + 1);
-	memcpy(header->val, val, val_len);
+	kgl_memcpy(header->val, val, val_len);
 	header->val[val_len] = '\0';
 	header->val_len = val_len;
 	return header;
@@ -41,11 +41,11 @@ inline KHttpHeader *new_http_header(const char *attr,int attr_len,const char *va
 	KHttpHeader *header = (KHttpHeader *)malloc(sizeof(KHttpHeader));
 	header->next = NULL;
 	header->attr = (char *)malloc(attr_len+1);
-	memcpy(header->attr,attr,attr_len);
+	kgl_memcpy(header->attr,attr,attr_len);
 	header->attr[attr_len] = '\0';
 	header->attr_len = attr_len;
 	header->val = (char *)malloc(val_len+1);
-	memcpy(header->val,val,val_len);
+	kgl_memcpy(header->val,val,val_len);
 	header->val[val_len] = '\0';
 	header->val_len = val_len;
 	return header;
@@ -64,7 +64,7 @@ bool is_attr(KHttpHeader *av, const char *attr,int attr_len);
 inline char *strlendup(const char *str, int len)
 {
 	char *buf = (char *)malloc(len + 1);
-	memcpy(buf, str, len);
+	kgl_memcpy(buf, str, len);
 	buf[len] = '\0';
 	return buf;
 }

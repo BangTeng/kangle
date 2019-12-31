@@ -6,7 +6,6 @@
  */
 
 #include "KHttpField.h"
-#include "utils.h"
 #include "kmalloc.h"
 
 KHttpField::KHttpField() {
@@ -24,21 +23,21 @@ KHttpField::~KHttpField() {
 		header = next;
 	}
 }
-void KHttpField::parse(const char *str) {
+void KHttpField::parse(const char *str,const u_char split) {
 	if(buf){
 		xfree(buf);
 	}
 	buf = xstrdup(str);
 	char *hot = buf;
 	for (;;) {
-		if(!*hot){
+		if (!*hot) {
 			break;
 		}
 		http_field_t *new_t = new http_field_t();
-		hot = new_t->parse(hot);
+		hot = new_t->parse(hot, split);
 		new_t->next = header;
 		header = new_t;
-		if(hot==NULL){
+		if (hot==NULL) {
 			break;
 		}
 	}

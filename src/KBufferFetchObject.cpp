@@ -12,12 +12,11 @@ kev_result result_fetch_object(void *arg, int got)
 	if (got <= 0) {
 		return stageEndRequest(rq);
 	}
-	rq->addFlow(got);
+	rq->AddDownFlow(got);
 	KBufferFetchObject *fo = static_cast<KBufferFetchObject *>(rq->fetchObj);
 	if (kr_read_success(&fo->buffer, got)) {
 		return rq->Write(rq, result_fetch_object, buffer_fetch_object);
 	}
-	rq->ctx->expected_done = 1;
 	return stageEndRequest(rq);
 }
 kev_result KBufferFetchObject::open(KHttpRequest *rq)

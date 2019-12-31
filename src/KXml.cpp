@@ -321,7 +321,7 @@ int KXml::getLine() {
 	//line = l;
 	return line;
 }
-bool KXml::startParse(char * buf) throw (KXmlException) {
+bool KXml::startParse(char * buf) {
 	origBuf = buf;
 	line = 1;
 	if (events.size() == 0) {
@@ -360,7 +360,7 @@ bool KXml::startParse(char * buf) throw (KXmlException) {
 	return result;
 
 }
-bool KXml::parseString(const char *buf) throw (KXmlException) {
+bool KXml::parseString(const char *buf)  {
 
 	char *str = strdup(buf);
 	bool result = false;
@@ -374,7 +374,7 @@ bool KXml::parseString(const char *buf) throw (KXmlException) {
 	return result;
 }
 
-bool KXml::internelParseString(char *buf) throw (KXmlException) {
+bool KXml::internelParseString(char *buf) {
 
 	//std::map<std::string, std::string> attibute;
 	std::list<KXmlEvent *>::iterator it;
@@ -512,7 +512,7 @@ bool KXml::internelParseString(char *buf) throw (KXmlException) {
 			if (curContext) {
 				//assert(char_len>0);
 				char *charBuf = (char *) malloc(char_len+1);
-				memcpy(charBuf, hot, char_len);
+				kgl_memcpy(charBuf, hot, char_len);
 				charBuf[char_len] = '\0';
 				if (!cdata) {
 					htmlDecode(charBuf,char_len);
@@ -587,7 +587,7 @@ bool KXml::internelParseString(char *buf) throw (KXmlException) {
 	 */
 	return true;
 }
-bool KXml::parseFile(std::string file) throw (KXmlException) {
+bool KXml::parseFile(std::string file) {
 	KXmlException e;
 	stringstream s;
 	bool result;
