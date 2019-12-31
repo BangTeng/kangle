@@ -458,7 +458,8 @@ int WINAPI WhmCoreCall(const char *callName, const char *event, WHM_CONTEXT *con
 	case CALL_INFO:
 		{		
 			INT64 total_mem_size = 0, total_disk_size = 0;
-			get_cache_size(total_mem_size, total_disk_size);
+			int mem_count = 0, disk_count = 0;
+			cache.getSize(total_mem_size, total_disk_size,mem_count,disk_count);
 			ctx->add("server", PROGRAM_NAME);
 			ctx->add("version", VERSION);
 			ctx->add("type",getServerType());

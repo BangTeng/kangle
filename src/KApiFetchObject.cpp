@@ -78,7 +78,7 @@ void KApiFetchObject::process(KHttpRequest *rq)
 	if (dso->HttpExtensionProc) {
 		assert(rq);
 		if (!brd->rd->enable) {
-			send_error(rq, NULL, STATUS_SERVER_ERROR, "extend is disable");
+			send_error(rq, STATUS_SERVER_ERROR, "extend is disable");
 			debug("extend is disable\n");
 			return;
 		}

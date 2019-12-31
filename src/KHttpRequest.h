@@ -295,6 +295,7 @@ public:
 	inline bool needFilter() {
 		return of_ctx!=NULL;
 	}
+	char *BuildVary(const char *vary);
 	
 	bool ParseHeader(const char *attr, int attr_len,char *val,int val_len, bool is_first);
 	const char *getMethod();

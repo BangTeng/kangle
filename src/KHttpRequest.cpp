@@ -350,9 +350,9 @@ bool KHttpRequest::rewriteUrl(const char *newUrl, int errorCode, const char *pre
 		url2.host = strdup(url->host);
 	}
 	url_decode(url2.path, 0, &url2);
-	if (ctx->obj && ctx->obj->url==url && !TEST(ctx->obj->index.flags,FLAG_URL_FREE)) {
+	if (ctx->obj && ctx->obj->uk.url==url && !TEST(ctx->obj->index.flags,FLAG_URL_FREE)) {
 		SET(ctx->obj->index.flags,FLAG_URL_FREE);
-		ctx->obj->url = url->clone();
+		ctx->obj->uk.url = url->clone();
 	}
 	url->destroy();
 	url->host = url2.host;
@@ -384,7 +384,7 @@ char *KHttpRequest::getUrl() {
 std::string KHttpRequest::getInfo() {
 	KStringBuf s;
 
-	raw_url.getUrl(s,true);
+	raw_url.GetUrl(s,true);
 
 	return s.getString();
 }
@@ -1030,7 +1030,27 @@ KOutputFilterContext *KHttpRequest::getOutputFilterContext()
 	}
 	return of_ctx;
 }
-
+char *KHttpRequest::BuildVary(const char *vary)
+{
+	KHttpField field;
+	field.parse(vary, ',');
+	KStringBuf s;
+	http_field_t *head = field.getHeader();
+	while (head) {
+		if (strcasecmp(head->attr, "Accept-Encoding") != 0) {
+			KHttpHeader *rq_header = this->FindHeader(head->attr,strlen(head->attr));
+			if (rq_header) {
+				s.write_all(rq_header->val, rq_header->val_len);
+			}
+			s.WSTR("\n");
+		}
+		head = head->next;
+	}
+	if (s.getSize() == 0) {
+		return NULL;
+	}
+	return s.stealString();
+}
 bool KHttpRequest::responseHeader(const char *name,hlen_t name_len,const char *val,hlen_t val_len)
 {
 	return sink->ResponseHeader(name, name_len, val, val_len);

@@ -322,7 +322,7 @@ void KAccess::loadModel() {
 	addMarkModel(REQUEST,new KPathSignMark());
 	addAclModel(REQUEST_RESPONSE,new KListenPortsAcl());
 	addMarkModel(REQUEST,new KFlowMark());
-	addMarkModel(REQUEST,new KVaryMark());	
+	addMarkModel(RESPONSE,new KVaryMark());	
 	addMarkModel(REQUEST,new KIpSpeedLimitMark());
 	addMarkModel(REQUEST_RESPONSE,new KAddHeaderMark());
 	addMarkModel(REQUEST_RESPONSE,new KRemoveHeaderMark());

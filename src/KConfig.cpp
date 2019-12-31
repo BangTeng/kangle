@@ -200,6 +200,21 @@ bool get_size_radio(INT64 size,int radio,const char radio_char,std::stringstream
 	}
 	return false;
 }
+char *get_human_size(double size,char *buf,size_t buf_size)
+{
+	memset(buf, 0, buf_size);
+	int i = 0;
+	const char* units[] = { "", "K", "M", "G", "T", "P", "E", "Z", "Y" };
+	while (size > 1024) {
+		if (i > 8) {
+			break;
+		}
+		size /= 1024;
+		i++;
+	}
+	snprintf(buf, buf_size-1, "%.*f%s", 2, size, units[i]);
+	return buf;
+}
 std::string get_size(INT64 size)
 {
 	std::stringstream s;

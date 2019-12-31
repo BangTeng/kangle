@@ -28,6 +28,7 @@ struct HttpObjectIndexHeader
 		};
 	};
 };
+
 struct KHttpObjectKey
 {
 	unsigned filename1;//´Ókgl_current_secµÃµ½
@@ -97,7 +98,9 @@ enum cor_result
 	cor_success,
 	cor_incache,
 };
+bool obj_can_disk_cache(KHttpRequest *rq, KHttpObject *obj);
 cor_result create_http_object(KHttpObject *obj,const char *url, u_short flag_encoding,const char *verified_filename=NULL);
+cor_result create_http_object2(KHttpObject *obj, char *url, u_short flag_encoding, const char *verified_filename = NULL);
 extern volatile bool index_progress;
 extern index_scan_state_t index_scan_state;
 #endif

@@ -59,9 +59,9 @@ public:
 	bool match(KHttpRequest *rq, KHttpObject *obj) {
 		KStringBuf url;
 		if (raw) {
-			rq->raw_url.getUrl(url);
+			rq->raw_url.GetUrl(url);
 		} else {
-			rq->url->getUrl(url);
+			rq->url->GetUrl(url);
 		}
 		if (reg.match(url.getString(), url.getSize(), 0)>=0){
 			return true;

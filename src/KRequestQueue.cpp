@@ -22,7 +22,7 @@ kev_result resultQueuedRequestTimeOut(void *arg,int got)
 		return stageEndRequest(rq);
 	}
 	rq->closeFetchObject();
-	return send_error(rq,NULL,STATUS_SERVICE_UNAVAILABLE,"Server is busy");
+	return send_error(rq, STATUS_SERVICE_UNAVAILABLE, "Server is busy");
 }
 bool checkQueuedRequestTimeOut(KHttpRequest *rq)
 {

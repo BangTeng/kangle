@@ -145,7 +145,12 @@ kgl_header_result KHttpResponseParser::InternalParseHeader(KHttpRequest *rq, KHt
 #endif
 		return kgl_header_success;
 	}
-
+	if (!strcasecmp(attr, "Vary")) {
+		if (obj->AddVary(rq, val, *val_len)) {
+			return kgl_header_no_insert;
+		}
+		return kgl_header_success;
+	}
 	if (!strcasecmp(attr, "Age")) {
 		age = atoi(val);
 		return kgl_header_no_insert;
@@ -195,17 +200,17 @@ kgl_header_result KHttpResponseParser::InternalParseHeader(KHttpRequest *rq, KHt
 			return kgl_header_no_insert;
 		}
 		if (strcasecmp(val, "gzip") == 0) {
-			obj->url->set_content_encoding(KGL_ENCODING_GZIP);
+			obj->uk.url->set_content_encoding(KGL_ENCODING_GZIP);
 		} else	if (strcasecmp(val, "deflate") == 0) {
-			obj->url->set_content_encoding(KGL_ENCODING_DEFLATE);
+			obj->uk.url->set_content_encoding(KGL_ENCODING_DEFLATE);
 		} else if (strcasecmp(val, "compress") == 0) {
-			obj->url->set_content_encoding(KGL_ENCODING_COMPRESS);
+			obj->uk.url->set_content_encoding(KGL_ENCODING_COMPRESS);
 		} else if (strcasecmp(val, "br") == 0) {
-			obj->url->set_content_encoding(KGL_ENCODING_BR);
+			obj->uk.url->set_content_encoding(KGL_ENCODING_BR);
 		} else if (strcasecmp(val, "identity") == 0) {
-			obj->url->encoding = (u_char)~KGL_ENCODING_YES;
+			obj->uk.url->encoding = (u_char)~KGL_ENCODING_YES;
 		} else if (*val) {
-			obj->url->set_content_encoding(KGL_ENCODING_UNKNOW);
+			obj->uk.url->set_content_encoding(KGL_ENCODING_UNKNOW);
 		}
 		return kgl_header_success;
 	}

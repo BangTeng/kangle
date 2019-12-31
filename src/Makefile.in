@@ -105,7 +105,7 @@ am_kangle_OBJECTS = cache.$(OBJEXT) KConfig.$(OBJEXT) \
 	KCdnRewriteMark.$(OBJEXT) KCdnContainer.$(OBJEXT) \
 	KTempleteVirtualHost.$(OBJEXT) KVirtualHostDatabase.$(OBJEXT) \
 	KDsoModule.$(OBJEXT) KLogHandle.$(OBJEXT) \
-	KRequestQueue.$(OBJEXT) KContext.$(OBJEXT) \
+	KRequestQueue.$(OBJEXT) KContext.$(OBJEXT) KUrl.$(OBJEXT) \
 	KCdnRedirect.$(OBJEXT) time_utils.$(OBJEXT) \
 	KVirtualHostContainer.$(OBJEXT) KSocketBuffer.$(OBJEXT) \
 	KAsyncFetchObject.$(OBJEXT) KSyncFetchObject.$(OBJEXT) \
@@ -465,7 +465,7 @@ KVirtualHostDatabase.cpp     KVirtualHostDatabase.h       KVirtualHostDataInterf
 KLogHandle.h KLogHandle.cpp\
 KListenPipeStream.h\
 KRequestQueue.h KRequestQueue.cpp KContext.cpp\
-KUrl.h KContext.h vh_module.h\
+KUrl.h KUrl.cpp KContext.h vh_module.h\
 KCdnRedirect.h KCdnRedirect.cpp\
 time_utils.h time_utils.cpp\
 KVirtualHostContainer.h KVirtualHostContainer.cpp\
@@ -970,6 +970,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/KTimer.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/KTsUpstream.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/KUpstream.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/KUrl.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/KUrlParser.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/KUrlValue.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/KVirtualHost.Po@am__quote@

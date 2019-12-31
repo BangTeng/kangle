@@ -194,6 +194,6 @@ kev_result denyInputFilter(KHttpRequest *rq)
 	klog(KLOG_ERR,"access denied by input filter. ip=%s url=%s\n",rq->getClientIp(),url);
 	xfree(url);
 	//SET(rq->flags,RQ_CONNECTION_CLOSE);
-	return send_error(rq,NULL,STATUS_FORBIDEN,"access denied by input filter.");
+	return send_error(rq, STATUS_FORBIDEN,"access denied by input filter.");
 }
 #endif

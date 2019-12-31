@@ -168,7 +168,7 @@ KVirtualHostDatabase.cpp     KVirtualHostDatabase.h       KVirtualHostDataInterf
 KLogHandle.h KLogHandle.cpp\
 KListenPipeStream.h\
 KRequestQueue.h KRequestQueue.cpp KContext.cpp\
-KUrl.h KContext.h vh_module.h\
+KUrl.h KUrl.cpp KContext.h vh_module.h\
 KCdnRedirect.h KCdnRedirect.cpp\
 time_utils.h time_utils.cpp\
 KVirtualHostContainer.h KVirtualHostContainer.cpp\

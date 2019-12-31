@@ -12,7 +12,7 @@ public:
 			int &jumpType)
 	{
 		KStringBuf u;
-		rq->url->getUrl(u);
+		rq->url->GetUrl(u);
 		/*
 		int len = url_decode(u.getBuf(),u.getSize());
 		KRegSubString *subString = url.matchSubString(u.getBuf(),len,0);

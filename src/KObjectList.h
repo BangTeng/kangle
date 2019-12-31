@@ -20,7 +20,7 @@ public:
 	void add(KHttpObject *obj);
 	void dead(KHttpObject *obj);
 	void remove(KHttpObject *obj);
-	void move(KBufferFile *bf,int64_t begin_msec,INT64 size,bool swapout);
+	int move(KBufferFile *bf,int64_t begin_msec,INT64 size,bool swapout);
 	void dead_count(int &count);
 	void dead_all_obj();
 #ifdef ENABLE_DISK_CACHE

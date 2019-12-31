@@ -103,9 +103,11 @@ std::string md5sum(FILE *fp)
         buf[32]=0;
         return buf;
 }
+#if 0
 void get_cache_size(INT64 &total_mem_size, INT64 &total_disk_size) {
 	cache.getSize(total_mem_size,total_disk_size);
 }
+#endif
 
 void flush_mem_cache(int64_t last_msec) {
 	INT64 disk_cache = 0;

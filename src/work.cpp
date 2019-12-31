@@ -66,9 +66,6 @@
 volatile uint32_t kgl_log_count = 0;
 using namespace std;
 
-void free_url(KUrl *url) {
-	url->destroy();
-}
 inline bool in_stop_cache(KHttpRequest *rq) {
 	if (TEST(rq->filter_flags, RF_NO_CACHE)) {
 		return true;
@@ -357,7 +354,7 @@ inline int checkRequest(KHttpRequest *rq)
 kev_result handleConnectMethod(KHttpRequest *rq)
 {
 
-	return send_error(rq,NULL,STATUS_METH_NOT_ALLOWED,"The requested method CONNECT is not allowed");
+	return send_error(rq, STATUS_METH_NOT_ALLOWED, "The requested method CONNECT is not allowed");
 }
 kev_result stageHttpManageLogin(KHttpRequest *rq)
 {
@@ -434,7 +431,7 @@ kev_result stageDeniedRequest(KHttpRequest *rq) {
 		return send_auth(rq);
 	}
 	if (!TEST(rq->flags, RQ_HAS_SEND_HEADER)) {
-		return send_error(rq, NULL, STATUS_FORBIDEN, "denied by request access control");
+		return send_error(rq, STATUS_FORBIDEN, "denied by request access control");
 	}
 	return kev_err;
 }
@@ -492,9 +489,9 @@ kev_result bind_virtual_host(KHttpRequest *rq,const char *hostname,int len,int h
 #endif
 	switch (vh_result) {
 	case query_vh_connect_limit:
-		return send_error(rq, NULL, STATUS_SERVER_ERROR, "max connect limit.");
+		return send_error(rq, STATUS_SERVER_ERROR, "max connect limit.");
 	case query_vh_host_not_found:
-		return send_error(rq,NULL,STATUS_BAD_REQUEST,"host not found.");
+		return send_error(rq, STATUS_BAD_REQUEST, "host not found.");
 	default:
 		break;
 	}
@@ -538,11 +535,11 @@ kev_result handleStartRequest(KHttpRequest *rq,int header_length)
 #endif
 	if (unlikely(rq->ctx->read_huped)) {
 		SET(rq->flags,RQ_CONNECTION_CLOSE);
-		return send_error(rq,NULL,STATUS_BAD_REQUEST,"Client close connection");
+		return send_error(rq, STATUS_BAD_REQUEST, "Client close connection");
 	}
 	if (unlikely(rq->isBad())) {
 		SET(rq->flags,RQ_CONNECTION_CLOSE);
-		return send_error(rq, NULL, STATUS_BAD_REQUEST, "Bad request format.");
+		return send_error(rq, STATUS_BAD_REQUEST, "Bad request format.");
 	}
 	if (unlikely(TEST(rq->GetWorkModel(), WORK_MODEL_MANAGE))) {
 		return stageHttpManage(rq);
@@ -586,7 +583,7 @@ kev_result async_http_start(KHttpRequest *rq)
 	if (TEST(rq->flags, RQ_HAS_ONLY_IF_CACHED)) {
 		context->obj = findHttpObject(rq, false, context);
 		if (!context->obj) {
-			return send_error(rq, context->obj, 404, "Not in cache");
+			return send_error(rq, 404, "Not in cache");
 		}
 		return processCacheRequest(rq);
 	}
@@ -596,14 +593,14 @@ kev_result async_http_start(KHttpRequest *rq)
 		context->new_object = 1;
 		if (!context->obj) {
 			SET(rq->flags,RQ_CONNECTION_CLOSE);
-			return send_error(rq, context->obj, STATUS_SERVER_ERROR, "cann't malloc memory.");
+			return send_error(rq,  STATUS_SERVER_ERROR, "cann't malloc memory.");
 		}
 		SET(context->obj->index.flags,FLAG_DEAD);
 	} else {
 		context->obj = findHttpObject(rq, true, context);
 		if (!context->obj) {
 			SET(rq->flags,RQ_CONNECTION_CLOSE);
-			return send_error(rq, context->obj, STATUS_SERVER_ERROR, "cann't malloc memory.");
+			return send_error(rq,  STATUS_SERVER_ERROR, "cann't malloc memory.");
 		}
 	}
 	if (context->new_object) { //It is a new object

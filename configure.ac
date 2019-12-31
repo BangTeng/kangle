@@ -1,5 +1,5 @@
 # Process this file with autoconf to produce a configure script.
-AC_INIT([kangle],[3.5.18])
+AC_INIT([kangle],[3.5.19])
 AC_CANONICAL_SYSTEM
 AM_INIT_AUTOMAKE
 AM_CONFIG_HEADER([src/config.h])

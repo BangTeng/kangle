@@ -21,12 +21,23 @@
 #ifdef LINUX
 #include <sys/vfs.h>
 #endif
+
 //扫描进程是否存在
 volatile bool index_progress = false;
 index_scan_state_t index_scan_state;
 static int load_count = 0;
 static INT64 recreate_start_time = 0;
 using namespace std;
+bool obj_can_disk_cache(KHttpRequest *rq, KHttpObject *obj)
+{
+	if (TEST(rq->filter_flags, RF_NO_DISK_CACHE)) {
+		return false;
+	}
+	if (TEST(obj->index.flags, ANSW_LOCAL_SERVER | FLAG_NO_DISK_CACHE)) {
+		return false;
+	}
+	return cache.IsDiskCacheReady();
+}
 bool skipString(char **hot,int &hotlen)
 {
 	if (hotlen<=(int)sizeof(int)) {
@@ -282,53 +293,78 @@ bool saveCacheIndex()
 #endif
 	return false;
 }
-cor_result create_http_object(KHttpObject *obj,const char *url,u_short flag_encoding,const char *verified_filename)
+cor_result create_http_object2(KHttpObject *obj, char *url, u_short flag_encoding, const char *verified_filename)
 {
+	char *vary = strchr(url, '\n');
+	if (vary != NULL) {
+		*vary = '\0';
+		vary++;
+	}
 	KUrl m_url;
-	if (!parse_url(url,&m_url) || m_url.host==NULL) {
-		fprintf(stderr,"cann't parse url[%s]\n",url);
+	if (!parse_url(url, &m_url) || m_url.host == NULL) {
+		fprintf(stderr, "cann't parse url[%s]\n", url);
 		m_url.destroy();
 		return cor_failed;
 	}
-	CLR(obj->index.flags,FLAG_IN_MEM);
-	SET(obj->index.flags,FLAG_IN_DISK|FLAG_URL_FREE);
-	obj->url = new KUrl;
-	obj->url->host = m_url.host;
-	obj->url->path = m_url.path;
-	obj->url->param = m_url.param;
-	obj->url->port = m_url.port;
-	obj->url->flag_encoding = flag_encoding;
+	CLR(obj->index.flags, FLAG_IN_MEM);
+	SET(obj->index.flags, FLAG_IN_DISK | FLAG_URL_FREE);
+	obj->uk.url = new KUrl;
+	obj->uk.url->host = m_url.host;
+	obj->uk.url->path = m_url.path;
+	obj->uk.url->param = m_url.param;
+	obj->uk.url->port = m_url.port;
+	obj->uk.url->flag_encoding = flag_encoding;
+	if (vary) {
+		char *vary_val = strchr(vary, '\n');
+		if (vary_val) {
+			*vary_val = '\0';
+			vary_val++;
+			obj->uk.vary = new KVary;
+			obj->uk.vary->key = strdup(vary);
+			obj->uk.vary->val = strdup(vary_val);
+		}
+	}
 	if (verified_filename) {
-		obj->h = cache.hash_url(obj->url);
-		if (cache.getHash(obj->h)->find(obj->url,verified_filename)) {
-			CLR(obj->index.flags,FLAG_IN_DISK);
-			klog(KLOG_NOTICE,"filename [%s] already in cache\n",verified_filename);
+		obj->h = cache.hash_url(obj->uk.url);
+		if (cache.getHash(obj->h)->FindByFilename(&obj->uk, verified_filename)) {
+			CLR(obj->index.flags, FLAG_IN_DISK);
+			klog(KLOG_NOTICE, "filename [%s] already in cache\n", verified_filename);
 			return cor_incache;
 		}
 	}
 	if (TEST(obj->index.flags, FLAG_IN_DISK)) {
 		if (obj->index.head_size != kgl_align(obj->index.head_size, kgl_aio_align_size)) {
-			char *url = obj->url->getUrl();
+			char *url = obj->uk.url->getUrl();
 			char *filename = obj->getFileName();
 			klog(KLOG_ERR, "disk cache file head_size=[%d] is not align by size=[%d], url=[%s] file=[%s] now dead it.\n", obj->index.head_size, kgl_aio_align_size, url, filename);
 			free(filename);
 			free(url);
 			SET(obj->index.flags, FLAG_DEAD);
 		}
+#ifndef ENABLE_BIG_OBJECT_206
 		if (TEST(obj->index.flags, FLAG_BIG_OBJECT_PROGRESS)) {
-			char *url = obj->url->getUrl();
+			char *url = obj->uk.url->getUrl();
 			char *filename = obj->getFileName();
 			klog(KLOG_ERR, "disk cache file head_size=[%d] is part file that is not support by now size=[%d], url=[%s] file=[%s]. now dead it.\n", obj->index.head_size, kgl_aio_align_size, url, filename);
 			free(filename);
 			free(url);
 			SET(obj->index.flags, FLAG_DEAD);
 		}
+#endif
 	}
-	if (stored_obj(obj,LIST_IN_DISK)) {
+	if (stored_obj(obj, LIST_IN_DISK)) {
 		return cor_success;
 	}
-	CLR(obj->index.flags,FLAG_IN_DISK);
+	CLR(obj->index.flags, FLAG_IN_DISK);
 	return cor_failed;
+}
+cor_result create_http_object(KHttpObject *obj,const char *url,u_short flag_encoding,const char *verified_filename)
+{
+	//printf("url=[%s]\n", url);
+	char *buf = strdup(url);
+	cor_result ret = create_http_object2(obj, buf, flag_encoding, verified_filename);
+	xfree(buf);
+	return ret;
 }
 cor_result create_http_object(KFile *fp,KHttpObject *obj,u_short url_flag_encoding,const char *verified_filename=NULL)
 {
@@ -338,7 +374,7 @@ cor_result create_http_object(KFile *fp,KHttpObject *obj,u_short url_flag_encodi
 		fprintf(stderr,"read url is NULL\n");
 		return cor_failed;
 	}
-	cor_result ret = create_http_object(obj,url, url_flag_encoding,verified_filename);
+	cor_result ret = create_http_object2(obj,url, url_flag_encoding,verified_filename);
 	free(url);
 	return ret;
 }
@@ -364,6 +400,12 @@ int create_file_index(const char *file,void *param)
 		}
 	}
 	if (strstr(file,".part")) {
+#ifdef ENABLE_BIG_OBJECT_206
+		std::string obj_file = file;
+		obj_file = obj_file.substr(0, obj_file.size() - 5);
+		partfiles.push_back(obj_file);
+		return 0;
+#endif
 		goto failed;
 	}
 	if (sscanf(file, "%x_%x", &f1, &f2)!=2) {
@@ -382,14 +424,17 @@ int create_file_index(const char *file,void *param)
 		klog(KLOG_ERR, "disk cache [%s] is not valide file\n", file_name);
 		goto failed;
 	}
+	/*
 	if (header.body_complete) {
 		klog(KLOG_ERR, "disk cache [%s] is not complete.\n", file_name);
 		goto failed;
 	}
+	*/
 	obj = new KHttpObject;
 	kgl_memcpy(&obj->index,&header.index,sizeof(obj->index));
 	obj->dk.filename1 = f1;
 	obj->dk.filename2 = f2;
+	
 	result = create_http_object(&fp,obj,header.url_flag_encoding,file_name);
 	if (result==cor_success) {
 #ifdef ENABLE_DB_DISK_INDEX
@@ -408,10 +453,16 @@ failed:
 	}
 	return 0;
 }
+void clean_disk_orphan_files(const char *cache_dir)
+{
+	
+}
 void recreate_index_dir(const char *cache_dir)
 {
 	klog(KLOG_NOTICE,"scan cache dir [%s]\n",cache_dir);
+	
 	list_dir(cache_dir,create_file_index,(void *)cache_dir);
+	clean_disk_orphan_files(cache_dir);
 }
 bool recreate_index(const char *path,int &first_dir_index,int &second_dir_index,KTimeMatch *tm=NULL)
 {

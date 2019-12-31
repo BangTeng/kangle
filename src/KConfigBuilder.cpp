@@ -173,6 +173,11 @@ void KConfigBuilder::build(std::stringstream &s) {
 	if (*conf.disk_work_time) {
 		s << " disk_work_time='" << conf.disk_work_time << "'";
 	}
+#ifdef ENABLE_BIG_OBJECT_206
+	if (conf.cache_part) {
+		s << " cache_part='1'";
+	}
+#endif
 #endif
 	s << " refresh_time='" << conf.refresh_time << "'";
 	s << "/>\n";

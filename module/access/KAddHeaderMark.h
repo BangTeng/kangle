@@ -29,10 +29,10 @@ public:
 			}
 			if (obj) {
 				//如果是缓存物件，则不再重复增加header
-				if (!obj->in_cache) {
+				if (obj->in_cache && (this->force || obj->findHeader(attr,attr_len)==NULL)) {
 					obj->insertHttpHeader((const char *)attr,attr_len,s->getString(),s->getSize());
 				}
-			} else {
+			} else if (this->force || rq->FindHeader(attr, attr_len) ==NULL) {
 				rq->AddHeader((const char *)attr,attr_len,s->getString(),s->getSize());
 			}
 			delete s;
@@ -96,9 +96,10 @@ public:
 	}
 	void buildXML(std::stringstream &s)
 	{
-		s << " attr='" << (attr?attr:"") << "' val='" << (val?val:"") << "'>";
+		s << " attr='" << (attr?attr:"") << "' val='" << (val?val:"") << "' force='" << force << "'>";
 	}
 private:
+	int force;
 	int attr_len;
 	int val_len;
 	char *attr;

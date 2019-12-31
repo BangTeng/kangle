@@ -56,7 +56,7 @@ bool KDiskCacheStream::Open(KHttpRequest *rq,KHttpObject *obj)
 		kfclose(fp);
 		return false;
 	}
-	obj->caculate_header_size(0);
+	obj->GetHeaderSize(0);
 	return true;
 }
 bool KDiskCacheStream::Write(KHttpRequest *rq, KHttpObject *obj, const char *buf, int len)

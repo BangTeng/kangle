@@ -49,7 +49,6 @@ KTHREAD_FUNCTION load_cache_index(void *param);
 void init_cache();
 void release_obj(KHttpObject *);
 void dead_all_obj();
-void get_cache_size(INT64 &total_mem_size,INT64 &total_disk_size);
 void caculateCacheSize(INT64 &csize,INT64 &cdsize,INT64 &hsize,INT64 &hdsize);
 
 //内容过滤链更新时
@@ -69,7 +68,7 @@ inline bool objCanCache(KHttpRequest *rq,KHttpObject *obj)
 		//死物件和标记为不缓存的
 		return false;
 	}
-	if (TEST(obj->url->encoding ,(KGL_ENCODING_UNKNOW | KGL_ENCODING_YES)) == (KGL_ENCODING_UNKNOW | KGL_ENCODING_YES)) {
+	if (TEST(obj->uk.url->encoding ,(KGL_ENCODING_UNKNOW | KGL_ENCODING_YES)) == (KGL_ENCODING_UNKNOW | KGL_ENCODING_YES)) {
 		//未知的content-encoding
 		return false;
 	}

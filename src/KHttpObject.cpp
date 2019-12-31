@@ -11,6 +11,7 @@
 #include "cache.h"
 #include "KHttpObject.h"
 #include "KHttpObjectHash.h"
+#include "KCache.h"
 #ifdef ENABLE_DB_DISK_INDEX
 #include "KDiskCacheIndex.h"
 #endif
@@ -45,10 +46,30 @@ KHttpObjectBody::KHttpObjectBody(KHttpObjectBody *data)
 		tmp = tmp->next;
 	}
 }
+bool KHttpObject::AddVary(KHttpRequest *rq,const char *val,int val_len)
+{
+	SET(index.flags, OBJ_HAS_VARY);
+	if (uk.vary == NULL) {
+		char *vary_val = rq->BuildVary(val);
+		if (vary_val != NULL) {
+			uk.vary = new KVary;
+			uk.vary->val = vary_val;
+			uk.vary->key = strdup(val);
+			return true;
+		}
+	}
+	return false;
+}
+char *KHttpObject::BuildVary(KHttpRequest *rq)
+{
+	kassert(uk.vary);
+	kassert(uk.vary->key);
+	return rq->BuildVary(uk.vary->key);
+}
 KHttpObject::KHttpObject(KHttpRequest *rq,KHttpObject *obj)
 {
 	init(rq->url);
-	url->encoding = rq->raw_url.encoding;
+	uk.url->encoding = rq->raw_url.encoding;
 	index.flags = obj->index.flags;
 	CLR(index.flags,FLAG_IN_DISK|FLAG_URL_FREE|OBJ_IS_READY|OBJ_IS_STATIC2|FLAG_NO_BODY|ANSW_HAS_CONTENT_LENGTH|ANSW_HAS_CONTENT_RANGE);
 	SET(index.flags,FLAG_IN_MEM);
@@ -64,16 +85,53 @@ KHttpObject::~KHttpObject() {
 	if (data) {
 		delete data;
 	}
-	if (url && TEST(index.flags,FLAG_URL_FREE)) {
+	if (uk.url && TEST(index.flags,FLAG_URL_FREE)) {
 		//url由obj负责，则清理
-		url->destroy();
-		delete url;
+		uk.url->destroy();
+		delete uk.url;
+	}
+	if (uk.vary) {
+		delete uk.vary;
 	}
 }
 void KHttpObject::Dead()
 {
 	SET(index.flags, FLAG_DEAD);
 	dc_index_update = 1;
+}
+void KHttpObject::UpdateCache(KHttpObject *obj)
+{
+	kassert(!obj->in_cache);
+	kassert(in_cache);
+	if (cmp_vary_key(uk.vary, obj->uk.vary)) {
+		cache.UpdateVary(this, obj->uk.vary);
+	}
+	//TODO:更新vary,或max_age等缓存控制	
+	
+	return;
+}
+int KHttpObject::GetHeaderSize(int url_len)
+{
+	if (index.head_size > 0) {
+		return index.head_size;
+	}
+	int len = sizeof(KHttpObjectFileHeader);
+	if (url_len == 0) {
+		char *u = get_url_key(&uk,&url_len);
+		if (u == NULL) {
+			return 0;
+		}
+		free(u);
+	}
+	len += url_len + sizeof(int);
+	KHttpHeader *header = data->headers;
+	while (header) {
+		len += header->attr_len + header->val_len + 2 * sizeof(int);
+		header = header->next;
+	}
+	len += sizeof(int);
+	index.head_size = kgl_align(len, kgl_aio_align_size);
+	return index.head_size;
 }
 #ifdef ENABLE_DISK_CACHE
 void KHttpObjectBody::create_type(HttpObjectIndex *index)
@@ -115,7 +173,7 @@ void KHttpObject::unlinkDiskFile()
 #endif
 		char *name = getFileName();
 		int ret = unlink(name);
-		char *url = this->url->getUrl();
+		char *url = this->uk.url->getUrl();
 		assert(url);
 		if (url) {
 			klog(KLOG_INFO, "unlink disk cache obj=[%p %x " INT64_FORMAT_HEX "] url=[%s] file=[%s] ret=[%d] errno=[%d]\n",
@@ -246,7 +304,7 @@ void KHttpObject::write_file_header(KHttpObjectFileHeader *fileHeader)
 	kgl_memcpy(fileHeader->fix_str, CACHE_FIX_STR, sizeof(CACHE_FIX_STR));
 	kgl_memcpy(&fileHeader->index, &index, sizeof(HttpObjectIndex));
 	fileHeader->version = CACHE_DISK_VERSION;
-	fileHeader->url_flag_encoding = url->flag_encoding;
+	fileHeader->url_flag_encoding = uk.url->flag_encoding;
 	fileHeader->status_code = data->status_code;
 	fileHeader->body_complete = 1;
 	
@@ -276,37 +334,14 @@ int KHttpObject::saveIndex(KFile *fp)
 	return len;
 }
 */
-int KHttpObject::caculate_header_size(int url_len)
-{
-	if (index.head_size > 0) {
-		return index.head_size;
-	}
-	int len = sizeof(KHttpObjectFileHeader);
-	if (url_len == 0) {
-		char *u = url->getUrl2(url_len);
-		if (u == NULL) {
-			return 0;
-		}
-		free(u);
-	}
-	len += url_len + sizeof(int);
-	KHttpHeader *header = data->headers;
-	while (header) {
-		len += header->attr_len + header->val_len + 2 * sizeof(int);
-		header = header->next;
-	}
-	len += sizeof(int);
-	index.head_size = kgl_align(len, kgl_aio_align_size);
-	return index.head_size;
-}
 char *KHttpObject::build_aio_header(int &len)
 {
 	int url_len;
-	char *u = url->getUrl2(url_len);
+	char *u = get_url_key(&uk, &url_len);
 	if (u == NULL) {
 		return NULL;
 	}
-	len = caculate_header_size(url_len);
+	len = GetHeaderSize(url_len);
 	char *buf = (char *)aio_alloc_buffer(len);
 	char *hot = buf;
 	write_file_header((KHttpObjectFileHeader *)hot);
@@ -320,6 +355,7 @@ char *KHttpObject::build_aio_header(int &len)
 		header = header->next;
 	}
 	hot += write_string(hot, NULL, 0);
+	kassert(hot - buf <= (INT64)index.head_size);
 	return buf;
 }
 bool KHttpObject::save_header(KBufferFile *fp,const char *url,int url_len)
@@ -334,7 +370,10 @@ bool KHttpObject::save_header(KBufferFile *fp,const char *url,int url_len)
 	}
 	writeString(fp,NULL);
 	int pad_len = index.head_size - (int)fp->get_total_write();
-	fp->write(NULL, pad_len);
+	kassert(pad_len >= 0);
+	if (pad_len > 0) {
+		fp->write(NULL, pad_len);
+	}
 	return true;
 }
 
@@ -361,11 +400,11 @@ bool KHttpObject::swapout(KBufferFile *file,bool fast_model)
 		return false;
 	}
 	int url_len = 0;
-	char *url = this->url->getUrl2(url_len);
+	char *url = get_url_key(&uk, &url_len);
 	if (url == NULL) {
 		return false;
 	}
-	caculate_header_size(url_len);
+	GetHeaderSize(url_len);
 	INT64 buffer_size = index.content_length + index.head_size;
 	if (buffer_size > KGL_MAX_BUFFER_FILE_SIZE) {
 		buffer_size = KGL_MAX_BUFFER_FILE_SIZE;
@@ -404,7 +443,7 @@ bool KHttpObject::swapout(KBufferFile *file,bool fast_model)
 		}
 		tmp=tmp->next;
 	}
-	cache.getHash(h)->incDiskSize(index.head_size + index.content_length);
+	cache.getHash(h)->IncDiskObjectSize(this);
 #ifdef ENABLE_DB_DISK_INDEX
 	if (dci) {		
 		dci->start(ci_add,this);

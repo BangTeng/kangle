@@ -19,7 +19,7 @@ public:
 		}
 		KStringBuf u;
 		KUrl *url = rq->url;
-		url->getUrl(u);
+		url->GetUrl(u);
 		KRegSubString *s = range_from.matchSubString(u.getBuf(),u.getSize(),0);
 		bool result = false;
 		if (s) {

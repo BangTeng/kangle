@@ -106,12 +106,13 @@ inline bool status_code_can_cache(u_short code) {
  */
 class KHttpObject {
 public:
+	friend class KHttpObjectHash;
 	KHttpObject() {
 		init(NULL);
 	}
 	KHttpObject(KHttpRequest *rq) {		
 		init(rq->url);
-		url->encoding = rq->raw_url.encoding;
+		uk.url->encoding = rq->raw_url.encoding;
 		data = new KHttpObjectBody();	
 		SET(index.flags,FLAG_IN_MEM);
 	}
@@ -122,12 +123,14 @@ public:
 		list_state = LIST_IN_NONE;
 		runtime_flags = 0;
 		index.last_verified = kgl_current_sec;
-		this->url = url;
+		uk.url = url;
+		uk.vary = NULL;
 		h = HASH_SIZE;
 		refs = 1;
 		data = NULL;
 	}
 	void Dead();
+	void UpdateCache(KHttpObject *obj);
 	bool IsContentRangeComplete(KHttpRequest *rq)
 	{
 		if (!TEST(index.flags, ANSW_HAS_CONTENT_RANGE)) {
@@ -260,19 +263,30 @@ public:
 		}
 		return false;
 	}
-
-	void count_size(INT64 &mem_size,INT64 &disk_size)
+	void CountSize(INT64 &mem_size,INT64 &disk_size,int &mem_count,int &disk_count)
 	{
 		if (TEST(index.flags,FLAG_IN_MEM)) {
-			mem_size += index.head_size;
-			if (data->type==MEMORY_OBJECT) {
-				mem_size += index.content_length;
-			}
+			mem_count++;
+			mem_size += GetMemorySize();
 		}
 		if (TEST(index.flags,FLAG_IN_DISK)) {
-			disk_size += index.content_length + index.head_size;
+			disk_count++;
+			disk_size += GetDiskSize();			
 		}
 	}
+	inline INT64 GetMemorySize()
+	{
+		INT64 size = GetHeaderSize();
+		if (data && data->type == MEMORY_OBJECT) {
+			size += index.content_length;
+		}
+		return size;
+	}
+	inline INT64 GetDiskSize()
+	{
+		return GetHeaderSize() + index.content_length;
+	}
+	int GetHeaderSize(int url_len=0);
 #ifdef ENABLE_DISK_CACHE
 	bool swapout(KBufferFile *file,bool fast_model);
 	bool swapin(KHttpObjectBody *data);
@@ -282,7 +296,6 @@ public:
 	void write_file_header(KHttpObjectFileHeader *fileHeader);
 	bool save_header(KBufferFile *fp,const char *url, int url_len);
 	char *build_aio_header(int &len);
-	int caculate_header_size(int url_len);
 	bool save_dci_header(KBufferFile *fp);
 #endif
 	bool removeHttpHeader(const char *attr)
@@ -323,6 +336,7 @@ public:
 	void insertHttpHeader(const char *attr,int attr_len, const char *val,int val_len) {
 		insertHttpHeader2(xstrdup(attr),attr_len,xstrdup(val),val_len);
 	}
+	bool AddVary(KHttpRequest *rq,const char *val,int val_len);
 	INT64 getTotalContentSize(KHttpRequest *rq)
 	{
 		if (TEST(index.flags,ANSW_HAS_CONTENT_RANGE)) {
@@ -351,11 +365,13 @@ public:
 	};
 	short h; /* hash value */
 	int refs;
-	KUrl *url;
+	KUrlKey uk;
 	KHttpObjectBody *data;
 	KHttpObjectKey dk;
 	HttpObjectIndex index;
 private:
 	~KHttpObject();
+	char *BuildVary(KHttpRequest *rq);
 };
+
 #endif /*KHTTPOBJECT_H_*/

@@ -34,12 +34,8 @@ kev_result swap_obj_result(KHttpRequest *rq, KHttpObject *obj, KHttpObjectBody *
 	}
 	lock->Unlock();
 	if (result == swap_in_success) {
-		assert(obj->data->status_code > 0);
-		INT64 inc_size = obj->index.head_size;
-		if (obj->data->type == MEMORY_OBJECT) {
-			inc_size += obj->index.content_length;
-		}
-		cache.getHash(obj->h)->incSize(inc_size);
+		kassert(obj->data->status_code > 0);
+		cache.getHash(obj->h)->IncMemObjectSize(obj);
 	}
 	kev_result ret = osData->os->swapResult(rq,obj, result);
 	delete osData;

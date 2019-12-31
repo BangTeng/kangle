@@ -88,11 +88,11 @@ kev_result handle_http2https_error(KHttpRequest *rq)
 {
 	SET(rq->flags, RQ_CONNECTION_CLOSE);
 	if (conf.http2https_code == 0 || rq->raw_url.IsBad()) {
-		return send_error(rq, NULL, STATUS_HTTP_TO_HTTPS, "send http to https port");
+		return send_error(rq, STATUS_HTTP_TO_HTTPS, "send http to https port");
 	}
 	sockaddr_i addr;
 	if (!rq->sink->GetSelfAddr(&addr)) {
-		return send_error(rq, NULL, STATUS_HTTP_TO_HTTPS, "send http to https port");
+		return send_error(rq, STATUS_HTTP_TO_HTTPS, "send http to https port");
 	}
 	KStringBuf s;
 	s << "https://";

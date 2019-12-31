@@ -83,14 +83,10 @@ bool KTcpUpstream::BuildHttpHeader(KHttpRequest *rq, KWStream *s)
 		}
 	}
 	*s << path;
-	char *param_buf = NULL;
-	const char *param = url->getParam(&param_buf);
+	const char *param = url->param;
 	if (param) {
 		s->WSTR("?");
 		*s << param;
-	}
-	if (param_buf) {
-		free(param_buf);
 	}
 	s->WSTR(" HTTP/1.1\r\nHost: ");
 	*s << url->host;

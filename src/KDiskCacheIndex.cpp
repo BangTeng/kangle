@@ -95,11 +95,11 @@ void KDiskCacheIndex::start(ci_operator op,KHttpObject *obj)
 	param->op = op;
 	switch (op) {
 	case ci_add:
-		param->url = obj->url->getUrl();
+		param->url = get_url_key(&obj->uk,NULL);
 	case ci_update:
 		param->filename1 = obj->dk.filename1;
 		param->filename2 = obj->dk.filename2;
-		param->data.url_flag_encoding = obj->url->flag_encoding;
+		param->data.url_flag_encoding = obj->uk.url->flag_encoding;
 		kgl_memcpy(&param->data.index,&obj->index,sizeof(param->data.index));
 		break;
 	case ci_del:

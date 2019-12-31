@@ -111,6 +111,17 @@ public:
 		Append(new_t);
 		return true;
 	}
+	KHttpHeader *FindHeader(const char *attr, int len)
+	{
+		KHttpHeader *l = header;
+		while (l) {
+			if (is_attr(l,attr,len)) {
+				return l;
+			}		
+			l = l->next;
+		}
+		return NULL;
+	}
 	KHttpHeader *RemoveHeader(const char *attr)
 	{
 		KHttpHeader *l = header;

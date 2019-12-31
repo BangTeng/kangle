@@ -98,15 +98,11 @@ KGL_RESULT get_request_variable(KHttpRequest *rq,KGL_VAR type, LPSTR  name, LPVO
 		return add_api_var(buffer, size, rq->url->path);
 	case KGL_VAR_QUERY_STRING:
 	{
-		char *param_buf = NULL;
-		const char *param = rq->url->getParam(&param_buf);
+		const char *param = rq->url->param;
 		*size = 0;
 		KGL_RESULT ret = KGL_ENO_DATA;
 		if (param) {
 			ret = add_api_var(buffer, size, param);
-		}
-		if (param_buf) {
-			free(param_buf);
 		}
 		return ret;
 	}

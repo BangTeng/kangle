@@ -37,7 +37,10 @@ public:
 	KStringBuf();
 	virtual ~KStringBuf();
 	char *getString() {
-		assert(hot && buf);
+		if (buf == NULL) {
+			return NULL;
+		}
+		kassert(hot && buf);
 		*hot = '\0';
 		return buf;
 	}
@@ -46,6 +49,9 @@ public:
 		return buf;
 	}
 	int getSize() {
+		if (buf == NULL) {
+			return 0;
+		}
 		return (int)(hot - buf);
 	}
 	char *stealString() {

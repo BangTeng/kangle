@@ -105,7 +105,7 @@ am_kangle_OBJECTS = cache.$(OBJEXT) KConfig.$(OBJEXT) \
 	KCdnRewriteMark.$(OBJEXT) KCdnContainer.$(OBJEXT) \
 	KTempleteVirtualHost.$(OBJEXT) KVirtualHostDatabase.$(OBJEXT) \
 	KDsoModule.$(OBJEXT) KLogHandle.$(OBJEXT) \
-	KRequestQueue.$(OBJEXT) KContext.$(OBJEXT) \
+	KRequestQueue.$(OBJEXT) KContext.$(OBJEXT) KUrl.$(OBJEXT) \
 	KCdnRedirect.$(OBJEXT) time_utils.$(OBJEXT) \
 	KVirtualHostContainer.$(OBJEXT) KSocketBuffer.$(OBJEXT) \
 	KAsyncFetchObject.$(OBJEXT) KSyncFetchObject.$(OBJEXT) \
@@ -232,14 +232,14 @@ OBJEXT = o
 PACKAGE = kangle
 PACKAGE_BUGREPORT = 
 PACKAGE_NAME = kangle
-PACKAGE_STRING = kangle 3.5.18
+PACKAGE_STRING = kangle 3.5.19
 PACKAGE_TARNAME = kangle
-PACKAGE_VERSION = 3.5.18
+PACKAGE_VERSION = 3.5.19
 PATH_SEPARATOR = :
 SET_MAKE = 
 SHELL = /bin/sh
 STRIP = 
-VERSION = 3.5.18
+VERSION = 3.5.19
 abs_builddir = /home/keengo/kangle/src
 abs_srcdir = /home/keengo/kangle/src
 abs_top_builddir = /home/keengo/kangle
@@ -465,7 +465,7 @@ KVirtualHostDatabase.cpp     KVirtualHostDatabase.h       KVirtualHostDataInterf
 KLogHandle.h KLogHandle.cpp\
 KListenPipeStream.h\
 KRequestQueue.h KRequestQueue.cpp KContext.cpp\
-KUrl.h KContext.h vh_module.h\
+KUrl.h KUrl.cpp KContext.h vh_module.h\
 KCdnRedirect.h KCdnRedirect.cpp\
 time_utils.h time_utils.cpp\
 KVirtualHostContainer.h KVirtualHostContainer.cpp\
@@ -970,6 +970,7 @@ include ./$(DEPDIR)/KTimeMatch.Po
 include ./$(DEPDIR)/KTimer.Po
 include ./$(DEPDIR)/KTsUpstream.Po
 include ./$(DEPDIR)/KUpstream.Po
+include ./$(DEPDIR)/KUrl.Po
 include ./$(DEPDIR)/KUrlParser.Po
 include ./$(DEPDIR)/KUrlValue.Po
 include ./$(DEPDIR)/KVirtualHost.Po

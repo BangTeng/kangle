@@ -566,6 +566,13 @@ bool KHttpManage::config() {
 		s << LANG_MAX_CACHE_SIZE << ":<input type=text name=max_cache_size size=6 value='"	<< get_size(conf.max_cache_size) << "'><br>";
 #ifdef ENABLE_DISK_CACHE
 		s << klang["max_bigobj_size"] << ":<input type=text name=max_bigobj_size size=6 value='" << get_size(conf.max_bigobj_size) << "'><br>";
+#ifdef ENABLE_BIG_OBJECT_206
+		s << "cache part:<input type=checkbox name='cache_part' value='1' ";
+		if (conf.cache_part) {
+			s << "checked";
+		}
+		s << "><br>";
+#endif
 #endif
 		s << LANG_MIN_REFRESH_TIME << ":<input type=text name=refresh_time size=4 value=" << conf.refresh_time << ">" << LANG_SECOND << "<br>";
 
@@ -744,6 +751,9 @@ bool KHttpManage::configsubmit() {
 		conf.diskWorkTime.set(conf.disk_work_time);
 		cache.init();
 		conf.max_bigobj_size = get_size(getUrlValue("max_bigobj_size").c_str());
+#ifdef ENABLE_BIG_OBJECT_206
+		conf.cache_part = getUrlValue("cache_part") == "1";
+#endif
 #endif
 		conf.mem_cache = get_size(getUrlValue("mem_cache").c_str());
 		conf.refresh_time = atoi(getUrlValue("refresh_time").c_str());
@@ -1071,13 +1081,13 @@ bool KHttpManage::sendLeftMenu() {
 }
 bool KHttpManage::sendMainFrame() {
 	stringstream s;
-	//	s << "<p>   " << PROGRAM_NAME << VER_ID <<  "</p>";
+	char buf[256];
 	INT64 total_mem_size = 0, total_disk_size = 0;
+	int mem_count = 0, disk_count = 0;
 	time_t total_run_time = time(NULL) - program_start_time;
-	get_cache_size(total_mem_size, total_disk_size);
-	s << "<html><head><title>" << PROGRAM_NAME << "(" << VER_ID << ") "
-			<< LANG_INFO
-			<< "</title><LINK href=/main.css type='text/css' rel=stylesheet></head><body>";
+	cache.getSize(total_mem_size, total_disk_size,mem_count,disk_count);
+	s << "<html><head><title>" << PROGRAM_NAME << "(" << VER_ID << ") ";
+	s << LANG_INFO << "</title><LINK href=/main.css type='text/css' rel=stylesheet></head><body>";
 	if(conf.autoupdate != AUTOUPDATE_OFF && !autoupdate_thread_started){
 		//检查有没有更新
 		string update_file = conf.path;
@@ -1121,32 +1131,19 @@ bool KHttpManage::sendMainFrame() {
 	s << "[<a href='/flush_disk_cache.km'>flush</a>]";
 #endif
 #endif
-	s << "<br>";
-	s << LANG_TOTAL_OBJ_COUNT << ":" << cache.getCount();
-	s << "<br>";
-
-	s << LANG_TOTAL_MEM_CACHE << ":";
-	if (total_mem_size > 1048576) {
-		s << total_mem_size / 1048576 << "M";
-	} else if (total_mem_size > 1024) {
-		s << total_mem_size / 1024 << "K";
-	} else {
-		s << total_mem_size;
-	}
+	s << "<table><tr><td>";
+	s << LANG_TOTAL_OBJ_COUNT << "</td><td colspan=2>" << cache.getCount() << "</td></tr>";
+	s << "<tr><td>";
+	s << LANG_TOTAL_MEM_CACHE << "</td><td>" << mem_count << "</td><td>" << get_human_size(double(total_mem_size),buf,sizeof(buf)) << "</td></tr>";
 #ifdef ENABLE_DISK_CACHE
-	s << "<br>" << LANG_TOTAL_DISK_CACHE << ":";
-	if (total_disk_size > 1048576) {
-		s << total_disk_size / 1048576 << "M";
-	} else if (total_disk_size > 1024) {
-		s << total_disk_size / 1024 << "K";
-	} else {
-		s << total_disk_size;
-	}
+	s << "<tr><td>";
+	s << LANG_TOTAL_DISK_CACHE << "</td><td>" << disk_count << "</td><td>" <<  get_human_size(double(total_disk_size),buf,sizeof(buf)) << "</td></tr>";
 	INT64 total_size, free_size;	
 	if (get_disk_size(total_size, free_size)) {
 		s << "(" << (total_size - free_size) * 100 / total_size << "%)";
 	}
 #endif
+	s << "</table>";
 	s << "<h3>" << LANG_UPTIME << "</h3>" << LANG_TOTAL_RUNING << " ";
 	if (total_run_time >= 86400) {
 		s << total_run_time / 86400 << " " << LANG_DAY << ",";
@@ -1620,6 +1617,7 @@ bool KHttpManage::start_listen(bool &hit) {
 
 	return false;
 }
+#if 0
 //@deprecated
 KHttpObject *refsHttpObject(const char *url,bool gzip)
 {
@@ -1697,6 +1695,7 @@ bool KHttpManage::start_obj(bool &hit)
 	}
 	return true;
 }
+#endif
 bool KHttpManage::save_access(KVirtualHost *vh,std::string redirect_url)
 {
 	if (vh) {
@@ -1990,7 +1989,7 @@ void KHttpManage::process(KHttpRequest *rq)
 		SET(rq->flags,RQ_CONNECTION_CLOSE);
 	}
 	if (!hit) {
-		send_error(rq,NULL,STATUS_NOT_FOUND,"no such file");
+		send_error(rq, STATUS_NOT_FOUND, "no such file");
 	}
 }
 bool KHttpManage::start(bool &hit) {
@@ -2464,10 +2463,6 @@ function sortrq(index)\
 	if(hit){
 		return result;
 	}
-	result = start_listen(hit);
-	if (hit) {
-		return result;
-	}
-	return start_obj(hit);
+	return start_listen(hit);
 }
 

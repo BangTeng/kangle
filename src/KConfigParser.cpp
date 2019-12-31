@@ -98,6 +98,9 @@ bool KConfigParser::startElement(std::string &context, std::string &qName,
 		if (attribute["disk_work_time"].size()>0) {
 			SAFE_STRCPY(cconf->disk_work_time ,attribute["disk_work_time"].c_str());	
 		}
+#ifdef ENABLE_BIG_OBJECT_206
+		cconf->cache_part = attribute["cache_part"] == "1";
+#endif
 #endif
 		return true;
 	}

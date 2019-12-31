@@ -40,7 +40,7 @@ public:
 	bool start(bool &hit);
 	bool start_vhs(bool &hit);
 	bool start_listen(bool &hit);
-	bool start_obj(bool &hit);
+	//bool start_obj(bool &hit);
 	bool start_access(bool &hit);
 
 	std::string getUrlValue(std::string name);

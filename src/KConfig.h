@@ -126,6 +126,9 @@ public:
 #ifdef ENABLE_DISK_CACHE
 	INT64 disk_cache;
 	bool disk_cache_is_radio;
+#ifdef ENABLE_BIG_OBJECT_206
+	bool cache_part;
+#endif
 	INT64 max_bigobj_size;
 #endif
 	int refresh;
@@ -286,6 +289,7 @@ bool saveConfig();
 void parse_server_software();
 INT64 get_size(const char *size);
 std::string get_size(INT64 size);
+char *get_human_size(double size, char *buf,size_t buf_size);
 INT64 get_radio_size(const char *size,bool &is_radio);
 #define CONFIG_FILE_SIGN  "<!--configfileisok-->"
 #ifndef CONFIG_FILE

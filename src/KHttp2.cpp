@@ -1721,15 +1721,15 @@ u_char *KHttp2::state_rst_stream(u_char *pos, u_char *end)
 	switch (status) {
 
 	case KGL_HTTP_V2_CANCEL:
-		klog(KLOG_INFO, "client canceled stream %ui", state.sid);
+		klog(KLOG_INFO, "client canceled stream %u\n", state.sid);
 		break;
 
 	case KGL_HTTP_V2_INTERNAL_ERROR:
-		klog(KLOG_INFO, "client terminated stream %ui due to internal error",state.sid);
+		klog(KLOG_INFO, "client terminated stream %u due to internal error\n",state.sid);
 		break;
 
 	default:
-		klog(KLOG_INFO,	"client terminated stream %ui with status %ui",state.sid, status);
+		klog(KLOG_INFO,	"client terminated stream %u with status %u\n",state.sid, status);
 		break;
 	}	
 	kgl_http2_event *re = stream->read_wait;
@@ -1761,7 +1761,7 @@ u_char *KHttp2::state_settings(u_char *pos, u_char *end)
 {
 	if (state.flags == KGL_HTTP_V2_ACK_FLAG) {
 		if (state.length != 0) {
-			klog(KLOG_WARNING,"client sent SETTINGS frame with the ACK flag and nonzero length");
+			klog(KLOG_WARNING,"client sent SETTINGS frame with the ACK flag and nonzero length\n");
 			return this->close(true, KGL_HTTP_V2_SIZE_ERROR);
 		}
 
@@ -2007,7 +2007,7 @@ u_char *KHttp2::state_window_update(u_char *pos, u_char *end)
 }
 u_char *KHttp2::state_continuation(u_char *pos, u_char *end)
 {
-	klog(KLOG_ERR,"client sent unexpected CONTINUATION frame");
+	klog(KLOG_ERR,"client sent unexpected CONTINUATION frame\n");
 	return this->close(true, KGL_HTTP_V2_PROTOCOL_ERROR);
 }
 bool KHttp2::send_rst_stream(uint32_t sid, uint32_t status)

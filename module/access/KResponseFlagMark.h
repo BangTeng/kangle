@@ -45,8 +45,8 @@ public:
 			obj->need_gzip = 1;
 			result = true;
 		}
-		if (identity_encoding && !TEST(obj->url->encoding, KGL_ENCODING_YES)) {
-			obj->url->encoding = (uint8_t)(~KGL_ENCODING_YES);
+		if (identity_encoding && !TEST(obj->uk.url->encoding, KGL_ENCODING_YES)) {
+			obj->uk.url->encoding = (uint8_t)(~KGL_ENCODING_YES);
 			result = true;
 		}
 		return result;

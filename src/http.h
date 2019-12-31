@@ -67,7 +67,7 @@ kev_result asyncLoadHttpObject(KHttpRequest *rq);
 kev_result async_http_start(KHttpRequest *rq);
 bool sync_send_http_object(KHttpRequest *rq, KHttpObject *obj);
 kev_result sendMemoryObject(KHttpRequest *rq,KHttpObject *obj);
-kev_result send_not_modify_from_mem(KHttpRequest *rq);
+kev_result send_not_modify_from_mem(KHttpRequest *rq,KHttpObject *obj);
 kev_result stageDeniedRequest(KHttpRequest *rq) ;
 char *url_encode(const char *s, size_t len, size_t *new_length);
 std::string url_encode(const char *s, size_t len = 0);
@@ -75,7 +75,7 @@ bool parse_url(const char *src, KUrl *url);
 kev_result try_send_request(KHttpRequest *rq);
 kev_result stage_rdata_end(KHttpRequest *rq,StreamState result);
 kev_result stage_prepare(KHttpRequest *rq);
-kev_result send_error(KHttpRequest *rq, KHttpObject *obj,int code, const char* reason);
+kev_result send_error(KHttpRequest *rq, int code, const char* reason);
 void prepare_write_stream(KHttpRequest *rq);
 kev_result prepare_load_body(KHttpRequest *rq);
 StreamState send_buff(KSendable *socket, kbuf *buf , INT64 &start,INT64 &send_len);
@@ -102,7 +102,7 @@ inline bool check_need_gzip(KHttpRequest *rq, KHttpObject *obj) {
 		return false;
 	}
     //如果obj标记为已经压缩过，或者标记了不用压缩，则不压缩数据
-	if (TEST(obj->url->encoding,KGL_ENCODING_YES)) {
+	if (TEST(obj->uk.url->encoding,KGL_ENCODING_YES)) {
 			return false;
 	}
     //obj有多个引用,不压缩
@@ -143,10 +143,10 @@ inline kev_result processRequestUseQueue(KHttpRequest *rq, KRequestQueue *queue)
 	if (queue->getMaxWorker() > 0) {
 		if (!queue->start(rq)) {
 			if (TEST(rq->flags, RQ_SYNC)) {
-				send_error(rq, NULL, STATUS_SERVICE_UNAVAILABLE, "Server is busy.");
+				send_error(rq, STATUS_SERVICE_UNAVAILABLE, "Server is busy.");
 				return stageEndRequest(rq);
 			}
-			return send_error(rq, NULL, STATUS_SERVICE_UNAVAILABLE, "Server is busy.");
+			return send_error(rq, STATUS_SERVICE_UNAVAILABLE, "Server is busy.");
 		}
 		return kev_ok;
 	}
@@ -246,7 +246,7 @@ inline kev_result async_send_valide_object(KHttpRequest *rq, KHttpObject *obj)
 	if (!not_modifed || rq->needFilter()) {
 		return  asyncSendHttpObject(rq);
 	}
-	return send_not_modify_from_mem(rq);
+	return send_not_modify_from_mem(rq,obj);
 }
 //检查obj是否过期1
 inline bool check_object_expiration(KHttpRequest *rq,KHttpObject *obj) {

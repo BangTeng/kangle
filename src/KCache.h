@@ -16,6 +16,8 @@ struct KCacheInfo
 {
 	INT64 mem_size;
 	INT64 disk_size;
+	int mem_count;
+	int disk_count;
 };
 
 class KCache
@@ -63,17 +65,13 @@ public:
 	}
 	KHttpObject * find(KHttpRequest *rq, u_short url_hash)
 	{
-		return objHash[url_hash].get(rq->url,
-			rq->raw_url.encoding,
-			rq->ctx->internal,
-			TEST(rq->filter_flags, RF_NO_DISK_CACHE) > 0,
-			rq->min_obj_verified);
+		return objHash[url_hash].get(rq);
 	}
 	void iterator(objHandler handler, void *param);
 	bool add(KHttpObject *obj, int list_state)
 	{
 		if (obj->h == HASH_SIZE) {
-			obj->h = hash_url(obj->url);
+			obj->h = hash_url(obj->uk.url);
 		}
 		assert(obj->in_cache == 0);		
 		cacheLock.Lock();
@@ -138,26 +136,42 @@ public:
 		INT64 total_size = 0;
 		INT64 kill_mem_size=0,kill_disk_size =0;
 		INT64 total_disk_size = 0;
+		int disk_clean_count = 0;
 		check_count_limit(maxMemSize);
-		getSize(total_size, total_disk_size);
+		int mem_count = 0, disk_count = 0;
+		getSize(total_size, total_disk_size,mem_count,disk_count);
 		kill_mem_size = total_size - maxMemSize;
-		objList[LIST_IN_MEM].move(&bf, last_msec,kill_mem_size, true);
+		int memory_clean_count = objList[LIST_IN_MEM].move(&bf, last_msec,kill_mem_size, true);
 #ifdef ENABLE_DISK_CACHE
 		if (disk_is_radio) {
 			kill_disk_size = get_need_free_disk_size((int)(maxDiskSize));
 		} else {
 			kill_disk_size = total_disk_size - maxDiskSize;
+			INT64 kill_percent_disk_size = get_need_free_disk_size(95);
+			if (kill_percent_disk_size > kill_disk_size) {
+				//最大不超过磁盘95%
+				kill_disk_size = kill_percent_disk_size;
+			}
 		}
-		objList[LIST_IN_DISK].move(&bf, last_msec,kill_disk_size, false);
+		disk_clean_count = objList[LIST_IN_DISK].move(&bf, last_msec,kill_disk_size, false);
+		if (disk_clean_count == 0 && kill_disk_size > 0) {
+			//disk list不够，则从mem list删除
+			disk_clean_count = objList[LIST_IN_MEM].move(&bf, last_msec, kill_disk_size, false);
+			klog(KLOG_INFO, "clean disk list count is zero,now clean it from memory list.\n");
+		}
 #endif
-		klog(KLOG_DEBUG, "cache flush, killed memory size=[" INT64_FORMAT "],killed disk size=[" INT64_FORMAT "]\n", kill_mem_size, kill_disk_size);
+		klog(KLOG_INFO, "cache flush, killed memory [" INT64_FORMAT " %d],killed disk [" INT64_FORMAT " %d]\n",
+			kill_mem_size,
+			memory_clean_count,
+			kill_disk_size,
+			disk_clean_count);
 		return;
 	}
-	void getSize(INT64 &memSize,INT64 &diskSize)
+	void getSize(INT64 &memSize,INT64 &diskSize,int &mem_count,int &disk_count)
 	{
 		int i;
 		for (i = 0; i < HASH_SIZE; i++) {
-			objHash[i].getSize(memSize, diskSize);
+			objHash[i].getSize(memSize, diskSize,mem_count,disk_count);
 		}
 	}
 #ifdef MALLOCDEBUG
@@ -252,6 +266,7 @@ public:
 	{
 		disk_shutdown = shutdown_flag;
 	}
+	void UpdateVary(KHttpObject *obj, KVary *vary);
 	KHttpObjectHash *getHash(u_short h)
 	{
 		return &objHash[h];
@@ -276,9 +291,11 @@ private:
 	{
 		cacheLock.Unlock();
 	}
-	bool clean_blocked;
-	bool disk_shutdown;
+	volatile bool clean_blocked;
+	volatile bool disk_shutdown;
 	int count;
+	int mem_count;
+	int disk_count;
 	KMutex cacheLock;
 	KObjectList objList[2];
 	KHttpObjectHash objHash[HASH_SIZE];

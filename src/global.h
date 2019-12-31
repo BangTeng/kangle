@@ -35,7 +35,7 @@
 #endif
 #endif
 #ifndef VERSION
-#define VERSION         "3.5.18"
+#define VERSION         "3.5.19"
 #endif
 #define VER_ID   VERSION
 #ifndef MAX
@@ -143,7 +143,7 @@
 #define ANSW_HAS_MAX_AGE        (1<<11) /**/
 #define ANSW_LAST_MODIFIED      (1<<12) /* */
 #define ANSW_HAS_CONTENT_LENGTH (1<<13) 
-//#define OBJ_DEFLATED            (1<<14) 
+#define OBJ_HAS_VARY            (1<<14)
 #define ANSW_HAS_CONTENT_RANGE  (1<<15) 
 #define ANSW_CHUNKED            (1<<16) 
 /////////////////////////////////////////////////////////////////////
@@ -307,7 +307,7 @@
 #define DEFAULT_COOKIE_STICK_NAME  "kangle_runat"
 #define X_REAL_IP_SIGN             "x-real-ip-sign"
 #define X_REAL_IP_HEADER           "X-Real-IP"
-#define VARY_URL_KEY               1
+//#define VARY_URL_KEY               1
 enum Proto_t {
 	Proto_http, Proto_fcgi, Proto_ajp,
 #if 0

@@ -12,7 +12,7 @@
 #define CLEAN_CACHE		0
 #define DROP_DEAD		1
 #define MAX_LOCK_MOVE_SIZE 1
-#define MAX_CLEAN_DEAD_COUNT 512
+#define MAX_CLEAN_DEAD_COUNT 1024
 
 KObjectList::KObjectList()
 {
@@ -97,9 +97,9 @@ void KObjectList::dump_refs_obj(std::stringstream &s)
 	KHttpObject *obj = l_head;
 	while (obj) {
 		if (obj->refs>1) {
-			s << obj->refs << " " << obj->url->host << obj->url->path;
-			if (obj->url->param) {
-				s << "?" << obj->url->param;
+			s << obj->refs << " " << obj->uk.url->host << obj->uk.url->path;
+			if (obj->uk.url->param) {
+				s << "?" << obj->uk.url->param;
 			}
 			s << "\r\n";
 			if (max_dump--<=0) {
@@ -166,14 +166,14 @@ void KObjectList::dead_count(int &count)
 		count--;
 	}
 }
-void KObjectList::move(KBufferFile *bf, int64_t begin_msec,INT64 m_size,bool swapout_flag)
+int KObjectList::move(KBufferFile *bf, int64_t begin_msec,INT64 m_size,bool swapout_flag)
 {
 	bool is_dead = true;
 	int dead_obj_count = 0;
 	cache.lock();
 	if (m_size<=0 && cache_model==CLEAN_CACHE) {
 		cache.unlock();
-		return;
+		return 0;
 	}
 	KTempHttpObject *thead = NULL;
 	KHttpObject * obj = l_head;
@@ -185,6 +185,7 @@ void KObjectList::move(KBufferFile *bf, int64_t begin_msec,INT64 m_size,bool swa
 		is_dead = (TEST(obj->index.flags,FLAG_DEAD)>0);
 		if (m_size <= 0 && is_dead) {
 			if (dead_obj_count++ > MAX_CLEAN_DEAD_COUNT) {
+				//一次性最大清理死亡物件，防止点清理所有缓存时，而卡住非常长的时间
 				break;
 			}
 		}
@@ -194,22 +195,14 @@ void KObjectList::move(KBufferFile *bf, int64_t begin_msec,INT64 m_size,bool swa
 		}
 		KTempHttpObject *to = new KTempHttpObject;
 		to->decSize = obj->index.head_size;
-		if (obj->data && obj->data->type == MEMORY_OBJECT) {
+		if (!swapout_flag || (obj->data && obj->data->type == MEMORY_OBJECT)) {
+			//磁盘缓存清理或者是内存交换大物件
 			to->decSize += obj->index.content_length;
 		}
 		if (swapout_flag && TEST(obj->index.flags, FLAG_NO_DISK_CACHE)) {
 			//标记为不使用磁盘缓存的，直接dead
 			is_dead = true;
 		}
-#if 0
-		
-			to->decSize = obj->index.content_length;
-			if (swapout_flag && TEST(obj->index.flags,FLAG_NO_DISK_CACHE)) {
-				//标记为不使用磁盘缓存的，直接dead
-				is_dead = true;
-			}
-		
-#endif
 		m_size -= to->decSize;
 		//加入到临时链表中			
 		to->next = thead;
@@ -221,7 +214,9 @@ void KObjectList::move(KBufferFile *bf, int64_t begin_msec,INT64 m_size,bool swa
 	}
 	cache.unlock();
 	//实际发生磁盘IO
+	int count = 0;
 	while (thead) {
+		count++;
 		KTempHttpObject *tnext = thead->next;
 		int gc_used_msec = (int)(kgl_current_msec - begin_msec);
 		if (swapout_flag && !cache.is_disk_shutdown() && !thead->is_dead) {
@@ -231,6 +226,7 @@ void KObjectList::move(KBufferFile *bf, int64_t begin_msec,INT64 m_size,bool swa
 		}
 		thead = tnext;
 	}
+	return count;
 }
 void KObjectList::swapout(KTempHttpObject *thead, KBufferFile *bf,int gc_used_msec)
 {
@@ -258,7 +254,7 @@ void KObjectList::swapout_result(KTempHttpObject *thead,int gc_used_msec,bool re
 		if (obj->list_state == this->list_state && obj->refs <= 1) {
 			remove(obj);
 			CLR(obj->index.flags, FLAG_IN_MEM);
-			cache.objHash[obj->h].decSize(thead->decSize);
+			cache.objHash[obj->h].DecMemObjectSize(obj);
 			cache.objList[LIST_IN_DISK].add(obj);
 			delete obj->data;
 			obj->data = NULL;
@@ -272,7 +268,8 @@ void KObjectList::swapout_result(KTempHttpObject *thead,int gc_used_msec,bool re
 	bool removed_result = false;
 	lock = &cache.objHash[obj->h].lock;
 	lock->Lock();
-	//这里为什么要判断一下list_state呢？因为有可能在中间，obj被其它请求使用，如调用swap_in而改变了list_state.
+	//这里为什么要判断一下list_state呢？
+	//因为有可能在中间，obj被其它请求使用，如调用swap_in而改变了list_state.
 	if (obj->list_state == this->list_state && obj->getRefs() <= 1) {
 		remove(obj);
 		removed_result = cache.objHash[obj->h].remove(obj);
@@ -293,7 +290,7 @@ int KObjectList::clean_cache(KReg *reg,int flag)
 	while (obj) {
 		if (!TEST(obj->index.flags,FLAG_DEAD)) {
 			KStringBuf url;
-			if (obj->url->getUrl(url) && reg->match(url.getString(),url.getSize(),flag)>0) {
+			if (obj->uk.url->GetUrl(url) && reg->match(url.getString(),url.getSize(),flag)>0) {
 				result++;
 				obj->Dead();
 			}			

@@ -116,7 +116,7 @@ bool stored_obj(KHttpRequest *rq, KHttpObject *obj,KHttpObject *old_obj) {
 #endif
 	if (old_obj) {
 		old_obj->Dead();
-	}	
+	}
 	if (stored_obj(obj,(TEST(obj->index.flags,FLAG_IN_MEM)?LIST_IN_MEM:LIST_IN_DISK))) {
 		SET(rq->flags,RQ_OBJ_STORED);
 #ifdef ENABLE_DB_DISK_INDEX

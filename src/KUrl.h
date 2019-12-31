@@ -23,6 +23,7 @@
 #define KGL_ENCODING_BR       (1<<3)
 #define KGL_ENCODING_UNKNOW   (1<<6)
 #define KGL_ENCODING_YES      (1<<7)
+
 class KUrl {
 public:
 	~KUrl() {
@@ -65,35 +66,35 @@ public:
 		}
 		return strncmp(path,a->path,n);
 	}
-	int operator <(const KUrl &a) const {
-		int ret = strcasecmp(host, a.host);
+	int cmp(const KUrl *a) const {
+		int ret = strcasecmp(host, a->host);
 		if (ret < 0) {
 			return -1;
 		} else if (ret > 0) {
 			return 1;
 		}
-		ret = strcmp(path, a.path);
+		ret = strcmp(path, a->path);
 		if (ret < 0) {
 			return -1;
 		} else if (ret > 0) {
 			return 1;
 		}
-		if (port < a.port) {
+		if (port < a->port) {
 			return -1;
-		}else if(port > a.port){
+		} else if(port > a->port) {
 			return 1;
 		}
-		if(param==NULL){
-			if(a.param==NULL){
+		if (param == NULL) {
+			if (a->param == NULL) {
 				return 0;
-			}else{
+			} else {
 				return 1;
 			}
 		}
-		if(a.param==NULL){
+		if (a->param == NULL) {
 			return -1;
 		}
-		return strcmp(param,a.param);
+		return strcmp(param, a->param);
 	}
 	KUrl *clone() {
 		KUrl *url = new KUrl;
@@ -108,27 +109,29 @@ public:
 
 		url->host = xstrdup(host);
 		url->path = xstrdup(path);
-		if (param)
-			url->param = xstrdup(param);		
+		if (param) {
+			url->param = xstrdup(param);
+		}
 		url->port = port;
 		url->flags = flags;
 		url->encoding = encoding;
 	}
 	char *getUrl() {
 		KStringBuf s(128);
-		if (!getUrl(s)) {
+		if (!GetUrl(s)) {
 			return NULL;
 		}
 		return s.stealString();
 	}
 	char *getUrl2(int &len) {
 		KStringBuf s(128);
-		if (!getUrl(s)) {
+		if (!GetUrl(s)) {
 			return NULL;
 		}
 		len = s.getSize();
 		return s.stealString();
 	}
+#if 0
 	void clean_vary()
 	{
 		if (!TEST(flags,KGL_URL_VARIED)) {
@@ -195,6 +198,7 @@ public:
 		}
 		return ret;
 	}
+#endif
 	void GetPath(KStringBuf &s, bool urlEncode = false) {
 		if (urlEncode) {
 			size_t len = strlen(path);
@@ -240,7 +244,7 @@ public:
 		}
 		GetHost(s, default_port);
 	}
-	bool getUrl(KStringBuf &s,bool urlEncode=false) {
+	bool GetUrl(KStringBuf &s,bool urlEncode=false) {
 		if (unlikely(host == NULL || path == NULL)) {
 			return false;
 		}
@@ -265,5 +269,38 @@ public:
 		};
 	};
 };
+class KVary
+{
+public:
+	KVary()
+	{
+		memset(this, 0, sizeof(*this));
+	}
+	~KVary()
+	{
+		if (key) {
+			xfree(key);
+		}
+		if (val) {
+			xfree(val);
+		}
+	}
+	KVary *Clone()
+	{
+		KVary *vary = new KVary;
+		vary->key = strdup(key);
+		vary->val = strdup(val);
+		return vary;
+	}
+	char *key;
+	char *val;
+};
+struct KUrlKey
+{
+	KUrl *url;
+	KVary *vary;
+};
+char *get_url_key(KUrlKey *uk, int *len);
+void update_url_vary_key(KUrlKey *uk, const char *key);
 void free_url(KUrl *url);
 #endif

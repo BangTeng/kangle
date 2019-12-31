@@ -161,8 +161,7 @@ bool KRewriteRule::mark(KHttpRequest *rq, KHttpObject *obj,
 		subString
 		);
 	if (url) {
-		char *param_buf = NULL;
-		const char *param = rq->url->getParam(&param_buf);		
+		const char *param = rq->url->param;
 		if (param) {
 			if (qsa) {
 				//append the query string
@@ -174,9 +173,6 @@ bool KRewriteRule::mark(KHttpRequest *rq, KHttpObject *obj,
 			} else if (strchr(url->getString(), '?')==NULL) {
 				*url << "?" << param;
 			}
-		}
-		if (param_buf) {
-			free(param_buf);
 		}
 		if (proxy && *proxy=='-') {
 			rq->rewriteUrl(url->getString(),0,(rewriteBase?rewriteBase:prefix.c_str()));
@@ -444,13 +440,9 @@ void KRewriteMarkEx::getEnv(KHttpRequest *rq, char *env, KStringBuf &s) {
 		return;
 	}
 	if (strcasecmp(env, "QUERY_STRING") == 0) {
-		char *param_buf = NULL;
-		const char *param = rq->url->getParam(&param_buf);
+		const char *param = rq->url->param;
 		if (param) {
 			s << param;
-		}
-		if (param_buf) {
-			free(param_buf);
 		}
 		return;
 	}

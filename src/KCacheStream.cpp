@@ -65,18 +65,20 @@ void KCacheStream::CheckMemoryCacheSize()
 {
 	if (buffer->getLen() > conf.max_cache_size) {
 #ifdef ENABLE_DISK_CACHE
-		//turn on disk cache
-		kassert(disk_cache == NULL);
-		disk_cache = NewDiskCache();
-		if (disk_cache) {
-			kbuf *buf = buffer->getHead();
-			while (buf) {
-				if (buf->used > 0 && !disk_cache->Write(rq, obj,buf->data, buf->used)) {
-					delete disk_cache;
-					disk_cache = NULL;
-					break;
+		if (obj_can_disk_cache(rq, obj)) {
+			//turn on disk cache
+			kassert(disk_cache == NULL);
+			disk_cache = NewDiskCache();
+			if (disk_cache) {
+				kbuf *buf = buffer->getHead();
+				while (buf) {
+					if (buf->used > 0 && !disk_cache->Write(rq, obj, buf->data, buf->used)) {
+						delete disk_cache;
+						disk_cache = NULL;
+						break;
+					}
+					buf = buf->next;
 				}
-				buf = buf->next;
 			}
 		}
 #endif
@@ -123,12 +125,6 @@ StreamState KCacheStream::write_all(const char *buf,int len)
 #ifdef ENABLE_DISK_CACHE
 KDiskCacheStream *KCacheStream::NewDiskCache()
 {
-	if (TEST(obj->index.flags, FLAG_NO_DISK_CACHE)) {
-		return NULL;
-	}
-	if (TEST(rq->filter_flags, RF_NO_DISK_CACHE)) {
-		return NULL;
-	}
 	kassert(!rq->IsSync());
 	KDiskCacheStream *disk_cache = new KDiskCacheStream;
 	if (!disk_cache->Open(rq, obj)) {
