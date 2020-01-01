@@ -5,28 +5,19 @@ compiler:
   - g++
 #  - clang++
 
-# The build machines are Ubuntu 12.04 x64
+# The build machines are Ubuntu 16.04 x64
 addons:
   apt:
     packages:
       - initscripts
-      - libc-bin
-      - libsqlite0-dev
-      - quota
-      - libxslt1-dev
-      - libpcre++0
+      - gcc
+      - g++
       - libpcre++-dev
       - libssl-dev
-      - openssl
-      - zlib1g-dev
-      - libperl-dev
-      - libaio1
-      - libaio-dev
-
-# TODO: fix tests so they don't depend on /usr/local/nginx/logs/
-#       so we can run `make`, `make test`, `make install`.
+      - libsqlite3-dev
 
 script:
   - ./configure --prefix=/vhs/kangle --enable-vh-limit --enable-disk-cache --enable-ipv6 --enable-ssl --enable-http2
-  - make -j2
-  - sudo make install
+  - make
+  - make test
+  - make install
