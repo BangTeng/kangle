@@ -19,5 +19,3 @@ addons:
 script:
   - ./configure --prefix=/vhs/kangle --enable-vh-limit --enable-disk-cache --enable-ipv6 --enable-ssl --enable-http2
   - make
-  - make test
-  - make install
